@@ -14,7 +14,7 @@ try:
         QHBoxLayout, QMessageBox, QTabWidget
     )
     from PyQt6.QtCore import Qt
-    from PyQt6.QtGui import QFont
+    from PyQt6.QtGui import QFont, QIcon
 except ImportError:
     from PySide6.QtWidgets import (
         QDialog, QVBoxLayout, QFormLayout, QLabel, QLineEdit, 
@@ -22,7 +22,7 @@ except ImportError:
         QHBoxLayout, QMessageBox, QTabWidget
     )
     from PySide6.QtCore import Qt
-    from PySide6.QtGui import QFont
+    from PySide6.QtGui import QFont, QIcon
 
 from src.utils.config import ConfigManager
 from src.gui.professional_themes import get_theme_qss
@@ -49,6 +49,12 @@ class ApiKeysDialog(QDialog):
         """Initialize the user interface."""
         self.setWindowTitle("API Anahtarları")  # API Keys in Turkish
         self.setModal(True)
+        
+        # Set dialog icon
+        from pathlib import Path
+        icon_path = Path(__file__).parent.parent.parent / "icon.ico"
+        if icon_path.exists():
+            self.setWindowIcon(QIcon(str(icon_path)))
         self.resize(600, 500)
         
         layout = QVBoxLayout(self)

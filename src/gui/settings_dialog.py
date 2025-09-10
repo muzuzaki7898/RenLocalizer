@@ -14,6 +14,7 @@ try:
         QCheckBox, QGroupBox, QDialogButtonBox, QSlider, QTextEdit
     )
     from PyQt6.QtCore import Qt, pyqtSignal
+    from PyQt6.QtGui import QIcon
 except ImportError:
     from PySide6.QtWidgets import (
         QDialog, QVBoxLayout, QHBoxLayout, QFormLayout, QTabWidget,
@@ -21,6 +22,7 @@ except ImportError:
         QCheckBox, QGroupBox, QDialogButtonBox, QSlider, QTextEdit
     )
     from PySide6.QtCore import Qt, Signal as pyqtSignal
+    from PySide6.QtGui import QIcon
 
 from src.utils.config import ConfigManager, Language
 from src.gui.professional_themes import get_theme_qss
@@ -55,6 +57,12 @@ class SettingsDialog(QDialog):
         self.setWindowTitle(self.config_manager.get_ui_text("settings"))
         self.setModal(True)
         self.resize(500, 600)
+        
+        # Set dialog icon
+        from pathlib import Path
+        icon_path = Path(__file__).parent.parent.parent / "icon.ico"
+        if icon_path.exists():
+            self.setWindowIcon(QIcon(str(icon_path)))
         
         layout = QVBoxLayout(self)
         

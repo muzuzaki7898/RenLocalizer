@@ -98,6 +98,11 @@ class MainWindow(QMainWindow):
         self.setWindowTitle(self.config_manager.get_ui_text("app_title"))
         self.setMinimumSize(1000, 700)
         
+        # Set application icon
+        icon_path = Path(__file__).parent.parent.parent / "icon.ico"
+        if icon_path.exists():
+            self.setWindowIcon(QIcon(str(icon_path)))
+        
         # Create central widget
         central_widget = QWidget()
         self.setCentralWidget(central_widget)

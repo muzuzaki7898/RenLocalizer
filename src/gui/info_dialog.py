@@ -11,14 +11,14 @@ try:
         QTextEdit, QDialogButtonBox, QLabel, QScrollArea
     )
     from PyQt6.QtCore import Qt
-    from PyQt6.QtGui import QFont
+    from PyQt6.QtGui import QFont, QIcon
 except ImportError:
     from PySide6.QtWidgets import (
         QDialog, QVBoxLayout, QHBoxLayout, QTabWidget, QWidget,
         QTextEdit, QDialogButtonBox, QLabel, QScrollArea
     )
     from PySide6.QtCore import Qt
-    from PySide6.QtGui import QFont
+    from PySide6.QtGui import QFont, QIcon
 
 from src.utils.config import ConfigManager
 
@@ -44,6 +44,12 @@ class InfoDialog(QDialog):
         self.setWindowTitle(dialog_data.get("title", "Info"))
         self.setModal(True)
         self.resize(800, 650)  # Increased width and height
+        
+        # Set dialog icon
+        from pathlib import Path
+        icon_path = Path(__file__).parent.parent.parent / "icon.ico"
+        if icon_path.exists():
+            self.setWindowIcon(QIcon(str(icon_path)))
         
         layout = QVBoxLayout(self)
         

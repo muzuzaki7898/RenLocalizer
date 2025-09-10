@@ -19,13 +19,20 @@ if __name__ == "__main__":
         
         try:
             from PyQt6.QtWidgets import QApplication
+            from PyQt6.QtGui import QIcon
         except ImportError:
             from PySide6.QtWidgets import QApplication
+            from PySide6.QtGui import QIcon
         
         # Create application
         app = QApplication(sys.argv)
         app.setApplicationName("RenLocalizer V2")
         app.setApplicationVersion("2.0.0")
+        
+        # Set application icon
+        icon_path = project_root / "icon.ico"
+        if icon_path.exists():
+            app.setWindowIcon(QIcon(str(icon_path)))
         
         # Create main window
         window = MainWindow()
