@@ -1,0 +1,295 @@
+{
+  "app_title": "RenLocalizer V2",
+  "file_menu": "Dosya",
+  "open_directory": "Klasör Aç",
+  "save_translations": "Çevirileri Kaydet",
+  "exit": "Çıkış",
+  "edit_menu": "Düzenle",
+  "settings": "Ayarlar",
+  "api_keys": "API Anahtarları",
+  "help_menu": "Yardım",
+  "about": "Hakkında",
+  "info": "Bilgi",
+  "view_menu": "Görünüm",
+  "theme_menu": "Tema",
+  "dark_theme": "Koyu Tema",
+  "solarized_theme": "Göz Dostu Tema",
+  
+  "input_section": "Giriş Bölümü",
+  "directory_label": "Klasör:",
+  "directory_placeholder": "Klasör yolunu seçin",
+  "browse": "Gözat",
+  "translation_settings": "Çeviri Ayarları",
+  "source_lang_label": "Kaynak Dil:",
+  "target_lang_label": "Hedef Dil:",
+  "translation_engine_label": "Çeviri Motoru:",
+  "output_format_label": "Çıktı Formatı:",
+  "advanced_settings": "Gelişmiş Ayarlar",
+  "concurrent_threads_label": "Eş Zamanlı Thread:",
+  "batch_size_label": "Batch Boyutu:",
+  "request_delay_label": "İstek Gecikmesi:",
+  "parser_workers_label": "Parser Workers:",
+  "proxy_enabled_label": "Proxy Etkin:",
+  "refresh_proxies_btn": "Proxy Yenile",
+  
+  "source_language": "Kaynak Dil",
+  "target_language": "Hedef Dil",
+  "translation_engine": "Çeviri Motoru",
+  "start_translation": "Çeviriyi Başlat",
+  "stop_translation": "Çeviriyi Durdur",
+  "progress": "İlerleme",
+  "status": "Durum",
+  "ready": "Hazır",
+  "translating": "Çevriliyor...",
+  "completed": "Tamamlandı",
+  "error": "Hata",
+  
+  "extracted_texts_tab": "Çıkarılan Metinler",
+  "translation_results_tab": "Çeviri Sonuçları",
+  "log_tab": "Log",
+  "text_header": "Metin",
+  "type_header": "Tip",
+  "file_header": "Dosya",
+  "line_header": "Satır",
+  "original_header": "Orijinal",
+  "translated_header": "Çevrilmiş",
+  "engine_header": "Motor",
+  "status_header": "Durum",
+  
+  "files_status": "Dosyalar: {count}",
+  "texts_status": "Metinler: {count}",
+  "translations_status": "Çeviriler: {count}",
+  
+  "select_directory_title": "Klasör Seçin",
+  "scanning_directory": "Klasör taranıyor...",
+  "directory_scanned": "Klasör tarandı",
+  "error_scanning_directory": "Klasör taranırken hata",
+  
+  "warning": "Uyarı",
+  "no_texts_warning": "Çevrilecek metin bulunamadı!",
+  "starting_translation": "Çeviri başlatılıyor...",
+  "stopping": "Durduruluyor...",
+  "translation_completed": "Çeviri tamamlandı",
+  "auto_saved": "Otomatik kaydedildi",
+  
+  "success": "Başarılı",
+  "failed": "Başarısız",
+  "no_translations_warning": "Kaydedilecek çeviri bulunamadı!",
+  "select_output_directory": "Çıktı Klasörü Seçin",
+  "translations_saved": "{count} çeviri dosyası {directory} klasörüne kaydedildi.",
+  "error_saving": "Çeviriler kaydedilirken hata: {error}",
+  
+  "auto_save_question": "Çeviriler otomatik olarak kaydedilsin mi?",
+  "auto_save_success": "{count} çeviri dosyası {directory} klasörüne otomatik kaydedildi.",
+  "auto_save_error": "Otomatik Kayıt Hatası",
+  "auto_save_error_message": "Çeviriler otomatik kaydedilemedi: {error}\\nManuel kayıt için 'Çevirileri Kaydet' butonunu kullanın.",
+  "translation_error": "Çeviri Hatası",
+  
+  "about_title": "RenLocalizer V2 Hakkında",
+  "about_content": "<h3>RenLocalizer V2</h3><p>Ren'Py oyunları için gelişmiş çok-motorlu çeviri aracı.</p><p><b>Özellikler:</b></p><ul><li>Çok-motorlu çeviri desteği</li><li>Otomatik proxy rotasyonu</li><li>Toplu işlem</li><li>Modern kullanıcı arayüzü</li><li>UTF-8 Ren'Py format çıktısı</li></ul><p><b>Sürüm:</b> 2.0.0</p><p><b>Framework:</b> {framework}</p><p>© 2025 RenLocalizer Ekibi</p>",
+  
+  "general_tab": "Genel",
+  "translation_tab": "Çeviri",
+  "proxy_tab": "Proxy",
+  "advanced_tab": "Gelişmiş",
+  
+  "ui_language_label": "Arayüz Dili:",
+  "theme_label": "Tema:",
+  "auto_save_label": "Otomatik Ayar Kaydet",
+  "auto_save_translations_label": "Çevirileri Otomatik Kaydet",
+  "check_updates_label": "Güncellemeleri Kontrol Et",
+  "window_size_group": "Pencere Boyutu",
+  "width_label": "Genişlik:",
+  "height_label": "Yükseklik:",
+  
+  "default_languages_group": "Varsayılan Diller",
+  "performance_group": "Performans",
+  "max_threads_label": "Maksimum Thread:",
+  "max_batch_label": "Maksimum Batch:",
+  "request_delay_setting_label": "İstek Gecikmesi:",
+  "retry_settings_group": "Yeniden Deneme",
+  "max_retries_label": "Maksimum Deneme:",
+  "timeout_label": "Zaman Aşımı:",
+  
+  "enable_proxy_label": "Proxy Etkinleştir",
+  "auto_rotate_label": "Otomatik Rotasyon",
+  "test_startup_label": "Başlangıçta Test Et",
+  "update_interval_label": "Güncelleme Aralığı:",
+  "max_failures_label": "Maksimum Hata:",
+  "custom_proxies_group": "Özel Proxy'ler",
+  "custom_proxies_note": "Her satıra bir proxy adresi girin (host:port formatında):",
+  
+  "log_level_label": "Log Seviyesi:",
+  "max_log_size_label": "Maksimum Log Boyutu:",
+  "memory_optimization_group": "Bellek Optimizasyonu",
+  "chunk_size_label": "Chunk Boyutu:",
+  "debugging_group": "Hata Ayıklama",
+  "debug_mode_label": "Debug Modu",
+  "verbose_logging_label": "Detaylı Log",
+  
+  "proxy_refresh_started": "Proxy yenileme başlatıldı.",
+  "proxy_refresh_unavailable": "Proxy yenileme şu anda kullanılamıyor.",
+  
+  "info_dialog": {
+    "title": "Program Bilgi Merkezi",
+    "tabs": {
+      "formats": "Çıktı Formatları",
+      "performance": "Performans Ayarları", 
+      "features": "Özellikler",
+      "troubleshooting": "Sorun Giderme"
+    },
+    "formats": {
+      "title": "Çeviri Dosya Formatları",
+      "description": "RenLocalizer V2, Ren'Py çeviri dosyaları için iki çıktı formatını destekler:",
+      "simple": {
+        "title": "🟦 SIMPLE Format (Varsayılan)",
+        "features": [
+          "Temiz ve okunabilir syntax",
+          "Orijinal metin yorumlarda",
+          "Daha az kod satırı",
+          "Manuel düzenleme için ideal",
+          "Modern Ren'Py ile uyumlu (7.0+)"
+        ],
+        "example": "translate tr hello_world:\n    # \"Hello, world!\"\n    \"Merhaba, dünya!\"",
+        "recommended_for": "Modern projeler, manuel düzenleme, temiz çıktı"
+      },
+      "old_new": {
+        "title": "🟩 OLD_NEW Format (Resmi)",
+        "features": [
+          "Ren'Py'nin resmi export formatı",
+          "Tüm Ren'Py sürümleri ile uyumlu (6.0+)",
+          "Eski/yeni metin açık ayrımı",
+          "Ren'Py araçları ile tam uyumluluk",
+          "Daha yapısal yaklaşım"
+        ],
+        "example": "translate tr hello_world:\n    old \"Hello, world!\"\n    new \"Merhaba, dünya!\"",
+        "recommended_for": "Eski projeler, resmi araçlar, maksimum uyumluluk"
+      },
+      "note": "Her iki format da Ren'Py motorunda mükemmel çalışır. Fark sadece syntax stili ve okunabilirlikte.",
+      "change_setting": "Çıktı formatını Ayarlar → Genel → Çıktı Formatı'ndan değiştirebilirsiniz."
+    },
+    "performance": {
+      "title": "Performans Ayarları Rehberi",
+      "description": "Sistem performansını optimize etmek için kritik ayarlar:",
+      "parser_workers": {
+        "title": "Parser Workers (Parser İş Parçacıkları)",
+        "description": "Dosyaları paralel olarak işlemek için kullanılan iş parçacığı sayısı.",
+        "ideal_settings": [
+          "Düşük sistemler (2-4 çekirdek): 2-4",
+          "Orta sistemler (4-8 çekirdek): 4-8", 
+          "Güçlü sistemler (8+ çekirdek): 8-16"
+        ],
+        "note": "CPU çekirdek sayınızdan fazla ayarlamak performansı düşürür."
+      },
+      "concurrent_threads": {
+        "title": "Eş Zamanlı Thread",
+        "description": "Çeviri işlemi sırasında eş zamanlı çalışan thread sayısı.",
+        "ideal_settings": [
+          "Yavaş internet: 8-16",
+          "Orta internet: 16-32",
+          "Hızlı internet: 32-64"
+        ],
+        "note": "Çok yüksek değerler rate limit sorunları yaratabilir."
+      },
+      "batch_size": {
+        "title": "Batch Boyutu",
+        "description": "Tek seferde işlenecek çeviri isteklerinin sayısı.",
+        "ideal_settings": [
+          "Küçük projeler: 50-100",
+          "Orta projeler: 100-200",
+          "Büyük projeler: 200-500"
+        ],
+        "note": "Büyük batch boyutları daha hızlı ama daha fazla bellek kullanır."
+      },
+      "request_delay": {
+        "title": "İstek Gecikmesi",
+        "description": "Çeviri istekleri arasındaki bekleme süresi (milisaniye).",
+        "ideal_settings": [
+          "Premium API: 50-100ms",
+          "Ücretsiz API: 200-500ms",
+          "Rate limit sorunu varsa: 1000ms+"
+        ],
+        "note": "Çok düşük değerler API limitine takılmanıza neden olur."
+      }
+    },
+    "features": {
+      "title": "Program Özellikleri",
+      "description": "RenLocalizer V2'nin sunduğu gelişmiş özellikler:",
+      "current": [
+        {
+          "title": "🚀 Paralel İşleme",
+          "description": "Çoklu dosyaları aynı anda işleyerek hız kazanır"
+        },
+        {
+          "title": "🔄 Asenkron Çeviri",
+          "description": "UI dondurmadan arka planda çeviri yapar"
+        },
+        {
+          "title": "🎯 Akıllı Parsing",
+          "description": "Regex + tokenize ile güvenli string çıkarımı"
+        },
+        {
+          "title": "🌐 Çoklu Motor Desteği",
+          "description": "Google, DeepL, Yandex çeviri motorları"
+        },
+        {
+          "title": "🔧 Yapılandırılabilir",
+          "description": "Her ayar kullanıcı ihtiyacına göre değiştirilebilir"
+        }
+      ],
+      "upcoming": [
+        {
+          "title": "📊 İlerleme Analizi",
+          "description": "Detaylı çeviri raporu ve istatistikler"
+        },
+        {
+          "title": "🔍 Akıllı Filtreleme",
+          "description": "AI destekli metin filtreleme sistemi"
+        },
+        {
+          "title": "💾 Proje Şablonları",
+          "description": "Hazır ayar şablonları ve profiller"
+        }
+      ]
+    },
+    "troubleshooting": {
+      "title": "Sorun Giderme Rehberi",
+      "description": "Sık karşılaşılan sorunlar ve çözümleri:",
+      "common_issues": [
+        {
+          "problem": "Çeviri çok yavaş",
+          "solutions": [
+            "Parser Workers sayısını artırın",
+            "Batch Size'ı büyütün",
+            "İstek Gecikmesi'ni azaltın",
+            "Daha hızlı çeviri motoru seçin"
+          ]
+        },
+        {
+          "problem": "Bellek kullanımı yüksek",
+          "solutions": [
+            "Batch Size'ı küçültün",
+            "Parser Workers sayısını azaltın",
+            "Büyük dosyaları parçalara bölün"
+          ]
+        },
+        {
+          "problem": "API rate limit hatası",
+          "solutions": [
+            "İstek Gecikmesi'ni artırın",
+            "Eş Zamanlı Thread sayısını azaltın",
+            "Premium API anahtarı kullanın"
+          ]
+        },
+        {
+          "problem": "Çıktı dosyası bozuk",
+          "solutions": [
+            "Farklı output format deneyin",
+            "Encoding ayarlarını kontrol edin",
+            "Parser ayarlarını sıfırlayın"
+          ]
+        }
+      ]
+    }
+  }
+}
