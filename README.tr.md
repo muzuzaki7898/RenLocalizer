@@ -7,7 +7,7 @@
 ## ✨ Temel Özellikler
 
 ### 🎯 Akıllı Çeviri
-- **Birden fazla motor**: Google Translate (web), DeepL API desteği
+- **Birden fazla motor**: Google Translate (web), DeepL API, Deep-Translator (çoklu motor) desteği
 - **RenPy uyumlu ayrıştırma**: Menü seçeneklerini, diyalogları ve UI öğelerini doğru şekilde işler
 - **Koşullu menü desteği**: `“choice” if condition:` sözdizimini işler
 - **Teknik filtreleme**: Renk kodlarını, yazı tipi dosyalarını ve performans ölçütlerini otomatik olarak hariç tutar
@@ -91,6 +91,8 @@ Veya Windows'ta, `run.bat` dosyasını çift tıklayabilirsiniz.
 |--------|--------|------|
 | Google | ✅ Etkin | Web istemcisi + proxy yedeği |
 | DeepL | ✅ Etkin | Yalnızca kullandığınızda API anahtarı gerekir |
+| OPUS-MT | ✅ Etkin | İndirme onayı ile çevrimdışı nöral çeviri |
+| Deep-Translator | ✅ Etkin | Çoklu motor sarmalayıcısı (Google, Bing, Yandex vb.) |
 | Bing / Microsoft | ⏳ Planlanmış | Henüz eklenmedi |
 | Yandex | ⏳ Planlanmış | Henüz eklenmedi |
 | LibreTranslator | ⏳ Planlanmış | Gelecekte kendi kendine barındırma seçeneği |

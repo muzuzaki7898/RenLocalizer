@@ -37,7 +37,7 @@ except ImportError:
 
 from src.utils.config import ConfigManager
 from src.core.parser import RenPyParser
-from src.core.translator import TranslationManager, TranslationEngine, GoogleTranslator, DeepLTranslator, YandexTranslator
+from src.core.translator import TranslationManager, TranslationEngine, GoogleTranslator, DeepLTranslator, YandexTranslator, DeepTranslator, OpusMTTranslator
 from src.core.output_formatter import RenPyOutputFormatter
 from src.gui.translation_worker import TranslationWorker
 from src.gui.settings_dialog import SettingsDialog
@@ -99,7 +99,14 @@ class MainWindow(QMainWindow):
         self.setMinimumSize(1000, 700)
         
         # Set application icon
-        icon_path = Path(__file__).parent.parent.parent / "icon.ico"
+        # PyInstaller için exe çalışma zamanında doğru yolu bulma
+        if getattr(sys, 'frozen', False):
+            # PyInstaller ile paketlenmiş exe durumu - temporary dizinde icon var
+            icon_path = Path(sys._MEIPASS) / "icon.ico"
+        else:
+            # Normal Python çalışma zamanı
+            icon_path = Path(__file__).parent.parent.parent / "icon.ico"
+        
         if icon_path.exists():
             self.setWindowIcon(QIcon(str(icon_path)))
         
@@ -388,15 +395,34 @@ class MainWindow(QMainWindow):
     def populate_engine_combo(self):
         """Populate translation engine combo box with type indicators."""
         engines = [
-            (TranslationEngine.GOOGLE, "Google Translate (WEB - Ücretsiz)"),
-            (TranslationEngine.DEEPL, "DeepL (API - Anahtar Gerekli)"),
-            (TranslationEngine.BING, "Microsoft Translator (API - Anahtar Gerekli)"),
-            (TranslationEngine.YANDEX, "Yandex Translate (WEB - Ücretsiz)"),
-            (TranslationEngine.LIBRETRANSLATOR, "LibreTranslator (API - Yerel/Özgür)")
+            (TranslationEngine.GOOGLE, self.config_manager.get_ui_text("translation_engines.google")),
+            (TranslationEngine.DEEPL, self.config_manager.get_ui_text("translation_engines.deepl")),
+            # (TranslationEngine.ARGOS, self.config_manager.get_ui_text("translation_engines.argos")),  # Temporarily disabled
+            (TranslationEngine.OPUS_MT, self.config_manager.get_ui_text("translation_engines.opus_mt")),
+            (TranslationEngine.DEEP_TRANSLATOR, self.config_manager.get_ui_text("translation_engines.deep_translator")),
+            (TranslationEngine.BING, self.config_manager.get_ui_text("translation_engines.bing")),
+            (TranslationEngine.YANDEX, self.config_manager.get_ui_text("translation_engines.yandex")),
+            (TranslationEngine.LIBRETRANSLATOR, self.config_manager.get_ui_text("translation_engines.libretranslator"))
         ]
         
         for engine, name in engines:
             self.engine_combo.addItem(name, engine)
+    
+    def refresh_engine_combo(self):
+        """Refresh translation engine combo box when language changes."""
+        # Save current selection
+        current_engine = self.engine_combo.currentData()
+        
+        # Clear and repopulate
+        self.engine_combo.clear()
+        self.populate_engine_combo()
+        
+        # Restore selection
+        if current_engine:
+            for i in range(self.engine_combo.count()):
+                if self.engine_combo.itemData(i) == current_engine:
+                    self.engine_combo.setCurrentIndex(i)
+                    break
     
     def create_status_bar(self):
         """Create the status bar."""
@@ -456,6 +482,30 @@ class MainWindow(QMainWindow):
         # Add Google Translator (free)
         google_translator = GoogleTranslator(proxy_manager=self.proxy_manager)
         self.translation_manager.add_translator(TranslationEngine.GOOGLE, google_translator)
+        
+        # Add OPUS-MT (Hugging Face transformers) - optional
+        try:
+            opus_translator = OpusMTTranslator()
+            # Set reference to main window for download dialogs
+            opus_translator._main_window = self
+            self.translation_manager.add_translator(TranslationEngine.OPUS_MT, opus_translator)
+            self.logger.info("✅ OPUS-MT engine loaded successfully")
+        except ImportError as e:
+            self.logger.warning(f"⚠️ OPUS-MT not available: {e}")
+            self.logger.info("💡 To install: pip install transformers torch")
+        except Exception as e:
+            self.logger.warning(f"⚠️ OPUS-MT engine error: {e}")
+        
+        # Add Deep-Translator (multi-engine wrapper) - optional
+        try:
+            deep_translator = DeepTranslator()
+            self.translation_manager.add_translator(TranslationEngine.DEEP_TRANSLATOR, deep_translator)
+            self.logger.info("✅ Deep-Translator engine loaded successfully")
+        except ImportError as e:
+            self.logger.warning(f"⚠️ Deep-Translator not available: {e}")
+            self.logger.info("💡 To install: pip install deep-translator")
+        except Exception as e:
+            self.logger.warning(f"⚠️ Deep-Translator engine error: {e}")
         
         # Add DeepL if API key is available
         deepl_key = self.config_manager.get_api_key("deepl")
@@ -596,24 +646,20 @@ class MainWindow(QMainWindow):
     def scan_directory(self):
         """Scan directory for .rpy files."""
         if not self.current_directory or not self.current_directory.exists():
-            print("DEBUG: No directory or directory doesn't exist")
+            self.status_label.setText("No directory selected or directory doesn't exist")
             return
         
         try:
-            print(f"DEBUG: Starting scan of {self.current_directory}")
             self.status_label.setText(self.config_manager.get_ui_text("scanning_directory"))
             
             # Check if we should use parallel processing
             rpy_files = list(self.current_directory.rglob('*.rpy'))
             use_parallel = len(rpy_files) > 10  # Use parallel for 10+ files
             
-            print(f"DEBUG: Found {len(rpy_files)} .rpy files, use_parallel={use_parallel}")
             
             if use_parallel:
                 self.status_label.setText(f"Scanning {len(rpy_files)} files (parallel mode)...")
                 max_workers = self.parser_workers_spin.value()
-                
-                print(f"DEBUG: Using parallel processing with {max_workers} workers")
                 
                 # Use parallel processing for large projects
                 extracted_data = self.parser.extract_from_directory_parallel(
@@ -622,7 +668,6 @@ class MainWindow(QMainWindow):
                     max_workers=max_workers
                 )
                 
-                print(f"DEBUG: Parallel extraction returned {len(extracted_data)} files")
                 
                 # Convert to MainWindow format
                 self.extracted_texts = []
@@ -638,11 +683,9 @@ class MainWindow(QMainWindow):
                         }
                         self.extracted_texts.append(text_data)
             else:
-                print("DEBUG: Using sequential processing")
+                self.status_label.setText("Using sequential processing...")
                 # Use standard processing for small projects
                 self.extracted_texts = self.parser.parse_directory(self.current_directory)
-            
-            print(f"DEBUG: Total extracted texts: {len(self.extracted_texts)}")
             
             # Update extracted texts tree
             self.update_extracted_texts_tree()
@@ -672,8 +715,6 @@ class MainWindow(QMainWindow):
                 str(text_data['line_number'])
             ])
             self.extracted_tree.addTopLevelItem(item)
-        
-        print(f"DEBUG: Added {self.extracted_tree.topLevelItemCount()} items to tree")
     
     def start_translation(self):
         """Start the translation process."""
@@ -686,6 +727,14 @@ class MainWindow(QMainWindow):
         target_lang = self.target_lang_combo.currentData()
         engine = self.engine_combo.currentData()
         use_proxy = self.proxy_check.isChecked()
+        
+        # Store parameters for potential restart after model download
+        self.last_translation_params = {
+            'source_lang': source_lang,
+            'target_lang': target_lang, 
+            'engine': engine,
+            'use_proxy': use_proxy
+        }
         
         # Configure translation manager based on proxy setting
         if use_proxy:
@@ -713,6 +762,7 @@ class MainWindow(QMainWindow):
         self.translation_worker.progress_updated.connect(self.update_progress)
         self.translation_worker.translation_completed.connect(self.on_translation_completed)
         self.translation_worker.error_occurred.connect(self.on_translation_error)
+        self.translation_worker.model_download_required.connect(self.on_model_download_required)
         self.translation_worker.finished.connect(self.on_translation_finished)
         
         # Start in thread
@@ -1032,6 +1082,9 @@ class MainWindow(QMainWindow):
         
         # Update status label
         self.status_label.setText(self.config_manager.get_ui_text("ready"))
+        
+        # Update translation engine combo box
+        self.refresh_engine_combo()
     
     def update_control_panel_texts(self):
         """Update control panel text elements."""
@@ -1136,3 +1189,71 @@ class MainWindow(QMainWindow):
             
             refresh_thread = threading.Thread(target=refresh_task, daemon=True)
             refresh_thread.start()
+
+    async def show_model_download_dialog(self, model_name: str, language_pair: str) -> bool:
+        """Show model download confirmation dialog in main thread."""
+        try:
+            from src.gui.model_download_dialog import ModelDownloadDialog
+            
+            # We're in an async context but need to run dialog synchronously in main thread
+            # Create dialog and run it directly since we should be in main thread already
+            dialog = ModelDownloadDialog(self, model_name, language_pair)
+            result = dialog.exec()
+            
+            # Check both dialog result and download confirmation
+            if result == dialog.DialogCode.Accepted and dialog.download_confirmed:
+                return True
+            else:
+                return False
+                
+        except Exception as e:
+            self.logger.error(f"Failed to show download dialog: {e}")
+            return False
+
+    def on_model_download_required(self, model_name: str, source_lang: str, target_lang: str):
+        """Handle model download requirement from translation worker."""
+        try:
+            from src.gui.model_download_dialog import ModelDownloadDialog
+            
+            language_pair = f"{source_lang.upper()} → {target_lang.upper()}"
+            dialog = ModelDownloadDialog(self, model_name, language_pair)
+            result = dialog.exec()
+            
+            if result == dialog.DialogCode.Accepted and dialog.download_confirmed:
+                # Model download confirmed, restart translation
+                self.logger.info(f"Model download confirmed for {model_name}")
+                
+                # Stop current worker
+                if hasattr(self, 'worker_thread') and self.worker_thread.isRunning():
+                    self.worker_thread.quit()
+                    self.worker_thread.wait()
+                
+                # Restart translation after a short delay to allow model loading
+                try:
+                    from PyQt6.QtCore import QTimer
+                except ImportError:
+                    from PySide6.QtCore import QTimer
+                    
+                QTimer.singleShot(1000, self.restart_translation_after_download)
+            else:
+                # Download cancelled
+                self.logger.info("Model download cancelled by user")
+                self.on_translation_error("Model download cancelled by user")
+                
+        except Exception as e:
+            self.logger.error(f"Error handling model download requirement: {e}")
+            self.on_translation_error(f"Model download error: {e}")
+    
+    def restart_translation_after_download(self):
+        """Restart translation after model download."""
+        try:
+            # Re-trigger translation with same settings
+            if hasattr(self, 'last_translation_params'):
+                params = self.last_translation_params
+                self.start_translation()
+            else:
+                self.logger.warning("No previous translation parameters found")
+                
+        except Exception as e:
+            self.logger.error(f"Error restarting translation: {e}")
+            self.on_translation_error(f"Restart error: {e}")

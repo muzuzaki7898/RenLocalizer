@@ -26,6 +26,7 @@ class TranslationWorker(QObject):
     progress_updated = pyqtSignal(int, int, str)  # completed, total, current_text
     translation_completed = pyqtSignal(list)  # translation_results
     error_occurred = pyqtSignal(str)  # error_message
+    model_download_required = pyqtSignal(str, str, str)  # model_name, source_lang, target_lang
     finished = pyqtSignal()
     
     def __init__(self, texts: List[Dict], source_lang: str, target_lang: str, 
@@ -137,6 +138,18 @@ class TranslationWorker(QObject):
                 
                 # Translate batch
                 batch_results = await self.translation_manager.translate_batch(batch)
+                
+                # Check for model download requirements (only check first result to avoid spam)
+                if batch_results and not batch_results[0].success and batch_results[0].error and batch_results[0].error.startswith("MODEL_DOWNLOAD_REQUIRED:"):
+                    # Parse the error message: MODEL_DOWNLOAD_REQUIRED:model_name:source_lang:target_lang
+                    parts = batch_results[0].error.split(":")
+                    if len(parts) == 4:
+                        model_name = parts[1]
+                        source_lang = parts[2] 
+                        target_lang = parts[3]
+                        self.logger.info(f"Model download required: {model_name} for {source_lang}->{target_lang}")
+                        self.model_download_required.emit(model_name, source_lang, target_lang)
+                        return  # Stop processing and let GUI handle download
                 
                 # CRITICAL: Restore placeholders in translated text
                 for result in batch_results:

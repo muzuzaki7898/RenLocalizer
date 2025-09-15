@@ -7,11 +7,12 @@
 ## ✨ Key Features
 
 ### 🎯 Smart Translation
-- **Multiple engines**: Google Translate (web), DeepL API support
+- **Multiple engines**: Google Translate (web), DeepL API, OPUS-MT (offline), Deep-Translator (multi-engine) support
 - **RenPy-aware parsing**: Correctly handles menu choices, dialogues, UI elements
 - **Conditional menu support**: Handles `"choice" if condition:` syntax
 - **Technical filtering**: Automatically excludes color codes, font files, performance metrics
 - **Character preservation**: Maintains `[character_name]` variables and placeholders
+- **Offline translation**: OPUS-MT provides high-quality neural translation without internet
 
 ### 🚀 High Performance  
 - **Concurrent processing**: Configurable thread count (1-256)
@@ -44,7 +45,7 @@
 
 1. **Clone the repository:**
 ```bash
-git clone https://github.com/yourusername/RenLocalizer.git
+git clone https://github.com/YOUR_USERNAME/RenLocalizer.git
 cd RenLocalizer
 ```
 
@@ -87,13 +88,18 @@ Or on Windows, you can double-click `run.bat`
 - Enable / disable proxy
 
 ## 🌍 Engine Status Table
-| Engine | Status | Note |
-|--------|--------|------|
-| Google | ✅ Active | Web client + proxy fallback |
-| DeepL | ✅ Active | API key required only if you use it |
-| Bing / Microsoft | ⏳ Planned | Not yet added |
-| Yandex | ⏳ Planned | Not yet added |
-| LibreTranslator | ⏳ Planned | Future self-host option |
+| Engine | Status | Languages | Note |
+|--------|--------|-----------|------|
+| Google | ✅ Active | 100+ | Web client + proxy fallback |
+| DeepL | ✅ Active | 30+ | API key required only if you use it |
+| OPUS-MT | ✅ Active | 16 pairs | Offline neural MT (Helsinki-NLP models) |
+| Deep-Translator | ✅ Active | 100+ | Multi-engine wrapper (Google, Bing, Yandex, etc.) |
+| Bing / Microsoft | ⏳ Planned | - | Not yet added |
+| Yandex | ⏳ Planned | - | Not yet added |
+| LibreTranslator | ⏳ Planned | - | Future self-host option |
+
+### OPUS-MT Supported Languages
+English ↔ Turkish, German, French, Spanish, Italian, Russian, Japanese, Chinese, Korean, Portuguese, Arabic, Dutch, Polish, Swedish, Norwegian, Danish
 
 ## 🧠 Parsing Logic
 - Excludes code blocks, label definitions, python blocks

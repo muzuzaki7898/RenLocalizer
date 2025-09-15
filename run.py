@@ -26,7 +26,7 @@ if __name__ == "__main__":
         
         # Create application
         app = QApplication(sys.argv)
-        app.setApplicationName("RenLocalizer V2")
+        app.setApplicationName("RenLocalizer")
         app.setApplicationVersion("2.0.0")
         
         # Set application icon

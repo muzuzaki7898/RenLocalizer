@@ -9,6 +9,13 @@ requests>=2.28.0
 # Text encoding detection
 chardet>=5.0.0
 
+# Translation engines (optional)
+deep-translator>=1.11.4  # Multi-engine wrapper
+transformers>=4.30.0  # For OPUS-MT offline translation with download dialog
+torch>=2.0.0  # PyTorch backend for transformers
+# Alternative: libretranslate (simpler to install)
+# libretranslate[cpu]>=1.3.0
+
 # Optional: For better performance
 uvloop>=0.17.0; sys_platform != "win32"  # Unix only
 

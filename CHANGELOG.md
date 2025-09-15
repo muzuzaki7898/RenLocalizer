@@ -1,6 +1,36 @@
 # Changelog
 
-# Changelog
+## [2.0.2] - 2025-09-15
+
+### 🚀 New Translation Engine
+- **OPUS-MT Offline Translation**: Added Helsinki-NLP OPUS-MT models for offline neural machine translation
+- **16 Language Pairs**: Support for EN↔TR, DE, FR, ES, IT, RU, JA, ZH, KO, PT, AR, NL, PL, SV, NO, DA
+- **Model Download Dialog**: User-controlled model download with progress tracking
+- **Thread-Safe Implementation**: Proper async/sync integration with Qt GUI
+
+### 🌐 Multi-Language UI Support
+- **Complete UI Translation**: All interface elements now support English and Turkish
+- **Dynamic Language Switching**: Real-time language switching without restart
+- **Translation Engine Names**: Engine dropdown now adapts to selected UI language
+- **Model Download Dialog**: Full multi-language support for offline model downloads
+
+### 🔧 Architecture Improvements
+- **Batch Translation Optimization**: Pre-check model availability before processing thousands of texts
+- **Signal-Based Download Workflow**: Clean separation between translation worker and GUI dialogs
+- **Error Prevention**: Eliminated infinite loop errors from missing models
+- **Memory Management**: Efficient model caching and loading system
+
+### 🐛 Critical Fixes
+- Fixed OPUS-MT model download infinite loop that caused application crashes
+- Resolved Qt thread safety issues with dialog creation
+- Improved error handling for missing translation models
+- Better fallback mechanisms when models are unavailable
+
+### 📚 Documentation & GitHub Preparation
+- Updated README.md with OPUS-MT information and installation instructions
+- Enhanced .gitignore for better repository management
+- Cleaned up debug prints and improved code quality
+- Added GitHub community files (CODE_OF_CONDUCT.md, issue templates, PR template)
 
 ## [2.0.1] - 2025-09-11
 

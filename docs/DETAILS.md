@@ -3,7 +3,7 @@
 This file contains the extended English documentation that was previously in README.md.
 
 ## 1. Features (Detailed)
-- Implemented Engines: Google (web), DeepL (API)
+- Implemented Engines: Google (web), DeepL (API), Argos Translate (offline)
 - Planned: Bing (Microsoft), Yandex, LibreTranslator (self-host)
 - Concurrency: UI up to 256 (internal active cap ~32 per engine)
 - Batch Size: Up to 2000
@@ -17,6 +17,7 @@ This file contains the extended English documentation that was previously in REA
 |--------|--------|-------|
 | Google | Implemented | Web client; optional proxy + direct fallback |
 | DeepL  | Implemented | API key only if enabled |
+| Argos Translate | Implemented | Offline neural translation; auto-downloads language packages |
 | Bing / Microsoft | Planned | Not implemented yet |
 | Yandex | Planned | Not implemented yet |
 | LibreTranslator | Planned | Self-host (future) |

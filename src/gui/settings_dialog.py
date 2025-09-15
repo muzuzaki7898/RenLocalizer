@@ -60,7 +60,15 @@ class SettingsDialog(QDialog):
         
         # Set dialog icon
         from pathlib import Path
-        icon_path = Path(__file__).parent.parent.parent / "icon.ico"
+        import sys
+        # PyInstaller için exe çalışma zamanında doğru yolu bulma
+        if getattr(sys, 'frozen', False):
+            # PyInstaller ile paketlenmiş exe durumu - temporary dizinde icon var
+            icon_path = Path(sys._MEIPASS) / "icon.ico"
+        else:
+            # Normal Python çalışma zamanı
+            icon_path = Path(__file__).parent.parent.parent / "icon.ico"
+        
         if icon_path.exists():
             self.setWindowIcon(QIcon(str(icon_path)))
         

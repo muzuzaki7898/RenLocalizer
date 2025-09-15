@@ -130,6 +130,37 @@
   "proxy_refresh_started": "Proxy yenileme başlatıldı.",
   "proxy_refresh_unavailable": "Proxy yenileme şu anda kullanılamıyor.",
   
+  "model_download_dialog": {
+    "title": "OPUS-MT Model İndirme",
+    "header": "🤖 OPUS-MT Offline Çeviri Modeli",
+    "info_group": "Model Bilgileri",
+    "model_label": "<b>Model:</b> {model_name}",
+    "language_pair_label": "<b>Dil Çifti:</b> {language_pair}",
+    "size_label": "<b>Tahmini Boyut:</b> ~300-500 MB",
+    "description_group": "Açıklama",
+    "description_text": "Bu offline neural machine translation modeli Hugging Face'den indirilecek. Model sadece ilk kullanımda indirilir ve sonraki çeviriler için yerel olarak kullanılır. İnternet bağlantısı sadece ilk indirme için gereklidir.",
+    "options_group": "Seçenekler",
+    "auto_download_checkbox": "Gelecekte bu dil çifti için otomatik indir",
+    "progress_group": "İndirme Durumu",
+    "preparing": "Hazırlanıyor...",
+    "download_button": "🔽 İndir ve Kullan",
+    "cancel_button": "❌ İptal",
+    "close_button": "✅ Kapat",
+    "pause_cancel_button": "⏸️ İptal",
+    "retry_button": "🔄 Tekrar Dene",
+    "loading_transformers": "Transformers kütüphanesi yükleniyor...",
+    "downloading_model": "Model indiriliyor...",
+    "downloading_tokenizer": "Tokenizer indiriliyor...",
+    "verifying_model": "Model dosyaları doğrulanıyor...",
+    "model_test_success": "Model testi başarılı!",
+    "download_complete": "✅ İndirme tamamlandı!",
+    "download_failed": "❌ İndirme başarısız!",
+    "model_ready": "Model başarıyla indirildi ve kullanıma hazır.",
+    "error_prefix": "Hata: {error}",
+    "transformers_not_found": "Transformers kütüphanesi bulunamadı. 'pip install transformers torch' çalıştırın.",
+    "model_test_failed": "Model testi başarısız - model çalışmıyor"
+  },
+  
   "info_dialog": {
     "title": "Program Bilgi Merkezi",
     "tabs": {
@@ -291,5 +322,16 @@
         }
       ]
     }
+  },
+  
+  "translation_engines": {
+    "google": "Google Translate (WEB - Ücretsiz)",
+    "deepl": "DeepL (API - Anahtar Gerekli)",
+    "argos": "Argos Translate (OFFLINE - Nöral Çeviri)",
+    "opus_mt": "OPUS-MT (OFFLINE - Hugging Face)",
+    "deep_translator": "Deep-Translator (MULTI-ENGINE - Ücretsiz)",
+    "bing": "Microsoft Translator (API - Anahtar Gerekli)",
+    "yandex": "Yandex Translate (WEB - Ücretsiz)",
+    "libretranslator": "LibreTranslator (API - Yerel/Özgür)"
   }
 }

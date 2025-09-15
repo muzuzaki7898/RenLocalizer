@@ -20,6 +20,8 @@ class TranslationEngine(Enum):
     YANDEX = "yandex"
     BING = "bing"
     LIBRETRANSLATOR = "libre"
+    DEEP_TRANSLATOR = "deep_translator"
+    OPUS_MT = "opus_mt"
 
 
 @dataclass
@@ -310,6 +312,659 @@ class LibreTranslator(BaseTranslator):
     def get_supported_languages(self) -> Dict[str,str]: return {'en':'English','tr':'Turkish'}
 
 
+class DeepTranslator(BaseTranslator):
+    """Deep-Translator - Multi-engine translation wrapper."""
+    
+    def __init__(self, api_key: Optional[str] = None, proxy_manager=None):
+        super().__init__(api_key, proxy_manager)
+        self.engine_name = "google"  # Default engine
+        self._translator = None
+        self._init_translator()
+        
+    def _init_translator(self):
+        """Initialize the deep-translator instance."""
+        try:
+            from deep_translator import GoogleTranslator
+            self._translator = GoogleTranslator(source='auto', target='en')
+            self.logger.info("Deep-Translator initialized successfully")
+        except ImportError:
+            self.logger.error("Deep-Translator not installed. Install with: pip install deep-translator")
+            raise ImportError("Deep-Translator not available.")
+        except Exception as e:
+            self.logger.error(f"Failed to initialize Deep-Translator: {e}")
+            raise
+    
+    def _setup_translator_for_languages(self, from_code: str, to_code: str):
+        """Setup translator for specific language pair."""
+        try:
+            from deep_translator import GoogleTranslator
+            
+            # Handle 'auto' source language
+            source_lang = from_code if from_code != 'auto' else 'auto'
+            
+            # Create translator for this language pair
+            translator = GoogleTranslator(source=source_lang, target=to_code)
+            return translator
+            
+        except Exception as e:
+            self.logger.error(f"Failed to setup translator for {from_code}->{to_code}: {e}")
+            return None
+    
+    async def translate_single(self, request: TranslationRequest) -> TranslationResult:
+        """Translate a single text using Deep-Translator."""
+        try:
+            # Setup translator for this language pair
+            translator = self._setup_translator_for_languages(request.source_lang, request.target_lang)
+            if not translator:
+                return TranslationResult(
+                    request.text, "", request.source_lang, request.target_lang,
+                    TranslationEngine.ARGOS, False, 
+                    f"Failed to setup translator for {request.source_lang}->{request.target_lang}",
+                    metadata=request.metadata
+                )
+            
+            # Perform translation
+            translated_text = await asyncio.to_thread(translator.translate, request.text)
+            
+            if not translated_text or translated_text == request.text:
+                # Fallback or no translation occurred
+                confidence = 0.3
+                success = bool(translated_text)
+            else:
+                confidence = 0.85  # Deep-Translator typically provides good quality
+                success = True
+                
+            return TranslationResult(
+                request.text, translated_text or "", 
+                request.source_lang, request.target_lang,
+                TranslationEngine.ARGOS, success,
+                confidence=confidence, metadata=request.metadata
+            )
+            
+        except ImportError:
+            return TranslationResult(
+                request.text, "", request.source_lang, request.target_lang,
+                TranslationEngine.ARGOS, False, "Deep-Translator not installed",
+                metadata=request.metadata
+            )
+        except Exception as e:
+            return TranslationResult(
+                request.text, "", request.source_lang, request.target_lang,
+                TranslationEngine.ARGOS, False, f"Deep-Translator error: {str(e)}",
+                metadata=request.metadata
+            )
+    
+    async def translate_batch(self, requests: List[TranslationRequest]) -> List[TranslationResult]:
+        """Batch translation using Deep-Translator."""
+        if not requests:
+            return []
+        
+        if len(requests) == 1:
+            return [await self.translate_single(requests[0])]
+        
+        # Group by language pair for efficiency
+        grouped = {}
+        for i, req in enumerate(requests):
+            key = (req.source_lang, req.target_lang)
+            if key not in grouped:
+                grouped[key] = []
+            grouped[key].append((i, req))
+        
+        results = [None] * len(requests)
+        
+        # Process each language pair group
+        for (from_lang, to_lang), group in grouped.items():
+            # Setup translator for this language pair
+            translator = self._setup_translator_for_languages(from_lang, to_lang)
+            if not translator:
+                # Fill with error results
+                for idx, req in group:
+                    results[idx] = TranslationResult(
+                        req.text, "", req.source_lang, req.target_lang,
+                        TranslationEngine.ARGOS, False,
+                        f"Failed to setup translator for {from_lang}->{to_lang}",
+                        metadata=req.metadata
+                    )
+                continue
+            
+            # Translate all texts in this group
+            try:
+                # Extract texts and translate them one by one (Deep-Translator doesn't have native batching)
+                for idx, req in group:
+                    try:
+                        translated_text = await asyncio.to_thread(translator.translate, req.text)
+                        
+                        if not translated_text or translated_text == req.text:
+                            confidence = 0.3
+                            success = bool(translated_text)
+                        else:
+                            confidence = 0.85
+                            success = True
+                        
+                        results[idx] = TranslationResult(
+                            req.text, translated_text or "",
+                            req.source_lang, req.target_lang,
+                            TranslationEngine.ARGOS, success,
+                            confidence=confidence, metadata=req.metadata
+                        )
+                    except Exception as e:
+                        results[idx] = TranslationResult(
+                            req.text, "", req.source_lang, req.target_lang,
+                            TranslationEngine.ARGOS, False, f"Translation error: {str(e)}",
+                            metadata=req.metadata
+                        )
+                    
+            except Exception as e:
+                # Fill with error results
+                for idx, req in group:
+                    results[idx] = TranslationResult(
+                        req.text, "", req.source_lang, req.target_lang,
+                        TranslationEngine.ARGOS, False, f"Batch setup error: {str(e)}",
+                        metadata=req.metadata
+                    )
+        
+        return results
+    
+    def get_supported_languages(self) -> Dict[str, str]:
+        """Return supported language codes and names."""
+        # Common languages supported by Argos Translate
+        return {
+            'auto': 'Auto-detect',
+            'en': 'English',
+            'tr': 'Turkish', 
+            'es': 'Spanish',
+            'fr': 'French',
+            'de': 'German',
+            'it': 'Italian',
+            'pt': 'Portuguese',
+            'ru': 'Russian',
+            'ja': 'Japanese',
+            'ko': 'Korean',
+            'zh': 'Chinese',
+            'ar': 'Arabic',
+            'hi': 'Hindi',
+            'nl': 'Dutch',
+            'pl': 'Polish',
+            'sv': 'Swedish',
+            'da': 'Danish',
+            'no': 'Norwegian',
+            'fi': 'Finnish',
+            'el': 'Greek',
+            'he': 'Hebrew',
+            'cs': 'Czech',
+            'sk': 'Slovak',
+            'hu': 'Hungarian',
+            'uk': 'Ukrainian',
+            'ca': 'Catalan',
+            'eu': 'Basque',
+            'eo': 'Esperanto',
+            'ga': 'Irish',
+            'cy': 'Welsh'
+        }
+
+
+class OpusMTTranslator(BaseTranslator):
+    """Argos Translate - True offline neural machine translation."""
+    
+    def __init__(self, api_key: Optional[str] = None, proxy_manager=None):
+        super().__init__(api_key, proxy_manager)
+        self._installed_packages = set()
+        self._available_packages = []
+        self._packages_loaded = False
+        
+    async def _ensure_packages_loaded(self):
+        """Ensure language packages are loaded and available."""
+        if self._packages_loaded:
+            return
+            
+        try:
+            import argostranslate.package
+            import argostranslate.translate
+            
+            # Update package index
+            await asyncio.to_thread(argostranslate.package.update_package_index)
+            self._available_packages = await asyncio.to_thread(argostranslate.package.get_available_packages)
+            self._packages_loaded = True
+            
+            # Log available packages
+            self.logger.info(f"Argos Translate: {len(self._available_packages)} language packages available")
+            
+        except ImportError:
+            self.logger.error("Argos Translate not installed. Install with: pip install argostranslate")
+            raise ImportError("Argos Translate not available.")
+        except Exception as e:
+            self.logger.error(f"Failed to load Argos Translate packages: {e}")
+            raise
+    
+    async def _ensure_language_package(self, from_code: str, to_code: str) -> bool:
+        """Ensure the required language package is installed."""
+        try:
+            await self._ensure_packages_loaded()
+            import argostranslate.package
+            
+            # Handle 'auto' source language
+            if from_code == 'auto':
+                from_code = 'en'  # Fallback to English for auto-detection
+            
+            package_key = f"{from_code}-{to_code}"
+            
+            # Check if already installed
+            if package_key in self._installed_packages:
+                return True
+                
+            # Find and install package
+            package_to_install = None
+            for package in self._available_packages:
+                if package.from_code == from_code and package.to_code == to_code:
+                    package_to_install = package
+                    break
+                    
+            if not package_to_install:
+                self.logger.warning(f"No Argos package found for {from_code}->{to_code}")
+                return False
+                
+            # Download and install package
+            self.logger.info(f"Installing Argos package: {from_code}->{to_code}")
+            download_path = await asyncio.to_thread(package_to_install.download)
+            await asyncio.to_thread(argostranslate.package.install_from_path, download_path)
+            
+            self._installed_packages.add(package_key)
+            self.logger.info(f"Successfully installed Argos package: {package_key}")
+            return True
+            
+        except Exception as e:
+            self.logger.error(f"Failed to install language package {from_code}->{to_code}: {e}")
+            return False
+    
+    async def translate_single(self, request: TranslationRequest) -> TranslationResult:
+        """Translate a single text using Argos Translate."""
+        try:
+            # Ensure required package is installed
+            if not await self._ensure_language_package(request.source_lang, request.target_lang):
+                return TranslationResult(
+                    request.text, "", request.source_lang, request.target_lang,
+                    TranslationEngine.ARGOS, False, 
+                    f"Language package {request.source_lang}->{request.target_lang} not available",
+                    metadata=request.metadata
+                )
+            
+            import argostranslate.translate
+            
+            # Handle 'auto' source language
+            from_code = request.source_lang
+            if from_code == 'auto':
+                from_code = 'en'  # Argos doesn't support auto-detection
+            
+            # Perform translation
+            translated_text = await asyncio.to_thread(
+                argostranslate.translate.translate,
+                request.text,
+                from_code,
+                request.target_lang
+            )
+            
+            if not translated_text or translated_text == request.text:
+                # Fallback or no translation occurred
+                confidence = 0.3
+                success = bool(translated_text)
+            else:
+                confidence = 0.85  # Argos typically provides good quality
+                success = True
+                
+            return TranslationResult(
+                request.text, translated_text or "", 
+                request.source_lang, request.target_lang,
+                TranslationEngine.ARGOS, success,
+                confidence=confidence, metadata=request.metadata
+            )
+            
+        except ImportError:
+            return TranslationResult(
+                request.text, "", request.source_lang, request.target_lang,
+                TranslationEngine.ARGOS, False, "Argos Translate not installed",
+                metadata=request.metadata
+            )
+        except Exception as e:
+            return TranslationResult(
+                request.text, "", request.source_lang, request.target_lang,
+                TranslationEngine.ARGOS, False, f"Argos error: {str(e)}",
+                metadata=request.metadata
+            )
+    
+    def get_supported_languages(self) -> Dict[str, str]:
+        """Return supported language codes and names."""
+        # Common languages supported by Argos Translate
+        return {
+            'auto': 'Auto-detect',
+            'en': 'English',
+            'tr': 'Turkish', 
+            'es': 'Spanish',
+            'fr': 'French',
+            'de': 'German',
+            'it': 'Italian',
+            'pt': 'Portuguese',
+            'ru': 'Russian',
+            'ja': 'Japanese',
+            'ko': 'Korean',
+            'zh': 'Chinese',
+            'ar': 'Arabic',
+            'hi': 'Hindi',
+            'nl': 'Dutch',
+            'pl': 'Polish',
+            'sv': 'Swedish',
+            'da': 'Danish',
+            'no': 'Norwegian',
+            'fi': 'Finnish',
+            'el': 'Greek',
+            'he': 'Hebrew',
+            'cs': 'Czech',
+            'sk': 'Slovak',
+            'hu': 'Hungarian',
+            'uk': 'Ukrainian',
+            'ca': 'Catalan',
+            'eu': 'Basque',
+            'eo': 'Esperanto',
+            'ga': 'Irish',
+            'cy': 'Welsh'
+        }
+
+
+class OpusMTTranslator(BaseTranslator):
+    """OPUS-MT - Offline neural machine translation using Hugging Face Transformers."""
+    
+    def __init__(self, api_key: Optional[str] = None, proxy_manager=None):
+        super().__init__(api_key, proxy_manager)
+        self._models_cache = {}
+        self._tokenizers_cache = {}
+        self._main_window = None  # Will be set by GUI
+        
+    def _get_model_name(self, from_code: str, to_code: str) -> Optional[str]:
+        """Get OPUS-MT model name for language pair."""
+        # Handle auto-detect
+        if from_code == 'auto':
+            from_code = 'en'  # Default to English
+            
+        # OPUS-MT model mappings (real Hugging Face model names)
+        model_mappings = {
+            # Turkish models
+            ('en', 'tr'): 'Helsinki-NLP/opus-mt-tc-big-en-tr',
+            ('tr', 'en'): 'Helsinki-NLP/opus-mt-tc-big-tr-en',
+            
+            # German models  
+            ('en', 'de'): 'Helsinki-NLP/opus-mt-tc-big-en-de',
+            ('de', 'en'): 'Helsinki-NLP/opus-mt-tc-big-de-en',
+            
+            # French models
+            ('en', 'fr'): 'Helsinki-NLP/opus-mt-tc-big-en-fr',
+            ('fr', 'en'): 'Helsinki-NLP/opus-mt-tc-big-fr-en',
+            
+            # Spanish models
+            ('en', 'es'): 'Helsinki-NLP/opus-mt-tc-big-en-es',
+            ('es', 'en'): 'Helsinki-NLP/opus-mt-tc-big-es-en',
+            
+            # Italian models
+            ('en', 'it'): 'Helsinki-NLP/opus-mt-tc-big-en-it',
+            ('it', 'en'): 'Helsinki-NLP/opus-mt-tc-big-it-en',
+            
+            # Russian models
+            ('en', 'ru'): 'Helsinki-NLP/opus-mt-tc-big-en-ru',
+            ('ru', 'en'): 'Helsinki-NLP/opus-mt-tc-big-ru-en',
+            
+            # Japanese models (different naming pattern)
+            ('en', 'ja'): 'Helsinki-NLP/opus-mt-en-jap',
+            ('ja', 'en'): 'Helsinki-NLP/opus-mt-jap-en',
+            
+            # Chinese models
+            ('en', 'zh'): 'Helsinki-NLP/opus-mt-en-zh',
+            ('zh', 'en'): 'Helsinki-NLP/opus-mt-zh-en',
+            
+            # Korean models
+            ('en', 'ko'): 'Helsinki-NLP/opus-mt-tc-big-en-ko',
+            ('ko', 'en'): 'Helsinki-NLP/opus-mt-tc-big-ko-en',
+            
+            # Portuguese models
+            ('en', 'pt'): 'Helsinki-NLP/opus-mt-tc-big-en-pt',
+            ('pt', 'en'): 'Helsinki-NLP/opus-mt-tc-big-pt-en',
+            
+            # Arabic models
+            ('en', 'ar'): 'Helsinki-NLP/opus-mt-tc-big-en-ar',
+            ('ar', 'en'): 'Helsinki-NLP/opus-mt-tc-big-ar-en',
+            
+            # Dutch models
+            ('en', 'nl'): 'Helsinki-NLP/opus-mt-tc-big-en-nl',
+            ('nl', 'en'): 'Helsinki-NLP/opus-mt-tc-big-nl-en',
+            
+            # Polish models
+            ('en', 'pl'): 'Helsinki-NLP/opus-mt-tc-big-en-pl',
+            ('pl', 'en'): 'Helsinki-NLP/opus-mt-tc-big-pl-en',
+            
+            # Swedish models
+            ('en', 'sv'): 'Helsinki-NLP/opus-mt-tc-big-en-sv',
+            ('sv', 'en'): 'Helsinki-NLP/opus-mt-tc-big-sv-en',
+            
+            # Norwegian models
+            ('en', 'no'): 'Helsinki-NLP/opus-mt-tc-big-en-no',
+            ('no', 'en'): 'Helsinki-NLP/opus-mt-tc-big-no-en',
+            
+            # Danish models
+            ('en', 'da'): 'Helsinki-NLP/opus-mt-tc-big-en-da',
+            ('da', 'en'): 'Helsinki-NLP/opus-mt-tc-big-da-en',
+        }
+        
+        return model_mappings.get((from_code, to_code))
+    
+    def _is_model_available_locally(self, model_name: str) -> bool:
+        """Check if model is available locally without downloading."""
+        try:
+            from transformers import MarianMTModel
+            import os
+            from pathlib import Path
+            
+            # Check Hugging Face cache directory
+            cache_dir = os.environ.get('TRANSFORMERS_CACHE', 
+                                      os.path.join(Path.home(), '.cache', 'huggingface', 'transformers'))
+            
+            # Look for model files in cache
+            model_path = Path(cache_dir) / f"models--{model_name.replace('/', '--')}"
+            
+            # Check if model directory exists and has required files
+            if model_path.exists():
+                config_file = model_path / "snapshots" / "refs" / "main"
+                if config_file.parent.exists():
+                    # Check if there are any snapshot directories
+                    snapshots_dir = model_path / "snapshots"
+                    if snapshots_dir.exists() and any(snapshots_dir.iterdir()):
+                        return True
+            
+            return False
+            
+        except Exception as e:
+            self.logger.debug(f"Error checking model availability: {e}")
+            return False
+    
+    async def _show_download_dialog(self, model_name: str, from_lang: str, to_lang: str) -> bool:
+        """Show download confirmation dialog and handle download."""
+        try:
+            # Signal main window to show dialog and wait for response
+            if hasattr(self._main_window, 'show_model_download_dialog'):
+                language_pair = f"{from_lang.upper()} → {to_lang.upper()}"
+                return await self._main_window.show_model_download_dialog(model_name, language_pair)
+            else:
+                self.logger.warning("Main window does not support download dialogs")
+                return False
+                
+        except Exception as e:
+            self.logger.error(f"Failed to show download dialog: {e}")
+            return False  # Default to not download if dialog fails
+    
+    async def _load_model(self, model_name: str, show_download_dialog: bool = True):
+        """Load model and tokenizer, cache them."""
+        if model_name in self._models_cache:
+            return self._models_cache[model_name], self._tokenizers_cache[model_name]
+        
+        try:
+            from transformers import MarianMTModel, MarianTokenizer
+            import os
+            from pathlib import Path
+            
+            # Check if model exists locally
+            model_cache_dir = Path.home() / ".cache" / "huggingface" / "transformers" / model_name.replace("/", "--")
+            model_exists = model_cache_dir.exists() and any(model_cache_dir.glob("*.bin")) or any(model_cache_dir.glob("*.safetensors"))
+            
+            if not model_exists and show_download_dialog:
+                # Model needs to be downloaded - this should trigger UI dialog
+                raise FileNotFoundError(f"Model {model_name} not found locally and needs download confirmation")
+            
+            # Load in separate thread to avoid blocking
+            model = await asyncio.to_thread(MarianMTModel.from_pretrained, model_name)
+            tokenizer = await asyncio.to_thread(MarianTokenizer.from_pretrained, model_name)
+            
+            # Cache them
+            self._models_cache[model_name] = model
+            self._tokenizers_cache[model_name] = tokenizer
+            
+            self.logger.info(f"Loaded OPUS-MT model: {model_name}")
+            return model, tokenizer
+            
+        except Exception as e:
+            self.logger.error(f"Failed to load OPUS-MT model {model_name}: {e}")
+            raise
+    
+    async def translate_single(self, request: TranslationRequest) -> TranslationResult:
+        """Translate a single text using OPUS-MT."""
+        try:
+            # Get model name
+            model_name = self._get_model_name(request.source_lang, request.target_lang)
+            if not model_name:
+                return TranslationResult(
+                    request.text, "", request.source_lang, request.target_lang,
+                    TranslationEngine.OPUS_MT, False, 
+                    f"No OPUS-MT model for {request.source_lang}->{request.target_lang}",
+                    metadata=request.metadata
+                )
+            
+            # Load model and tokenizer (may trigger download dialog)
+            try:
+                model, tokenizer = await self._load_model(model_name)
+            except FileNotFoundError:
+                # Model needs download - return specific error for GUI to handle
+                return TranslationResult(
+                    request.text, "", request.source_lang, request.target_lang,
+                    TranslationEngine.OPUS_MT, False, 
+                    f"MODEL_DOWNLOAD_REQUIRED:{model_name}:{request.source_lang}:{request.target_lang}",
+                    metadata=request.metadata
+                )
+            
+            # Perform translation
+            def translate_text():
+                # Tokenize input
+                inputs = tokenizer([request.text], return_tensors="pt", padding=True)
+                
+                # Generate translation
+                outputs = model.generate(**inputs, max_new_tokens=512, do_sample=False)
+                
+                # Decode result
+                translated = tokenizer.decode(outputs[0], skip_special_tokens=True)
+                return translated
+            
+            translated_text = await asyncio.to_thread(translate_text)
+            
+            if not translated_text or translated_text == request.text:
+                confidence = 0.3
+                success = bool(translated_text)
+            else:
+                confidence = 0.9  # OPUS-MT typically provides high quality
+                success = True
+                
+            return TranslationResult(
+                request.text, translated_text or "", 
+                request.source_lang, request.target_lang,
+                TranslationEngine.OPUS_MT, success,
+                confidence=confidence, metadata=request.metadata
+            )
+            
+        except ImportError:
+            return TranslationResult(
+                request.text, "", request.source_lang, request.target_lang,
+                TranslationEngine.OPUS_MT, False, "Transformers not installed",
+                metadata=request.metadata
+            )
+        except Exception as e:
+            return TranslationResult(
+                request.text, "", request.source_lang, request.target_lang,
+                TranslationEngine.OPUS_MT, False, f"OPUS-MT error: {str(e)}",
+                metadata=request.metadata
+            )
+    
+    async def check_model_availability(self, from_lang: str, to_lang: str) -> Tuple[bool, str]:
+        """Check if model is available for language pair without downloading."""
+        model_name = self._get_model_name(from_lang, to_lang)
+        if not model_name:
+            return False, f"No OPUS-MT model for {from_lang}->{to_lang}"
+        
+        if self._is_model_available_locally(model_name):
+            return True, "Model available"
+        else:
+            return False, f"MODEL_DOWNLOAD_REQUIRED:{model_name}:{from_lang}:{to_lang}"
+    
+    async def translate_batch(self, requests: List[TranslationRequest]) -> List[TranslationResult]:
+        """Translate a batch of texts, checking model availability first."""
+        if not requests:
+            return []
+        
+        # Check if we need to download models before processing
+        language_pairs = set((req.source_lang, req.target_lang) for req in requests)
+        missing_models = []
+        
+        for from_lang, to_lang in language_pairs:
+            available, message = await self.check_model_availability(from_lang, to_lang)
+            if not available and "MODEL_DOWNLOAD_REQUIRED" in message:
+                missing_models.append(message)
+        
+        # If any models are missing, return error for all requests
+        if missing_models:
+            error_message = missing_models[0]  # Use first missing model for dialog
+            return [
+                TranslationResult(
+                    req.text, "", req.source_lang, req.target_lang,
+                    TranslationEngine.OPUS_MT, False, error_message,
+                    metadata=req.metadata
+                ) for req in requests
+            ]
+        
+        # All models available, proceed with translation
+        results = []
+        for request in requests:
+            result = await self.translate_single(request)
+            results.append(result)
+        
+        return results
+    
+    def get_supported_languages(self) -> Dict[str, str]:
+        """Return supported language codes and names."""
+        # Languages with available OPUS-MT models
+        return {
+            'auto': 'Auto-detect',
+            'en': 'English',
+            'tr': 'Turkish', 
+            'de': 'German',
+            'fr': 'French',
+            'es': 'Spanish',
+            'it': 'Italian',
+            'ru': 'Russian',
+            'ja': 'Japanese',
+            'zh': 'Chinese',
+            'ko': 'Korean',
+            'pt': 'Portuguese',
+            'ar': 'Arabic',
+            'nl': 'Dutch',
+            'pl': 'Polish',
+            'sv': 'Swedish',
+            'no': 'Norwegian',
+            'da': 'Danish'
+        }
+
+
 class TranslationManager:
     def __init__(self, proxy_manager=None):
         self.proxy_manager = proxy_manager
@@ -425,6 +1080,32 @@ class TranslationManager:
                         used_batch = True
                 except Exception as e:
                     self.logger.debug(f"Batch fail {engine.value}: {e}")
+            elif isinstance(tr, OpusMTTranslator) and len(only) > 1:
+                # OPUS-MT batch processing
+                try:
+                    bout = await tr.translate_batch(only)
+                    if bout and len(bout) == len(only):
+                        for (idx, _), res in zip(items, bout):
+                            if res.success:
+                                key2 = (res.engine.value, res.source_lang, res.target_lang, res.original_text)
+                                await self._cache_put(key2, res)
+                            buffer.append((idx, res))
+                        used_batch = True
+                except Exception as e:
+                    self.logger.debug(f"OPUS-MT batch fail: {e}")
+            elif isinstance(tr, DeepTranslator) and len(only) > 1:
+                # Deep-Translator batch processing
+                try:
+                    bout = await tr.translate_batch(only)
+                    if bout and len(bout) == len(only):
+                        for (idx, _), res in zip(items, bout):
+                            if res.success:
+                                key2 = (res.engine.value, res.source_lang, res.target_lang, res.original_text)
+                                await self._cache_put(key2, res)
+                            buffer.append((idx, res))
+                        used_batch = True
+                except Exception as e:
+                    self.logger.debug(f"Deep-Translator batch fail: {e}")
             if used_batch:
                 continue
             sem = asyncio.Semaphore(self.max_concurrent_requests)

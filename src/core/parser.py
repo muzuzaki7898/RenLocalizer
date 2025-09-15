@@ -171,45 +171,35 @@ class RenPyParser:
         """Parse all .rpy files in a directory and return formatted text data."""
         directory = Path(directory)
         results = []
-        
-        # Find all .rpy files
-        rpy_files = list(directory.glob("**/*.rpy"))
-        self.logger.info(f"Found {len(rpy_files)} .rpy files in {directory}")
-        
+        # Find all .rpy files, ama 'game/tl/' içerenleri hariç tut
+        rpy_files = [f for f in directory.glob("**/*.rpy") if "game/tl/" not in str(f).replace('\\', '/')]
+        self.logger.info(f"Found {len(rpy_files)} .rpy files in {directory} (excluding game/tl/)")
         for rpy_file in rpy_files:
             try:
                 # Extract texts from file
                 extracted_texts = self.extract_translatable_text(rpy_file)
-                
                 # Read file content to get line numbers
                 with open(rpy_file, 'r', encoding='utf-8', errors='ignore') as f:
                     lines = f.readlines()
-                
                 # Convert to GUI format
                 for text in extracted_texts:
                     # Try to find line number and context
                     line_number = 1
                     context = ""
                     character = ""
-                    
                     # Search for the text in file lines to get context
                     for i, line in enumerate(lines):
                         if text in line:
                             line_number = i + 1
                             context = line.strip()
-                            
                             # Try to extract character name if it's dialogue
                             if '"' in line or "'" in line:
-                                # Look for character name pattern
-                                import re
                                 char_match = re.match(r'\s*([A-Za-z_]\w*)\s+["\']', line.strip())
                                 if char_match:
                                     character = char_match.group(1)
                             break
-                    
                     # Determine text type based on context
                     text_type = self.determine_text_type(text, context)
-                    
                     text_data = {
                         'text': text,
                         'type': text_type,
@@ -219,10 +209,8 @@ class RenPyParser:
                         'context': context
                     }
                     results.append(text_data)
-                    
             except Exception as e:
                 self.logger.error(f"Error parsing file {rpy_file}: {e}")
-        
         self.logger.info(f"Total extracted texts: {len(results)}")
         return results
     
@@ -230,14 +218,12 @@ class RenPyParser:
         """Extract texts from all .rpy files in parallel (for compatibility with GUI)."""
         directory = Path(directory)
         results = {}
-        
-        # Find all .rpy files
+        # Find all .rpy files, ama 'game/tl/' içerenleri hariç tut
         if recursive:
-            rpy_files = list(directory.glob("**/*.rpy"))
+            rpy_files = [f for f in directory.glob("**/*.rpy") if "game/tl/" not in str(f).replace('\\', '/')]
         else:
-            rpy_files = list(directory.glob("*.rpy"))
-        
-        self.logger.info(f"Found {len(rpy_files)} .rpy files for parallel processing")
+            rpy_files = [f for f in directory.glob("*.rpy") if "game/tl/" not in str(f).replace('\\', '/')]
+        self.logger.info(f"Found {len(rpy_files)} .rpy files for parallel processing (excluding game/tl/)")
         
         # For now, use sequential processing but return the expected format
         for rpy_file in rpy_files:
