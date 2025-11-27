@@ -13,6 +13,7 @@
 - **Config‑driven proxy manager:** Proxy behaviour is now fully driven by `Proxy` settings (enable/disable, failure limit, update interval and startup testing) instead of hardcoded values.
 - **Custom proxy list support:** You can now define your own proxy list in the `Proxy` tab; these entries are parsed and preferred over public proxy sources.
 - **Locale updates:** Updated English and Turkish locale files to match the new minimal UI and removed obsolete Quick Options/OPUS-MT related strings.
+ - **Expanded translation language list:** Greatly extended the supported source/target languages (Czech, Romanian, Hungarian, Greek, Bulgarian, Ukrainian, Indonesian, Malay, Hebrew and more) via `get_supported_languages`, so most major world languages can now be selected.
 
 ### 📚 Documentation
 - **README refresh:** Updated both `README.md` and `README.tr.md` to describe the minimal main window, current theme options and the separate Settings dialog.

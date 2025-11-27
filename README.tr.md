@@ -89,6 +89,11 @@ Veya Windows'ta, `run.bat` dosyasını çift tıklayabilirsiniz.
 - Proxy'yi etkinleştir / devre dışı bırak
 - Proxy hata limiti, güncelleme aralığı ve özel proxy listesi (her satıra bir tane)
 
+### 🌍 Dil Desteği
+- Otomatik kaynak dil algılama
+- Çoğu yaygın dünya dilini kapsayan genişletilmiş kaynak/hedef dil listesi
+- Son eklemeler arasında Çekçe, Rumence, Macarca, Yunanca, Bulgarca, Ukraynaca, Endonezce, Malayca ve İbranice bulunur
+
 ## 🌍 Motor Durumu Tablosu
 | Motor | Durum | Not |
 |--------|--------|------|

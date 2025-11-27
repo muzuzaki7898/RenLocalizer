@@ -90,6 +90,11 @@ Or on Windows, you can double-click `run.bat`
 - Enable / disable proxy
 - Proxy failure limit, update interval and custom proxy list (one per line)
 
+### 🌍 Language Support
+- Auto-detect source language
+- Extended source/target language list covering most major world languages
+- Recent additions include Czech, Romanian, Hungarian, Greek, Bulgarian, Ukrainian, Indonesian, Malay and Hebrew
+
 ## 🌍 Engine Status Table
 | Engine | Status | Languages | Note |
 |--------|--------|-----------|------|

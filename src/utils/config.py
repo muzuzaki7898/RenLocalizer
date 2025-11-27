@@ -421,7 +421,17 @@ class ConfigManager:
             'sv': 'Swedish',
             'da': 'Danish',
             'no': 'Norwegian',
-            'fi': 'Finnish'
+            'fi': 'Finnish',
+            # Extra popular targets
+            'cs': 'Czech',
+            'ro': 'Romanian',
+            'hu': 'Hungarian',
+            'el': 'Greek',
+            'bg': 'Bulgarian',
+            'uk': 'Ukrainian',
+            'id': 'Indonesian',
+            'ms': 'Malay',
+            'he': 'Hebrew'
         }
     
     def get_ui_translations(self) -> Dict[str, Dict[str, Any]]:
