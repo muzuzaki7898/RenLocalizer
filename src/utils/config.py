@@ -20,6 +20,28 @@ class Language(Enum):
     TURKISH = "tr"
     ENGLISH = "en"
 
+TURKIC_PRIMARY_LANG_IDS = {
+    0x1F,  # Turkish
+    0x2C,  # Azerbaijani
+    0x29,  # Persian (Azeri regions often use this)
+    0x3F,  # Kazakh
+    0x40,  # Kyrgyz
+    0x42,  # Turkmen
+    0x43,  # Uzbek
+    0x44,  # Tatar
+}
+
+TURKIC_LANGUAGE_CODES = {
+    "tr", "az", "azb", "tk", "uz", "kk", "ky", "tt", "ba", "ug", "sah", "kaa"
+}
+
+
+def _is_turkic_locale(code: str) -> bool:
+    normalized = (code or "").lower().replace("_", "-")
+    primary = normalized.split('-')[0]
+    return primary in TURKIC_LANGUAGE_CODES
+
+
 def detect_system_language() -> str:
     """Detect the system language and return appropriate UI language code."""
     try:
@@ -31,42 +53,42 @@ def detect_system_language() -> str:
                 lang_id = ctypes.windll.kernel32.GetUserDefaultUILanguage()
                 # Primary language mask
                 primary_lang = lang_id & 0x3FF
-                
-                # Turkish: 0x1F, English: 0x09
-                if primary_lang == 0x1F:  # Turkish
+
+                if primary_lang in TURKIC_PRIMARY_LANG_IDS:
                     return 'tr'
-                elif primary_lang == 0x09:  # English
+                if primary_lang == 0x09:  # English
                     return 'en'
-            except:
+            except Exception:
                 pass
-        
+
         # Method 2: Standard locale detection
         try:
             system_locale = locale.getdefaultlocale()[0]
             if system_locale:
-                lang_part = system_locale.split('_')[0].lower()
-                if lang_part == 'tr':
+                if _is_turkic_locale(system_locale):
                     return 'tr'
-                elif lang_part == 'en':
+                lang_part = system_locale.split('_')[0].lower()
+                if lang_part == 'en':
                     return 'en'
-        except:
+        except Exception:
             pass
-        
+
         # Method 3: Environment variables
         try:
             for env_var in ['LANG', 'LANGUAGE', 'LC_ALL', 'LC_MESSAGES']:
                 env_value = os.environ.get(env_var, '').lower()
-                if env_value:
-                    if 'tr' in env_value:
-                        return 'tr'
-                    elif 'en' in env_value:
-                        return 'en'
-        except:
+                if not env_value:
+                    continue
+                if _is_turkic_locale(env_value):
+                    return 'tr'
+                if 'en' in env_value:
+                    return 'en'
+        except Exception:
             pass
-        
+
         # Default to English if detection fails
         return 'en'
-        
+
     except Exception:
         return 'en'
 
@@ -118,6 +140,11 @@ class AppSettings:
     output_format: str = "old_new"
     # Parser workers for parallel file processing
     parser_workers: int = 4
+    # UnRen integration
+    unren_auto_download: bool = True
+    unren_custom_path: str = ""
+    unren_cached_version: str = ""
+    unren_last_checked: str = ""
 
 @dataclass
 class ProxySettings:

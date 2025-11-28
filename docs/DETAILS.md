@@ -3,14 +3,14 @@
 This file contains the extended English documentation that was previously in README.md.
 
 ## 1. Features (Detailed)
-- Implemented Engines: Google (web), DeepL (API), Argos Translate (offline)
+- Implemented Engines: Google (web), DeepL (API)
 - Planned: Bing (Microsoft), Yandex, LibreTranslator (self-host)
 - Concurrency: UI up to 256 (internal active cap ~32 per engine)
 - Batch Size: Up to 2000
 - Proxy Rotation: Multi-source harvesting + health scoring + disable toggle
 - Fallback Logic: Google path falls back to direct requests if proxy/aiohttp fails
 - Auto-save: Timestamped directory output
-- Parser: Filters code/paths/technical tokens, preserves placeholders
+- Parser: Context-aware, indentation-driven extractor with placeholder caching and structured metadata output
 
 ## 2. Engine Status Matrix
 | Engine | Status | Notes |
@@ -67,13 +67,22 @@ Logs stored in `logs/` (general + errors). Levels: DEBUG..CRITICAL.
 ## 7. API Keys
 Only DeepL currently meaningful. Future engines will use existing key UI placeholders.
 
-## 8. Contribution Guide (Summary)
+## 8. Parser Architecture Primer
+
+- **Context stack**: Each Ren'Py block (`label`, `menu`, `screen`, `init python`, etc.) pushes a node with indent info so nested scopes are recognised.
+- **Pattern registry**: Dialogue, narrator lines, menu options, UI strings and Ren'Py helper calls are matched via regex descriptors that also assign a `text_type`.
+- **Multiline handling**: Triple-quoted dialogue and `extend` segments are consumed until the closing delimiter, producing a single coherent entry.
+- **Structured entry**: Every match yields `text`, `processed_text`, `text_type`, `context_line`, `context_path`, `character`, `line_number` and a `placeholder_map`.
+- **Placeholder lifecycle**: Parser replaces `{color}` tags, `[player]` variables, `%s` markers and `{fstring}` placeholders with stable tokens up front; the translation worker later restores them.
+- **Legacy shim**: `extract_translatable_text()` still returns `Set[str]` so older tooling can coexist during migration.
+
+## 9. Contribution Guide (Summary)
 1. Fork & branch
 2. Implement & add tests
 3. Format with black/flake8
 4. Submit PR
 
-## 9. Troubleshooting (Common)
+## 10. Troubleshooting (Common)
 | Issue | Cause | Fix |
 |-------|-------|-----|
 | No texts found | Parser filtered everything | Check files have dialogue |
@@ -81,10 +90,10 @@ Only DeepL currently meaningful. Future engines will use existing key UI placeho
 | Slow speed | Too few threads | Increase threads / reduce delay |
 | Rate limit | Too aggressive | Lower concurrency |
 
-## 10. License
+## 11. License
 GPL-3.0-or-later.
 
-## 11. Roadmap (Short)
+## 12. Roadmap (Short)
 - Add Bing/Yandex engines
 - LibreTranslator self-host mode
 - In-app translation memory / glossary

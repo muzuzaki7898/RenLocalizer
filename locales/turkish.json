@@ -13,10 +13,13 @@
   "info": "Bilgi",
   "view_menu": "Görünüm",
   "theme_menu": "Tema",
-  "dark_theme": "Koyu Tema",
+  "dark_theme": "Karanlık Tema",
   "solarized_theme": "Göz Dostu Tema",
-  
-  "input_section": "Giriş Bölümü",
+  "tools_menu": "Araçlar",
+  "run_unren_menu": "UnRen'i Çalıştır...",
+  "redownload_unren_menu": "UnRen'i Yeniden İndir",
+
+  "input_section": "Girdi Bölümü",
   "directory_label": "Klasör:",
   "directory_placeholder": "Klasör yolunu seçin",
   "browse": "Gözat",
@@ -32,7 +35,7 @@
   "parser_workers_label": "Parser Workers:",
   "proxy_enabled_label": "Proxy Etkin:",
   "refresh_proxies_btn": "Proxy Yenile",
-  
+
   "source_language": "Kaynak Dil",
   "target_language": "Hedef Dil",
   "translation_engine": "Çeviri Motoru",
@@ -44,9 +47,7 @@
   "translating": "Çevriliyor...",
   "completed": "Tamamlandı",
   "error": "Hata",
-  
-  
-  
+
   "files_status": "Dosyalar: {count}",
   "texts_status": "Metinler: {count}",
   "translations_status": "Çeviriler: {count}",
@@ -58,6 +59,8 @@
   
   "warning": "Uyarı",
   "no_texts_warning": "Çevrilecek metin bulunamadı!",
+  "no_texts_unren_hint": "Oyun henüz paketliyse Araçlar → UnRen'i Çalıştır menüsünden UnRen'i çalıştırmayı deneyin.",
+  "no_texts_reselect_hint": "UnRen'den sonra hâlâ \"Metin bulunamadı\" görüyorsanız Gözat'a tıklayıp klasörü yeniden seçerek listeyi yenileyin.",
   "starting_translation": "Çeviri başlatılıyor...",
   "stopping": "Durduruluyor...",
   "translation_completed": "Çeviri tamamlandı",
@@ -97,6 +100,9 @@
   "auto_save_label": "Otomatik Ayar Kaydet",
   "auto_save_translations_label": "Çevirileri Otomatik Kaydet",
   "check_updates_label": "Güncellemeleri Kontrol Et",
+  "unren_group_label": "UnRen Entegrasyonu",
+  "unren_auto_download_label": "UnRen'i otomatik indir",
+  "unren_custom_path_label": "Özel UnRen klasörü:",
   
   
   "default_languages_group": "Varsayılan Diller",
@@ -126,6 +132,41 @@
   
   "proxy_refresh_started": "Proxy yenileme başlatıldı.",
   "proxy_refresh_unavailable": "Proxy yenileme şu anda kullanılamıyor.",
+  "unren_prompt_title": "UnRen Önerisi",
+  "unren_prompt_message": "Kaynak .rpy dosyası yok ancak derlenmiş Ren'Py dosyaları bulundu. Projeyi açmak için şimdi UnRen çalıştırılsın mı?",
+  "unren_windows_only": "UnRen otomasyonu yalnızca Windows'ta desteklenir.",
+  "unren_launching": "UnRen konsolu başlatılıyor...",
+  "unren_launch_failed": "UnRen başlatılamadı: {error}",
+  "unren_download_required": "UnRen yüklü değil ve otomatik indirme kapalı. Ayarlar → Genel bölümünden otomatik indirmeyi açın veya özel klasör seçin.",
+  "unren_download_failed": "UnRen indirilemedi: {error}",
+  "unren_download_success": "UnRen dosyaları hazır: {path}",
+  "unren_scan_hint": "Betik dosyası bulunamadı. Paket açıldıktan sonra Araçlar → UnRen'i Çalıştır menüsünü kullanın.",
+  "unren_auto_running": "UnRen otomasyonu çalıştırılıyor...",
+  "unren_auto_success": "Otomatik UnRen {path} için tamamlandı. {lines} satır günlük yakalandı. Süreci incelemek için Yardım → Bilgi → UnRen sekmesine bakabilirsiniz.",
+  "unren_auto_completion_hint": "İşlem tamamlandı. Eğer hâlâ \"Çevrilecek metin bulunamadı\" hatasını görüyorsanız lütfen Gözat'a tıklayıp proje klasörünü yeniden seçin.",
+
+  "unren_mode_dialog": {
+    "title": "UnRen Çalıştırma Şeklini Seç",
+    "description": "Deneyiminize göre uygun iş akışını seçin.",
+    "automatic": {
+      "title": "Otomatik Mod",
+      "details": [
+        "Menüdeki 1 (çıkar) ve 2 (decompile) seçeneklerini güvenli varsayılanlarla çalıştırır",
+        "Orijinal .rpa arşivlerini korur ve tüm paketleri çıkarır",
+        "Konsol çıktısını uygulama günlüğünde toplar"
+      ],
+      "button": "Otomatik Çalıştır"
+    },
+    "manual": {
+      "title": "Manuel Mod",
+      "details": [
+        "Klasik UnRen konsol penceresini açar",
+        "Gelişmiş seçenekleri ardışık kullanmanıza izin verir (3-6, a-l, kayıt defteri araçları vb.)"
+      ],
+      "button": "Konsolu Aç"
+    },
+    "manual_hint": "Otomatik mod deneyseldir; istendiği gibi çalışmayabilir ve menüler kendi kendine kapanmayabilir. Bu nedenle manuel mod önerilir. Ayrıntılar için Yardım → Bilgi → UnRen sekmesine bakın."
+  },
   
   
   
@@ -135,7 +176,8 @@
       "formats": "Çıktı Formatları",
       "performance": "Performans Ayarları", 
       "features": "Özellikler",
-      "troubleshooting": "Sorun Giderme"
+      "troubleshooting": "Sorun Giderme",
+      "unren": "UnRen"
     },
     "formats": {
       "title": "Çeviri Dosya Formatları",
@@ -289,6 +331,120 @@
           ]
         }
       ]
+    },
+    "unren": {
+      "title": "UnRen Entegrasyon Rehberi",
+      "description": "RenLocalizer, projeyi analiz etmeden önce UnRen aracını indirip önbelleğe alır. Otomatik mod hâlâ deneysel olduğundan çıktıyı izleyin ve gerekirse manuel moda geçin:",
+      "versions": {
+        "title": "Hangi UnRen sürümü?",
+        "description": "Konsolda ilk iki seçenek aynı komutları farklı Ren'Py sürümleri için hazırlar. Oyununuzun Ren'Py sürümünü belirleyip buna göre seçim yapın:",
+        "options": [
+          {
+            "title": "UnRen-current.bat",
+            "description": "Python 3 tabanlı yeni sürümdür. Ren'Py 7.4+ ve Ren'Py 8 projelerinde tüm arşiv ve .rpyc yapılarıyla uyumludur.",
+            "versions_label": "Önerilen Ren'Py sürümleri:",
+            "versions": "Ren'Py 7.4+, Ren'Py 8 (64-bit dahil)",
+            "note": "Projenin game/renpy/common/version.txt dosyasında 7.4 veya 8.x görüyorsanız veya oyun Py3/64-bit olarak dağıtıldıysa bu seçeneği kullanın."
+          },
+          {
+            "title": "UnRen-legacy.bat",
+            "description": "Python 2 tabanlı klasik sürümdür. Eski oyunlarda kullanılan derleyici çıktılarını daha sorunsuz işler.",
+            "versions_label": "Önerilen Ren'Py sürümleri:",
+            "versions": "Ren'Py 6.x, Ren'Py 7.0-7.3",
+            "note": "Oyun 32-bit olarak çalışıyorsa, konsolda 'unsupported python 2 build' hatası almamak için veya UnRen-current.bat hata veriyorsa legacy sürümü seçin."
+          }
+        ]
+      },
+      "automatic": {
+        "title": "Otomatik Mod (deneysel)",
+        "points": [
+          "Menüdeki 1 + 2 seçeneklerini (RPA çıkar, RPYC decompile) güvenli varsayılanlarla sırayla yürütür",
+          "Loglar sekmesine canlı çıktı düşürür; bekleyen bir istem görürseniz işlemi iptal edip manuel moda geçebilirsiniz",
+          "Konsol kapanmazsa UnRen görevini sonlandırıp manuel moddan devam edebilirsiniz; çıkarılmış veriler korunur"
+        ]
+      },
+      "manual": {
+        "title": "Manuel Mod",
+        "points": [
+          "UnRen konsolunu açarak gelişmiş menü öğelerini (3-6, a-l, kayıt defteri yardımcıları) sırayla kullanmanızı sağlar",
+          "Geliştirici araçlarını açmak, korumayı kaldırmak veya mod eklemek istediğinizde idealdir",
+          "Otomatik mod takıldığında aynı komutları kendiniz uygulayarak nerede durduğunu görebilirsiniz"
+        ],
+        "warning": "Yanlış seçenekler proje dosyalarını kalıcı olarak değiştirebilir; emin olmadığınız adımları atlamayın."
+      },
+      "checklist": {
+        "title": "Hazırlık Kontrol Listesi",
+        "items": [
+          "Çalıştığınız klasörde mutlaka bir game/ alt klasörü bulunmalı.",
+          "Projeyi modifiye etmeden önce dizinin bir yedeğini alın veya kopya üzerinde çalışın.",
+          "Antivirüs veya SmartScreen, UnRen-current.bat dosyasını engellemiyorsa devam edin.",
+          "Arşivleri açmak için .rpa boyutunun en az iki katı kadar boş disk alanı bırakın."
+        ]
+      },
+      "manual_flow": {
+        "title": "Manuel Mod Akışı",
+        "steps": [
+          {
+            "title": "1) UnRen'i indir ve doğrula",
+            "detail": "İndirme tamamlandı mesajındaki yolu not edin; gerekirse Yardım → UnRen ekranından tekrar indir butonuna basın."
+          },
+          {
+            "title": "2) Manuel modu başlat",
+            "detail": "Konsol açıldığında üst satırda görünen dizinin oyun kök klasörü (game/ klasörü içeren dizin) olduğundan emin olun."
+          },
+          {
+            "title": "3) Seçenek 1 – RPA çıkar",
+            "detail": "Tüm .rpa arşivleri bitene kadar bekleyin; hata görürseniz pencereyi kapatmadan ekran görüntüsü alın."
+          },
+          {
+            "title": "4) Seçenek 2 – RPYC decompile",
+            "detail": ".rpy dosyalarının üzerine yazmayı onaylayın; 'Done' satırını görmeden pencereyi kapatmayın."
+          },
+          {
+            "title": "5) İsteğe bağlı seçenekler",
+            "detail": "Geliştirici menüsünü açmak veya korumayı kaldırmak istediğinizde 3-6 ve a-l kombinasyonlarını kullanın."
+          },
+          {
+            "title": "6) Konsolu açık tut",
+            "detail": "Ekstra arşivler fark ederseniz aynı oturumda adımları tekrar çalıştırabilir, işiniz bitince pencereyi kapatabilirsiniz."
+          }
+        ],
+        "note": "Hata alırsanız pencereyi hemen kapatmayın; çıktı kaybolmasın diye ekran görüntüsü alın ve ardından adımı yeniden deneyin."
+      },
+      "verification": {
+        "title": "Çalıştırma Sonrası Kontrol",
+        "items": [
+          "game/ altında yeni .rpy dosyaları görünmeli; yalnızca .rpyc görüyorsanız 2. adımı yeniden çalıştırın.",
+          "Orijinal .rpa dosyalarını silmeyin; UnRen tekrar çalıştırıldığında referans olarak kullanılır.",
+          "RenLocalizer'da Dosyaları Tara dediğinizde RPYC/RPA bulunamadı uyarısı almamalısınız.",
+          "logs/unren_auto.log (varsa) işlemin nerede bittiğini gösterir; yeni hata satırlarını gözden geçirin."
+        ]
+      },
+      "tips_title": "Hızlı İpuçları",
+      "tips": [
+        "UnRen'i her zaman oyun kök klasöründe çalıştırın; farklı bir alt klasör seçerseniz dosyalar çıkarılmaz.",
+        ".rpy dosyalarını üzerine yazmadan önce mutlaka yedek alın.",
+        "Otomatik mod uzarsa manuel moda geçmekten çekinmeyin; daha önce çıkarılmış veriler silinmez.",
+        "Konsol çıktısını kopyalamak için pencere başlığına sağ tıklayıp Düzenle → İşaretle'yi kullanabilirsiniz."
+      ],
+      "troubleshooting": {
+        "title": "Sorun Giderme",
+        "items": [
+          {
+            "issue": "Konsol açılır açılmaz kapanıyor",
+            "resolution": "game/ klasörünün bulunduğu dizine yazma izniniz olduğundan emin olun ve antivirüsün .bat dosyasını engellemediğini kontrol edin. Gerekirse cmd'yi yönetici olarak açıp UnRen-current.bat'i manuel çalıştırın."
+          },
+          {
+            "issue": "Otomatik mod 1. adımda takılıyor",
+            "resolution": "Loglar sekmesini kontrol edin; 'Press any key' benzeri istem görürseniz işlemi iptal edip manuel modda aynı seçenekleri sırasıyla çalıştırın."
+          },
+          {
+            "issue": "Çıkarılan dosyalar RenLocalizer'da görünmüyor",
+            "resolution": "Ayarlar → Genel → Proje Dizini'nin oyun kökünü gösterdiğini doğrulayın ve Dosyaları Tara'yı tekrar başlatın; çıktılar bazen farklı alt klasöre yazılabilir."
+          }
+        ]
+      },
+      "footer": "Tüm istemleri görmek ve varsayılanları teyit etmek için docs/external/UnRen-current.bat dosyasını inceleyin."
     }
   },
   

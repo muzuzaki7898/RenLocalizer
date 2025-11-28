@@ -15,6 +15,9 @@
   "theme_menu": "Theme",
   "dark_theme": "Dark Theme",
   "solarized_theme": "Eye-Friendly Theme",
+  "tools_menu": "Tools",
+  "run_unren_menu": "Run UnRen...",
+  "redownload_unren_menu": "Re-download UnRen Files",
   
   "input_section": "Input Section",
   "directory_label": "Directory:",
@@ -58,6 +61,8 @@
   
   "warning": "Warning",
   "no_texts_warning": "No texts found to translate!",
+  "no_texts_unren_hint": "Try running UnRen (Tools → Run UnRen) if the project is still packaged.",
+  "no_texts_reselect_hint": "If you still see \"No texts found\" after UnRen, click Browse and re-select the project folder so RenLocalizer refreshes the files.",
   "starting_translation": "Starting translation...",
   "stopping": "Stopping...",
   "translation_completed": "Translation completed",
@@ -97,6 +102,9 @@
   "auto_save_label": "Auto Save Settings",
   "auto_save_translations_label": "Auto Save Translations",
   "check_updates_label": "Check for Updates",
+  "unren_group_label": "UnRen Integration",
+  "unren_auto_download_label": "Download UnRen automatically",
+  "unren_custom_path_label": "Custom UnRen folder:",
   
   
   "default_languages_group": "Default Languages",
@@ -126,6 +134,41 @@
   
   "proxy_refresh_started": "Proxy refresh started.",
   "proxy_refresh_unavailable": "Proxy refresh is currently unavailable.",
+  "unren_prompt_title": "UnRen Recommended",
+  "unren_prompt_message": "No source .rpy files were found, but compiled Ren'Py files exist. Run UnRen now to unpack the project?",
+  "unren_windows_only": "UnRen automation is only available on Windows.",
+  "unren_launching": "Launching UnRen console...",
+  "unren_launch_failed": "Could not launch UnRen: {error}",
+  "unren_download_required": "UnRen isn't installed and auto-download is disabled. Enable auto-download or set a custom folder in Settings → General.",
+  "unren_download_failed": "Could not download UnRen: {error}",
+  "unren_download_success": "UnRen files are ready at {path}.",
+  "unren_scan_hint": "No script files detected. Use Tools → Run UnRen after unpacking.",
+  "unren_auto_running": "Running UnRen automation...",
+  "unren_auto_success": "Automatic UnRen finished for {path}. Captured {lines} log lines. Check Help → Info → UnRen if you need to review the workflow.",
+  "unren_auto_completion_hint": "Process finished. If you still see \"No texts found\" please click Browse and re-select the project folder so RenLocalizer refreshes the files.",
+
+  "unren_mode_dialog": {
+    "title": "Choose How to Run UnRen",
+    "description": "Select the workflow that best matches your experience level.",
+    "automatic": {
+      "title": "Automatic Mode",
+      "details": [
+        "Runs menu options 1 (extract) and 2 (decompile) with safe defaults",
+        "Keeps original .rpa archives and extracts every package",
+        "Captures console output inside the application log"
+      ],
+      "button": "Run Automatically"
+    },
+    "manual": {
+      "title": "Manual Mode",
+      "details": [
+        "Opens the classic UnRen console window",
+        "You can chain advanced options (3-6, a-l, registry helpers, etc.)"
+      ],
+      "button": "Open Console"
+    },
+    "manual_hint": "Automatic mode is experimental; it may not behave as expected and menus might stay open. Manual mode is recommended. See Help → Info → UnRen for detailed instructions."
+  },
   
     
   
@@ -135,7 +178,8 @@
       "formats": "Output Formats",
       "performance": "Performance Settings",
       "features": "Features",
-      "troubleshooting": "Troubleshooting"
+      "troubleshooting": "Troubleshooting",
+      "unren": "UnRen"
     },
     "formats": {
       "title": "Translation File Formats",
@@ -289,6 +333,120 @@
           ]
         }
       ]
+    },
+    "unren": {
+      "title": "UnRen Integration Guide",
+      "description": "RenLocalizer downloads and caches UnRen before analysis. Automatic mode is still experimental, so watch the log output and switch to manual if something stalls:",
+      "versions": {
+        "title": "Which UnRen build should I launch?",
+        "description": "The first two menu entries point to different Python runtimes. Match the option to the Ren'Py version used by the game:",
+        "options": [
+          {
+            "title": "UnRen-current.bat",
+            "description": "Python 3-based release for modern Ren'Py builds. Handles the archive layout used by 7.4+ and Ren'Py 8 projects.",
+            "versions_label": "Best for:",
+            "versions": "Ren'Py 7.4+, Ren'Py 8 (64-bit builds included)",
+            "note": "Check game/renpy/common/version.txt or the splash screen—if it shows 7.4 or any 8.x/Py3 build, pick this option."
+          },
+          {
+            "title": "UnRen-legacy.bat",
+            "description": "Classic Python 2 toolchain that matches older games and 32-bit distributions.",
+            "versions_label": "Best for:",
+            "versions": "Ren'Py 6.x, Ren'Py 7.0-7.3",
+            "note": "Choose this when the game launches with a Py2 runtime, ships only a 32-bit exe, or when UnRen-current.bat fails with compatibility errors."
+          }
+        ]
+      },
+      "automatic": {
+        "title": "Automatic Mode (experimental)",
+        "points": [
+          "Runs menu options 1 + 2 (extract RPA, decompile RPYC) sequentially with safe defaults",
+          "Streams live output to the Logs tab; if you see a pending prompt, cancel and continue in manual mode",
+          "If the console refuses to close, stop the UnRen task and finish manually—already extracted data stays intact"
+        ]
+      },
+      "manual": {
+        "title": "Manual Mode",
+        "points": [
+          "Opens the UnRen console so you can chain advanced menu blocks (3-6, a-l, registry helpers)",
+          "Ideal when enabling developer tools, bypassing protection, or injecting mods",
+          "Great fallback when automatic mode hangs because you can see the exact menu step"
+        ],
+        "warning": "Incorrect menu choices can permanently modify the project—skip steps you don't fully understand."
+      },
+      "checklist": {
+        "title": "Pre-flight Checklist",
+        "items": [
+          "Make sure the selected folder contains the game/ directory at its root.",
+          "Back up the project or work on a copy before modifying any assets.",
+          "Ensure antivirus/SmartScreen is not blocking UnRen-current.bat.",
+          "Free disk space should be roughly 2× the combined size of the .rpa archives."
+        ]
+      },
+      "manual_flow": {
+        "title": "Manual Mode Flow",
+        "steps": [
+          {
+            "title": "1) Download and verify",
+            "detail": "Note the path shown in the download-complete message; use Help → UnRen → Download again if you need fresh files."
+          },
+          {
+            "title": "2) Launch manual mode",
+            "detail": "Confirm the path printed on the first console line points to the game root (folder that contains game/)."
+          },
+          {
+            "title": "3) Option 1 – Extract RPAs",
+            "detail": "Wait until every .rpa archive finishes; capture the console output if any error appears."
+          },
+          {
+            "title": "4) Option 2 – Decompile RPYC",
+            "detail": "Allow UnRen to overwrite .rpyc files; keep the window open until you see the final 'Done' message."
+          },
+          {
+            "title": "5) Optional extras",
+            "detail": "Use options 3-6 or a-l if you need developer tools, protection bypass, or additional mod helpers."
+          },
+          {
+            "title": "6) Keep the console open",
+            "detail": "If you notice more archives, rerun the commands in the same session; close the window only when you're finished."
+          }
+        ],
+        "note": "If something fails, don't close the window immediately—grab a screenshot so the output isn't lost, then retry the step."
+      },
+      "verification": {
+        "title": "Post-run Verification",
+        "items": [
+          "You should see fresh .rpy files under game/; rerun step 2 if only .rpyc files remain.",
+          "Leave the original .rpa archives in place so repeated runs can compare against them.",
+          "Running 'Scan Files' inside RenLocalizer should no longer show the “RPYC/RPA missing” warning.",
+          "logs/unren_auto.log (when present) shows exactly where the last automatic session ended—review new error lines."
+        ]
+      },
+      "tips_title": "Quick Tips",
+      "tips": [
+        "Always run UnRen from the game root; picking a subfolder will extract nothing.",
+        "Back up .rpy files before allowing any overwrite/delete prompts.",
+        "Feel free to switch to manual mode if automatic mode stalls; previously extracted files are preserved.",
+        "Right-click the console title bar → Edit → Mark to copy long sections of output."
+      ],
+      "troubleshooting": {
+        "title": "Troubleshooting",
+        "items": [
+          {
+            "issue": "Console closes immediately",
+            "resolution": "Verify you have write access to the game folder and that antivirus isn't blocking the .bat file. Launch cmd as Administrator and run UnRen-current.bat manually if needed."
+          },
+          {
+            "issue": "Automatic mode freezes on step 1",
+            "resolution": "Check the Logs tab; if you see prompts like 'Press any key', cancel automatic mode and rerun the same options manually."
+          },
+          {
+            "issue": "Extracted files are missing inside RenLocalizer",
+            "resolution": "Confirm Settings → General → Project Directory points to the game root, then click Scan Files again—outputs sometimes land in a parallel subfolder."
+          }
+        ]
+      },
+      "footer": "Review docs/external/UnRen-current.bat to inspect every prompt and default choice."
     }
   },
   

@@ -11,7 +11,7 @@ try:
     from PyQt6.QtWidgets import (
         QDialog, QVBoxLayout, QHBoxLayout, QFormLayout, QTabWidget,
         QLabel, QLineEdit, QPushButton, QComboBox, QSpinBox, QDoubleSpinBox,
-        QCheckBox, QGroupBox, QDialogButtonBox, QSlider, QTextEdit
+        QCheckBox, QGroupBox, QDialogButtonBox, QSlider, QTextEdit, QFileDialog
     )
     from PyQt6.QtCore import Qt, pyqtSignal
     from PyQt6.QtGui import QIcon
@@ -19,10 +19,12 @@ except ImportError:
     from PySide6.QtWidgets import (
         QDialog, QVBoxLayout, QHBoxLayout, QFormLayout, QTabWidget,
         QLabel, QLineEdit, QPushButton, QComboBox, QSpinBox, QDoubleSpinBox,
-        QCheckBox, QGroupBox, QDialogButtonBox, QSlider, QTextEdit
+        QCheckBox, QGroupBox, QDialogButtonBox, QSlider, QTextEdit, QFileDialog
     )
     from PySide6.QtCore import Qt, Signal as pyqtSignal
     from PySide6.QtGui import QIcon
+
+from pathlib import Path
 
 from src.utils.config import ConfigManager, Language
 from src.gui.professional_themes import get_theme_qss
@@ -123,6 +125,29 @@ class SettingsDialog(QDialog):
         # Check for updates
         self.check_updates_check = QCheckBox()
         layout.addRow(self.config_manager.get_ui_text("check_updates_label"), self.check_updates_check)
+
+        # UnRen integration
+        self.unren_group = QGroupBox(self.config_manager.get_ui_text("unren_group_label"))
+        unren_layout = QFormLayout(self.unren_group)
+
+        self.unren_auto_download_check = QCheckBox()
+        unren_layout.addRow(
+            self.config_manager.get_ui_text("unren_auto_download_label"),
+            self.unren_auto_download_check,
+        )
+
+        path_layout = QHBoxLayout()
+        self.unren_path_edit = QLineEdit()
+        self.unren_browse_btn = QPushButton(self.config_manager.get_ui_text("browse"))
+        self.unren_browse_btn.clicked.connect(self.browse_unren_path)
+        path_layout.addWidget(self.unren_path_edit)
+        path_layout.addWidget(self.unren_browse_btn)
+        unren_layout.addRow(
+            self.config_manager.get_ui_text("unren_custom_path_label"),
+            path_layout,
+        )
+
+        layout.addRow(self.unren_group)
         
         self.tab_widget.addTab(widget, self.config_manager.get_ui_text("general_tab"))
     
@@ -285,6 +310,18 @@ class SettingsDialog(QDialog):
         
         for code, name in languages.items():
             combo.addItem(f"{name} ({code})", code)
+
+    def browse_unren_path(self):
+        """Pick a custom UnRen directory."""
+        current_path = self.unren_path_edit.text().strip()
+        default_dir = current_path or str(Path.home())
+        directory = QFileDialog.getExistingDirectory(
+            self,
+            self.config_manager.get_ui_text("select_directory_title"),
+            default_dir,
+        )
+        if directory:
+            self.unren_path_edit.setText(directory)
     
     def load_settings(self):
         """Load current settings into the dialog."""
@@ -304,6 +341,8 @@ class SettingsDialog(QDialog):
         self.auto_save_check.setChecked(self.config_manager.app_settings.auto_save_settings)
         self.auto_save_translations_check.setChecked(self.config_manager.get_setting('ui.auto_save_translations', True))
         self.check_updates_check.setChecked(self.config_manager.app_settings.check_for_updates)
+        self.unren_auto_download_check.setChecked(self.config_manager.app_settings.unren_auto_download)
+        self.unren_path_edit.setText(self.config_manager.app_settings.unren_custom_path)
         
         # Translation settings
         source_lang = self.config_manager.translation_settings.source_language
@@ -355,6 +394,8 @@ class SettingsDialog(QDialog):
         self.config_manager.app_settings.auto_save_settings = self.auto_save_check.isChecked()
         self.config_manager.set_setting('ui.auto_save_translations', self.auto_save_translations_check.isChecked())
         self.config_manager.app_settings.check_for_updates = self.check_updates_check.isChecked()
+        self.config_manager.app_settings.unren_auto_download = self.unren_auto_download_check.isChecked()
+        self.config_manager.app_settings.unren_custom_path = self.unren_path_edit.text().strip()
         
         # Translation settings
         self.config_manager.translation_settings.source_language = self.default_source_combo.currentData()

@@ -70,6 +70,7 @@ class InfoDialog(QDialog):
         self.create_performance_tab(dialog_data)
         self.create_features_tab(dialog_data)
         self.create_troubleshooting_tab(dialog_data)
+        self.create_unren_tab(dialog_data)
         
         # Add close button
         button_box = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok)
@@ -324,4 +325,156 @@ class InfoDialog(QDialog):
         text_widget.setHtml(html_content)
         layout.addWidget(text_widget)
         
+        self.tab_widget.addTab(widget, tab_title)
+
+    def create_unren_tab(self, dialog_data):
+        """Create UnRen integration tab."""
+        unren_data = dialog_data.get("unren")
+        if not unren_data:
+            return
+
+        tab_title = dialog_data.get("tabs", {}).get("unren", "UnRen")
+        widget = QWidget()
+        layout = QVBoxLayout(widget)
+        layout.setContentsMargins(10, 10, 10, 10)
+
+        text_widget = QTextEdit()
+        text_widget.setReadOnly(True)
+
+        auto_section = "".join(
+            f"<li style='margin-bottom:6px;color:#e5e7eb;'>{point}</li>"
+            for point in unren_data.get("automatic", {}).get("points", [])
+        )
+        manual_section = "".join(
+            f"<li style='margin-bottom:6px;color:#e5e7eb;'>{point}</li>"
+            for point in unren_data.get("manual", {}).get("points", [])
+        )
+        tip_list = "".join(
+            f"<li style='margin-bottom:4px;'>{tip}</li>"
+            for tip in unren_data.get("tips", [])
+        )
+        version_section = ""
+        versions_data = unren_data.get("versions")
+        if versions_data:
+            version_cards = "".join(
+                f"""
+                <div style='border: 1px solid #1d4ed8; border-radius: 8px; padding: 12px; margin-bottom: 10px; background-color: #0f172a;'>
+                    <h4 style='color: #93c5fd; margin: 0 0 6px 0;'>{option.get('title', '')}</h4>
+                    <p style='margin: 0 0 4px 0; color: #e2e8f0;'>{option.get('description', '')}</p>
+                    <p style='margin: 0; color: #bfdbfe;'><b>{option.get('versions_label', '')}</b> {option.get('versions', '')}</p>
+                    <p style='margin: 4px 0 0 0; color: #cbd5f5; font-size: 12px;'>{option.get('note', '')}</p>
+                </div>
+                """
+                for option in versions_data.get("options", [])
+            )
+            version_section = f"""
+            <div style=\"border-left: 4px solid #2563eb; padding: 12px 15px; background-color: #0b1120; border-radius: 6px; margin-bottom: 15px;\">
+                <h3 style=\"color: #bfdbfe; margin-top: 0;\">{versions_data.get('title', '')}</h3>
+                <p style=\"color: #e5e7eb; margin-bottom: 12px;\">{versions_data.get('description', '')}</p>
+                {version_cards}
+            </div>
+            """
+
+        checklist_section = ""
+        checklist_data = unren_data.get("checklist", {})
+        checklist_items = "".join(
+            f"<li style='margin-bottom:4px;color:#e0f2fe;'>{item}</li>"
+            for item in checklist_data.get("items", [])
+        )
+        if checklist_items:
+            checklist_section = f"""
+            <div style=\"border-left: 4px solid #22d3ee; padding: 12px 15px; background-color: #083344; border-radius: 6px; margin-bottom: 15px;\">
+                <h4 style=\"color: #67e8f9; margin-top: 0;\">{checklist_data.get('title', '')}</h4>
+                <ul style=\"margin-left: 18px;\">{checklist_items}</ul>
+            </div>
+            """
+
+        manual_flow_section = ""
+        manual_flow_data = unren_data.get("manual_flow", {})
+        manual_flow_steps = "".join(
+            f"<li style='margin-bottom:8px;'>"
+            f"<span style='color:#bfdbfe;font-weight:600;'>{step.get('title', '')}</span><br>"
+            f"<span style='color:#cbd5f5;'>{step.get('detail', '')}</span>"
+            "</li>"
+            for step in manual_flow_data.get("steps", [])
+        )
+        if manual_flow_steps:
+            manual_flow_note = manual_flow_data.get("note")
+            manual_flow_note_html = ""
+            if manual_flow_note:
+                manual_flow_note_html = f"<p style=\"margin-top: 10px; color: #fcd34d;\">{manual_flow_note}</p>"
+            manual_flow_section = f"""
+            <div style=\"border: 2px dashed #fbbf24; border-radius: 8px; padding: 15px; margin-bottom: 15px; background-color: #1c1917;\">
+                <h3 style=\"color: #fde68a; margin-top: 0;\">{manual_flow_data.get('title', '')}</h3>
+                <ol style=\"margin-left: 18px;\">{manual_flow_steps}</ol>
+                {manual_flow_note_html}
+            </div>
+            """
+
+        verification_section = ""
+        verification_data = unren_data.get("verification", {})
+        verification_items = "".join(
+            f"<li style='margin-bottom:4px;color:#bbf7d0;'>{item}</li>"
+            for item in verification_data.get("items", [])
+        )
+        if verification_items:
+            verification_section = f"""
+            <div style=\"border-left: 4px solid #22c55e; padding: 12px 15px; background-color: #052e16; border-radius: 6px; margin-bottom: 15px;\">
+                <h4 style=\"color: #86efac; margin-top: 0;\">{verification_data.get('title', '')}</h4>
+                <ul style=\"margin-left: 18px;\">{verification_items}</ul>
+            </div>
+            """
+
+        troubleshooting_section = ""
+        troubleshooting_data = unren_data.get("troubleshooting", {})
+        troubleshooting_items = "".join(
+            f"<li style='margin-bottom:6px;'><b style='color:#fecaca;'>{item.get('issue', '')}</b><br><span style='color:#fee2e2;'>{item.get('resolution', '')}</span></li>"
+            for item in troubleshooting_data.get("items", [])
+        )
+        if troubleshooting_items:
+            troubleshooting_section = f"""
+            <div style=\"border: 1px solid #f87171; border-radius: 8px; padding: 15px; margin-top: 15px; background-color: #450a0a;\">
+                <h4 style=\"color: #fecaca; margin-top: 0;\">{troubleshooting_data.get('title', '')}</h4>
+                <ul style=\"margin-left: 18px;\">{troubleshooting_items}</ul>
+            </div>
+            """
+
+        html_content = f"""
+        <div style="font-family: Arial, sans-serif; line-height: 1.45; color: #e5e7eb;">
+            <h2 style="color: #93c5fd;">{unren_data.get('title', 'UnRen Integration')}</h2>
+            <p style="margin-bottom: 15px;">{unren_data.get('description', '')}</p>
+            {version_section}
+            {checklist_section}
+
+            <div style="border: 2px solid #60a5fa; border-radius: 8px; padding: 15px; margin-bottom: 15px; background-color: #0f172a;">
+                <h3 style="color: #bae6fd; margin-top: 0;">{unren_data.get('automatic', {}).get('title', 'Automatic Mode')}</h3>
+                <ul style="margin-left: 18px; list-style: disc;">
+                    {auto_section}
+                </ul>
+            </div>
+
+            <div style="border: 2px solid #fbbf24; border-radius: 8px; padding: 15px; margin-bottom: 15px; background-color: #422006;">
+                <h3 style="color: #fde68a; margin-top: 0;">{unren_data.get('manual', {}).get('title', 'Manual Mode')}</h3>
+                <ul style="margin-left: 18px; list-style: disc;">
+                    {manual_section}
+                </ul>
+                <p style="margin-top: 10px; color: #fef3c7;"><b>⚠️ {unren_data.get('manual', {}).get('warning', '')}</b></p>
+            </div>
+            {manual_flow_section}
+            {verification_section}
+
+            <div style="border-left: 4px solid #34d399; padding: 12px 15px; background-color: #064e3b; border-radius: 6px;">
+                <h4 style="color: #6ee7b7; margin-top: 0;">{unren_data.get('tips_title', 'Quick Reminders')}</h4>
+                <ul style="margin-left: 18px;">
+                    {tip_list}
+                </ul>
+                <p style="margin-top: 10px; color: #a7f3d0;">{unren_data.get('footer', '')}</p>
+            </div>
+            {troubleshooting_section}
+        </div>
+        """
+
+        text_widget.setHtml(html_content)
+        layout.addWidget(text_widget)
+
         self.tab_widget.addTab(widget, tab_title)

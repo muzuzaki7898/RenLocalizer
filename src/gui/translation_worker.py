@@ -84,18 +84,20 @@ class TranslationWorker(QObject):
             # Configure proxy usage
             self.translation_manager.set_proxy_enabled(self.use_proxy)
             
-            # Create translation requests with placeholder preservation
+            # Create translation requests using parser-provided metadata when available
             requests = []
-            placeholder_maps = []  # Store placeholder mappings for restoration
             
             for text_data in self.texts:
                 if self.should_stop:
                     break
                 
-                original_text = text_data['text']
-                
-                # CRITICAL: Preserve placeholders before translation
-                processed_text, placeholder_map = self.parser.preserve_placeholders(original_text)
+                original_text = text_data.get('text', '')
+                processed_text = text_data.get('processed_text')
+                placeholder_map = dict(text_data.get('placeholder_map') or {})
+
+                # Fall back to runtime preservation if parser did not provide metadata
+                if processed_text is None:
+                    processed_text, placeholder_map = self.parser.preserve_placeholders(original_text)
                 
                 request = TranslationRequest(
                     text=processed_text,  # Use processed text for translation
@@ -103,17 +105,18 @@ class TranslationWorker(QObject):
                     target_lang=self.target_lang,
                     engine=self.engine,
                     metadata={
-                        'type': text_data.get('type', 'unknown'),
+                        'type': text_data.get('text_type') or text_data.get('type', 'unknown'),
                         'character': text_data.get('character'),
                         'context': text_data.get('context', ''),
+                        'context_path': text_data.get('context_path', []),
                         'file_path': text_data.get('file_path', ''),
                         'line_number': text_data.get('line_number', 0),
                         'original_text': original_text,  # Store original text
-                        'placeholder_map': placeholder_map  # Store placeholder mapping
+                        'placeholder_map': placeholder_map,  # Store placeholder mapping
+                        'processed_text': processed_text,
                     }
                 )
                 requests.append(request)
-                placeholder_maps.append(placeholder_map)
                 
                 # Log placeholder preservation
                 if placeholder_map:
@@ -138,7 +141,9 @@ class TranslationWorker(QObject):
                 batch = requests[i:i + batch_size]
                 
                 # Update progress
-                current_text = batch[0].text if batch else ""
+                current_text = ""
+                if batch:
+                    current_text = batch[0].metadata.get('original_text', batch[0].text)
                 self.progress_updated.emit(completed, total_requests, current_text)
                 
                 # Translate batch

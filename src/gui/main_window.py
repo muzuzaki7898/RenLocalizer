@@ -9,8 +9,10 @@ import sys
 import logging
 import asyncio
 import time
+import os
+import threading
 from pathlib import Path
-from typing import Optional, List
+from typing import Optional, List, Tuple
 
 try:
     from PyQt6.QtWidgets import (
@@ -18,7 +20,8 @@ try:
         QLabel, QLineEdit, QPushButton, QComboBox, QSpinBox, QDoubleSpinBox,
         QProgressBar, QTextEdit, QFileDialog, QMenuBar, QStatusBar,
         QGroupBox, QCheckBox, QTabWidget, QSplitter, QTreeWidget, QTreeWidgetItem,
-        QMessageBox, QDialog, QDialogButtonBox, QFormLayout, QSlider
+        QMessageBox, QDialog, QDialogButtonBox, QFormLayout, QSlider,
+        QProgressDialog
     )
     from PyQt6.QtCore import Qt, QThread, pyqtSignal, QTimer, QSize
     from PyQt6.QtGui import QFont, QIcon, QPixmap, QAction
@@ -29,13 +32,15 @@ except ImportError:
         QLabel, QLineEdit, QPushButton, QComboBox, QSpinBox, QDoubleSpinBox,
         QProgressBar, QTextEdit, QFileDialog, QMenuBar, QStatusBar,
         QGroupBox, QCheckBox, QTabWidget, QSplitter, QTreeWidget, QTreeWidgetItem,
-        QMessageBox, QDialog, QDialogButtonBox, QFormLayout, QSlider
+        QMessageBox, QDialog, QDialogButtonBox, QFormLayout, QSlider,
+        QProgressDialog
     )
     from PySide6.QtCore import Qt, QThread, Signal as pyqtSignal, QTimer, QSize
     from PySide6.QtGui import QFont, QIcon, QPixmap, QAction
     GUI_FRAMEWORK = "PySide6"
 
 from src.utils.config import ConfigManager
+from src.utils.unren_manager import UnRenManager
 from src.version import VERSION
 from src.core.parser import RenPyParser
 from src.core.translator import TranslationManager, TranslationEngine, GoogleTranslator, DeepLTranslator, YandexTranslator
@@ -45,6 +50,7 @@ from src.gui.settings_dialog import SettingsDialog
 from src.gui.api_keys_dialog import ApiKeysDialog
 from src.gui.glossary_dialog import GlossaryEditorDialog
 from src.gui.info_dialog import InfoDialog
+from src.gui.unren_mode_dialog import UnRenModeDialog
 from src.gui.professional_themes import get_theme_qss
 
 class MainWindow(QMainWindow):
@@ -57,6 +63,10 @@ class MainWindow(QMainWindow):
         # Initialize components
         self.config_manager = ConfigManager()
         self.parser = RenPyParser(config_manager=self.config_manager)
+        self.unren_manager = UnRenManager(self.config_manager)
+        self._last_scanned_dir: Optional[Path] = None
+        self._last_auto_unren_dir: Optional[Path] = None
+        self._unren_progress_dialog: Optional[QProgressDialog] = None
         
         # Current theme (default: solarized)
         self.current_theme = self.config_manager.app_settings.theme
@@ -196,6 +206,17 @@ class MainWindow(QMainWindow):
         solarized_theme_action = QAction(self.config_manager.get_ui_text("solarized_theme"), self)
         solarized_theme_action.triggered.connect(lambda: self.change_theme('solarized'))
         theme_menu.addAction(solarized_theme_action)
+
+        # Tools menu
+        tools_menu = menubar.addMenu(self.config_manager.get_ui_text("tools_menu"))
+
+        run_unren_action = QAction(self.config_manager.get_ui_text("run_unren_menu"), self)
+        run_unren_action.triggered.connect(self.handle_run_unren)
+        tools_menu.addAction(run_unren_action)
+
+        redownload_unren_action = QAction(self.config_manager.get_ui_text("redownload_unren_menu"), self)
+        redownload_unren_action.triggered.connect(self.handle_unren_redownload)
+        tools_menu.addAction(redownload_unren_action)
         
         # Help menu
         help_menu = menubar.addMenu(self.config_manager.get_ui_text("help_menu"))
@@ -518,6 +539,31 @@ class MainWindow(QMainWindow):
             self.current_directory = Path(directory)
             self.scan_directory()
     
+    def ensure_directory_ready(self) -> Optional[Path]:
+        """Validate the directory path from the input and re-scan if needed."""
+        directory_text = self.directory_input.text().strip()
+        if not directory_text:
+            QMessageBox.warning(
+                self,
+                self.config_manager.get_ui_text("warning"),
+                self.config_manager.get_ui_text("no_directory_warning"),
+            )
+            return None
+
+        directory_path = Path(directory_text)
+        if not directory_path.exists():
+            QMessageBox.warning(
+                self,
+                self.config_manager.get_ui_text("warning"),
+                self.config_manager.get_ui_text("no_directory_warning"),
+            )
+            return None
+
+        if self.current_directory != directory_path:
+            self.current_directory = directory_path
+            self.scan_directory()
+        return directory_path
+
     def scan_directory(self):
         """Scan directory for .rpy files."""
         if not self.current_directory or not self.current_directory.exists():
@@ -525,31 +571,140 @@ class MainWindow(QMainWindow):
             return
         
         try:
+            self.extracted_texts = []
             self.status_label.setText(self.config_manager.get_ui_text("scanning_directory"))
             
-            # Find .rpy files (currently always use sequential parsing in UI)
-            rpy_files = list(self.current_directory.rglob('*.rpy'))
+            search_root, rpy_files = self._get_project_rpy_files()
+
+            if not rpy_files:
+                self.extracted_texts = []
+                self.files_label.setText(self.config_manager.get_ui_text("files_status").format(count=0))
+                self.texts_label.setText(self.config_manager.get_ui_text("texts_status").format(count=0))
+                self.status_label.setText(self.config_manager.get_ui_text("unren_scan_hint"))
+                if self._should_offer_unren(self.current_directory):
+                    self.prompt_run_unren(self.current_directory)
+                return
 
             # Use standard processing for now (parallel path removed from UI)
             self.status_label.setText("Using sequential processing...")
-            self.extracted_texts = self.parser.parse_directory(self.current_directory)
+            target_dir = search_root or self.current_directory
+            self.extracted_texts = self.parser.parse_directory(target_dir)
 
             # Update status
             processing_mode = "sequential"
             self.files_label.setText(self.config_manager.get_ui_text("files_status").format(count=len(rpy_files)))
             self.texts_label.setText(self.config_manager.get_ui_text("texts_status").format(count=len(self.extracted_texts)))
             self.status_label.setText(f"{self.config_manager.get_ui_text('directory_scanned')} ({processing_mode})")
+            self._last_scanned_dir = self.current_directory
+            if self.extracted_texts and self._last_auto_unren_dir:
+                try:
+                    if self.current_directory and self.current_directory.resolve() == self._last_auto_unren_dir:
+                        self._last_auto_unren_dir = None
+                except OSError:
+                    pass
             
             self.logger.info(f"Scanned directory: {len(self.extracted_texts)} texts found using {processing_mode} processing")
             
         except Exception as e:
             self.logger.error(f"Error scanning directory: {e}")
             self.status_label.setText(self.config_manager.get_ui_text("error_scanning_directory"))
-    
-    def start_translation(self):
-        """Start the translation process."""
-        # Önce klasör seçimi kontrolü
-        if not self.current_directory or not Path(self.directory_input.text()).exists():
+
+    def _get_project_rpy_files(self) -> Tuple[Optional[Path], List[Path]]:
+        """Return the search root and filtered .rpy files for the current project."""
+
+        if not self.current_directory:
+            return None, []
+
+        root = self.current_directory
+        game_dir = root / "game"
+        if game_dir.exists():
+            root = game_dir
+
+        files = []
+        for file_path in root.rglob('*.rpy'):
+            rel = str(file_path.relative_to(root)).replace('\\', '/').lower()
+            if rel.startswith('tl/'):
+                continue
+            if rel.startswith(('renpy/', 'lib/', 'launcher/', 'sdk/', 'tutorial/', 'templates/')):
+                continue
+            files.append(file_path)
+        return (root if files else None), files
+
+    def _should_offer_unren(self, directory: Path) -> bool:
+        """Return True if the project looks like it needs UnRen unpacking."""
+        if os.name != "nt":
+            return False
+        if not directory.exists():
+            return False
+        patterns = ['*.rpyc', '*.rpa']
+        for pattern in patterns:
+            iterator = directory.rglob(pattern)
+            if next(iterator, None):
+                return True
+        return False
+
+    def prompt_run_unren(self, directory: Path) -> None:
+        """Ask the user if they want to run UnRen for the current directory."""
+        reply = QMessageBox.question(
+            self,
+            self.config_manager.get_ui_text("unren_prompt_title"),
+            self.config_manager.get_ui_text("unren_prompt_message"),
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+        )
+        if reply == QMessageBox.StandardButton.Yes:
+            self.run_unren_for_directory(directory)
+
+    def handle_run_unren(self) -> None:
+        """Trigger UnRen execution from the Tools menu."""
+        directory = self.ensure_directory_ready()
+        if directory:
+            self.run_unren_for_directory(directory)
+
+    def handle_unren_redownload(self) -> None:
+        """Force re-download of UnRen files from Tools menu."""
+        if os.name != "nt":
+            QMessageBox.warning(
+                self,
+                self.config_manager.get_ui_text("warning"),
+                self.config_manager.get_ui_text("unren_windows_only"),
+            )
+            return
+
+        def worker():
+            try:
+                root = self.unren_manager.ensure_available(force_download=True)
+            except Exception as exc:  # noqa: BLE001
+                self.logger.error("UnRen download failed: %s", exc)
+                self._post_to_main_thread(
+                    lambda: QMessageBox.critical(
+                        self,
+                        self.config_manager.get_ui_text("error"),
+                        self.config_manager.get_ui_text("unren_download_failed").format(error=exc),
+                    )
+                )
+            else:
+                self.logger.info("UnRen files prepared at %s", root)
+                self._post_to_main_thread(
+                    lambda: QMessageBox.information(
+                        self,
+                        self.config_manager.get_ui_text("success"),
+                        self.config_manager.get_ui_text("unren_download_success").format(path=root),
+                    )
+                )
+
+        threading.Thread(target=worker, daemon=True).start()
+
+    def run_unren_for_directory(self, directory: Path, force_download: bool = False) -> None:
+        """Validate prerequisites and fire the UnRen helper."""
+        if os.name != "nt":
+            QMessageBox.warning(
+                self,
+                self.config_manager.get_ui_text("warning"),
+                self.config_manager.get_ui_text("unren_windows_only"),
+            )
+            return
+
+        if not directory.exists():
             QMessageBox.warning(
                 self,
                 self.config_manager.get_ui_text("warning"),
@@ -557,11 +712,206 @@ class MainWindow(QMainWindow):
             )
             return
 
-        if not self.extracted_texts:
+        if (
+            not self.config_manager.app_settings.unren_auto_download
+            and not self.unren_manager.is_available()
+        ):
             QMessageBox.warning(
                 self,
                 self.config_manager.get_ui_text("warning"),
+                self.config_manager.get_ui_text("unren_download_required"),
+            )
+            return
+
+        mode = self._prompt_unren_mode()
+        if mode is None:
+            self.status_label.setText(self.config_manager.get_ui_text("ready"))
+            return
+
+        if mode == "automatic":
+            self.status_label.setText(self.config_manager.get_ui_text("unren_auto_running"))
+            self._show_unren_progress_dialog(directory)
+        else:
+            self.status_label.setText(self.config_manager.get_ui_text("unren_launching"))
+
+        self._run_unren_async(
+            directory,
+            force_download=force_download,
+            automation=(mode == "automatic"),
+        )
+
+    def _prompt_unren_mode(self) -> Optional[str]:
+        """Ask the user whether to run UnRen manually or automatically."""
+        dialog = UnRenModeDialog(self.config_manager, self)
+        if dialog.exec():
+            return dialog.selected_mode or "manual"
+        return None
+
+    def _run_unren_async(self, directory: Path, force_download: bool = False, automation: bool = False) -> None:
+        """Run UnRen operations in the background to keep UI responsive."""
+
+        def worker():
+            try:
+                self.unren_manager.ensure_available(force_download=force_download)
+                if automation:
+                    captured_logs: list[str] = []
+
+                    def collect(line: str) -> None:
+                        captured_logs.append(line)
+                        self.logger.info("[UnRen] %s", line)
+
+                    script = self._build_unren_auto_script()
+                    self.unren_manager.run_unren(
+                        directory,
+                        wait=True,
+                        log_callback=collect,
+                        automation_script=script,
+                    )
+                    self._post_to_main_thread(
+                        lambda: self._handle_unren_auto_success(directory, captured_logs)
+                    )
+                else:
+                    self.unren_manager.run_unren(directory, wait=False)
+            except Exception as exc:  # noqa: BLE001
+                self.logger.error("Failed to start UnRen: %s", exc)
+                self._post_to_main_thread(
+                    lambda: QMessageBox.critical(
+                        self,
+                        self.config_manager.get_ui_text("error"),
+                        self.config_manager.get_ui_text("unren_launch_failed").format(error=exc),
+                    )
+                )
+                def _reset_status() -> None:
+                    self._close_unren_progress_dialog()
+                    self.status_label.setText(self.config_manager.get_ui_text("ready"))
+
+                self._post_to_main_thread(_reset_status)
+
+        threading.Thread(target=worker, daemon=True).start()
+
+    def _build_unren_auto_script(self) -> str:
+        """Return the canned stdin sequence for the default automation run."""
+        # Automatic mode should only decompile .rpyc files into .rpy (menu option 2) and then exit.
+        # Keeping the sequence minimal prevents long-running archive extraction tasks from triggering.
+        steps = [
+            "2",   # run the decompile option only
+            "n",   # do not overwrite existing .rpy files during decompile
+            "x",   # exit back to desktop once finished
+        ]
+        return "\r\n".join(steps) + "\r\n"
+
+    def _handle_unren_auto_success(self, directory: Path, logs: list[str]) -> None:
+        """Notify the user that the automatic run finished."""
+        try:
+            resolved_target = directory.resolve()
+        except OSError:
+            resolved_target = directory
+        self._last_auto_unren_dir = resolved_target
+
+        current_resolved = None
+        if self.current_directory:
+            try:
+                current_resolved = self.current_directory.resolve()
+            except OSError:
+                current_resolved = self.current_directory
+
+        should_rescan = bool(current_resolved and current_resolved == resolved_target)
+
+        # Close the busy dialog before triggering any heavy rescans so the UI refreshes immediately.
+        self._close_unren_progress_dialog()
+
+        if should_rescan:
+            self.status_label.setText(self.config_manager.get_ui_text("scanning_directory"))
+
+            def _rescan_after_unren() -> None:
+                self.scan_directory()
+                if not self.extracted_texts:
+                    self._show_reselect_directory_hint()
+
+            QTimer.singleShot(0, _rescan_after_unren)
+        else:
+            self.status_label.setText(self.config_manager.get_ui_text("ready"))
+        success_text = self.config_manager.get_ui_text("unren_auto_success").format(
+            path=directory,
+            lines=len(logs),
+        )
+        reminder_text = self.config_manager.get_ui_text("unren_auto_completion_hint")
+        message = f"{success_text}\n\n{reminder_text}"
+        QMessageBox.information(
+            self,
+            self.config_manager.get_ui_text("success"),
+            message,
+        )
+
+    def _show_reselect_directory_hint(self) -> None:
+        """Remind the user to re-select the folder so the file list refreshes."""
+        message = "\n\n".join(
+            [
                 self.config_manager.get_ui_text("no_texts_warning"),
+                self.config_manager.get_ui_text("no_texts_reselect_hint"),
+            ]
+        )
+        QMessageBox.warning(
+            self,
+            self.config_manager.get_ui_text("warning"),
+            message,
+        )
+
+    def _show_unren_progress_dialog(self, directory: Path) -> None:
+        """Display an indeterminate dialog while automatic UnRen runs."""
+        self._close_unren_progress_dialog()
+        label = "\n".join(
+            [
+                self.config_manager.get_ui_text("unren_auto_running"),
+                str(directory),
+            ]
+        )
+        dialog = QProgressDialog(label, None, 0, 0, self)
+        dialog.setWindowTitle(self.config_manager.get_ui_text("run_unren_menu"))
+        dialog.setWindowModality(Qt.WindowModality.ApplicationModal)
+        dialog.setCancelButton(None)
+        dialog.setMinimumDuration(0)
+        dialog.setAutoClose(False)
+        dialog.setAutoReset(False)
+        dialog.show()
+        self._unren_progress_dialog = dialog
+
+    def _close_unren_progress_dialog(self) -> None:
+        """Close the automation progress dialog if it is visible."""
+        if self._unren_progress_dialog:
+            try:
+                self._unren_progress_dialog.hide()
+                self._unren_progress_dialog.close()
+            except Exception:
+                pass
+            self._unren_progress_dialog = None
+
+    def _post_to_main_thread(self, callback):
+        """Schedule a callback to run on the Qt main thread."""
+        QTimer.singleShot(0, callback)
+    
+    def start_translation(self):
+        """Start the translation process."""
+        directory = self.ensure_directory_ready()
+        if not directory:
+            return
+
+        if not self.extracted_texts:
+            message = self.config_manager.get_ui_text("no_texts_warning")
+            needs_reselect_hint = False
+            if self._last_auto_unren_dir:
+                try:
+                    needs_reselect_hint = directory.resolve() == self._last_auto_unren_dir
+                except OSError:
+                    needs_reselect_hint = directory == self._last_auto_unren_dir
+            if needs_reselect_hint:
+                message += f"\n\n{self.config_manager.get_ui_text('no_texts_reselect_hint')}"
+            if self._should_offer_unren(directory):
+                message += f"\n\n{self.config_manager.get_ui_text('no_texts_unren_hint')}"
+            QMessageBox.warning(
+                self,
+                self.config_manager.get_ui_text("warning"),
+                message,
             )
             return
         
