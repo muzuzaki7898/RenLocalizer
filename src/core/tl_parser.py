@@ -439,6 +439,18 @@ class TLParser:
         """
         lang_dir = os.path.join(tl_dir, language)
         
+        # Case-insensitive folder search fallback for Linux/Mac
+        if not os.path.isdir(lang_dir) and os.path.isdir(tl_dir):
+            try:
+                available_dirs = [d for d in os.listdir(tl_dir) if os.path.isdir(os.path.join(tl_dir, d))]
+                for d in available_dirs:
+                    if d.lower() == language.lower():
+                        lang_dir = os.path.join(tl_dir, d)
+                        self.logger.info(f" Case-insensitive match found: {language} -> {d}")
+                        break
+            except Exception as e:
+                self.logger.warning(f"Directory listing failed: {e}")
+
         if not os.path.isdir(lang_dir):
             self.logger.warning(f"Dil klasörü bulunamadı: {lang_dir}")
             return []
