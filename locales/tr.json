@@ -1,0 +1,1029 @@
+{
+  "app_title": "RenLocalizer V2",
+  "file_menu": "Dosya",
+  "open_directory": "Klasör Aç",
+  "save_translations": "Çevirileri Kaydet",
+  "exit": "Çıkış",
+  "edit_menu": "Ayarlar",
+  "settings": "Ayarlar",
+  "api_keys": "API Anahtarları",
+  "glossary_menu": "Sözlük (Glossary)",
+  "help_menu": "Yardım",
+  "about": "Hakkında",
+  "info": "Bilgi",
+  "nav_home": "Ana Sayfa",
+  "nav_tools": "Araçlar",
+  "nav_settings": "Ayarlar",
+  "nav_about": "Hakkında",
+  "nav_support": "Destek Ol",
+  "app_subtitle": "Profesyonel Ren'Py Çeviri Aracı",
+  "support_patreon": "Patreon'da Destekle",
+  "view_menu": "Görünüm",
+  "theme_menu": "Tema",
+  "dark_theme": "Karanlık Tema",
+  "solarized_theme": "Göz Dostu Tema",
+  "tools_menu": "Araçlar",
+  "run_unren_menu": "UnRen'i Çalıştır...",
+  "redownload_unren_menu": "UnRen'i Yeniden İndir",
+  "health_check_menu": "Sağlık Kontrolü",
+  "font_check_menu": "Font Uyumluluğu",
+  "pseudo_menu": "Pseudo-Yerelleştirme",
+  "fuzzy_menu": "Akıllı Güncelleme (Fuzzy)",
+  "tl_menu": "TL Çeviri",
+  "tl_translate_menu": "TL Çevir...",
+  "extract_rpa_menu": "RPA Arşivlerini Aç",
+  "tl_translate_title": "Hazır TL klasörünü çevir",
+  "tl_directory_label": "TL dizini",
+  "tl_directory_placeholder": "tl/<dil> veya tl dizini",
+  "tl_invalid_dir": "Geçersiz dizin",
+  "health_check_select_dir": "Sağlık Kontrolü için Oyun Klasörü Seçin",
+  "health_check_title": "Sağlık Kontrolü",
+  "health_issues_found": "Bulunan Sorunlar:",
+  "font_check_select_dir": "Font Kontrolü için Oyun Klasörü Seçin",
+  "font_check_title": "Font Uyumluluk Kontrolü",
+  "font_check_results": "Font Uyumluluk Sonuçları",
+  "font_suggestions": "Önerilen Fontlar:",
+  "pseudo_title": "Pseudo-Yerelleştirme",
+  "pseudo_select_dir": "Pseudo-Yerelleştirme için Oyun Klasörü Seçin",
+  "fuzzy_title": "Akıllı Güncelleme (Fuzzy Eşleşme)",
+  "fuzzy_old_dir": "ESKİ Çeviri Klasörünü Seçin (mevcut çevirilerle)",
+  "fuzzy_new_dir": "YENİ Çeviri Klasörünü Seçin (önerilerin uygulanacağı)",
+  "input_section": "Girdi Bölümü",
+  "directory_label": "Klasör:",
+  "directory_placeholder": "Klasör yolunu seçin",
+  "browse": "Gözat",
+  "game_exe_label": "Oyun EXE:",
+  "game_exe_placeholder": "Oyun EXE dosyasını seçin (örn: Game.exe)",
+  "select_game_exe_title": "Oyun EXE'sini Seçin",
+  "auto_detect": "Otomatik Algıla (auto)",
+  "log_placeholder": "Log mesajları burada görünecek...",
+  "exe_selected": "EXE seçildi: {path}",
+  "valid_renpy_project": "✓ Geçerli Ren'Py projesi bulundu",
+  "rpy_files_found": "✓ .rpy dosyaları mevcut",
+  "only_rpyc_files": "⚠ Sadece .rpyc dosyaları var - decompile gerekli",
+  "game_folder_not_found": "✗ 'game' klasörü bulunamadı",
+  "pipeline_starting": "🚀 Pipeline başlatılıyor...",
+  "pipeline_invalid_exe": "Geçersiz oyun EXE yolu",
+  "pipeline_game_folder_missing": "'game' klasörü bulunamadı",
+  "pipeline_no_rpy_files": ".rpy dosyası bulunamadı. Decompile gerekli.",
+  "pipeline_no_rpyc_files": "RPYC dosyaları bulunamadı! RPYC Reader aktif ancak derlenmiş .rpyc dosyası yok. Oyunu bir kez çalıştırın veya Ayarlar'dan RPYC Reader'ı kapatın.",
+  "pipeline_rpyc_not_found_title": "RPYC DOSYASI BULUNAMADI!",
+  "pipeline_rpyc_not_found_reason1": "Oyun sadece .rpy kaynak dosyalarıyla dağıtılmış",
+  "pipeline_rpyc_not_found_reason2": ".rpyc dosyaları silinmiş veya eksik",
+  "pipeline_rpyc_not_found_reason3": "Oyun henüz hiç çalıştırılmamış",
+  "pipeline_rpyc_solution": "Oyunu bir kez çalıştırın (ana menü görününce kapatabilirsiniz). Ren'Py otomatik olarak .rpyc dosyalarını oluşturacak.",
+  "pipeline_rpyc_alternative": "Ayarlar'dan 'RPYC Reader' seçeneğini kapatın. Çeviri sadece .rpy dosyalarından yapılacaktır.",
+  "pipeline_rpyc_only_mode": "RPYC-only modu: .rpy dosyası bulunamadı, doğrudan .rpyc dosyaları okunacak.",
+  "folder_cleaned": "Klasör temizlendi",
+  "folder_cleanup_failed": "Klasör temizlenemedi",
+  "pipeline_files_not_found_parse": "Çeviri dosyaları bulunamadı veya parse edilemedi",
+  "pipeline_all_already_translated": "Tüm metinler zaten çevrilmiş!",
+  "pipeline_translate_failed": "Çeviri başarısız",
+  "pipeline_completed_summary": "{translated} metin çevrildi, {saved} dosya kaydedildi",
+  "pipeline_user_stopped": "Kullanıcı tarafından durduruldu",
+  "please_select_exe": "Lütfen bir oyun EXE'si seçin.",
+  "exe_not_found": "Seçilen EXE dosyası bulunamadı.",
+  "translation_settings": "Çeviri Ayarları",
+  "source_lang_label": "Kaynak Dil:",
+  "target_lang_label": "Hedef Dil:",
+  "translation_engine_label": "Çeviri Motoru:",
+  "output_format_label": "Çıktı Formatı:",
+  "advanced_settings": "Gelişmiş Ayarlar",
+  "concurrent_threads_label": "Eş Zamanlı Thread:",
+  "batch_size_label": "Batch Boyutu:",
+  "request_delay_label": "İstek Gecikmesi:",
+  "parser_workers_label": "Parser Workers:",
+  "proxy_enabled_label": "Proxy Etkin:",
+  "refresh_proxies_btn": "Proxy Yenile",
+  "source_language": "Kaynak Dil",
+  "target_language": "Hedef Dil",
+  "translation_engine": "Çeviri Motoru",
+  "start_translation": "Çeviriyi Başlat",
+  "stop_translation": "Çeviriyi Durdur",
+  "progress": "İlerleme",
+  "status": "Durum",
+  "ready": "Hazır",
+  "translating": "Çevriliyor...",
+  "completed": "Tamamlandı",
+  "error": "Hata",
+  "stage_idle": "Hazır",
+  "stage_validating": "🔍 Doğrulanıyor...",
+  "stage_unren": "📦 Decompile Ediliyor (UnRen)...",
+  "stage_generating": "📝 Çeviri Dosyaları Oluşturuluyor...",
+  "stage_parsing": "📖 Dosyalar Okunuyor...",
+  "stage_translating": "🌐 Çevriliyor...",
+  "stage_saving": "💾 Kaydediliyor...",
+  "stage_completed": "✅ Tamamlandı!",
+  "stage_error": "❌ Hata!",
+  "stop_requested": "⏹ Durdurma isteği gönderildi...",
+  "translating_progress": "Çevriliyor: {current}/{total}",
+  "stats_total": "📊 Toplam: {count} giriş",
+  "stats_translated": "✓ Çevrilmiş: {count}",
+  "stats_untranslated": "○ Çevrilmemiş: {count}",
+  "output_folder": "📁 Çıktı: {path}",
+  "detail": "Detay: {error}",
+  "pipeline_failed": "Pipeline başarısız:\n\n{message}",
+  "output_folder_label": "Çıktı klasörü:",
+  "translation_in_progress_close": "Çeviri işlemi devam ediyor. Durdurup kapatmak istiyor musunuz?",
+  "files_status": "Dosyalar: {count}",
+  "texts_status": "Metinler: {count}",
+  "translations_status": "Çeviriler: {count}",
+  "select_directory_title": "Klasör Seçin",
+  "scanning_directory": "Klasör taranıyor...",
+  "directory_scanned": "Klasör tarandı",
+  "error_scanning_directory": "Klasör taranırken hata",
+  "warning": "Uyarı",
+  "no_texts_warning": "Çevrilecek metin bulunamadı!",
+  "no_texts_unren_hint": "Oyun henüz paketliyse Araçlar → UnRen'i Çalıştır menüsünden UnRen'i çalıştırmayı deneyin.",
+  "no_texts_reselect_hint": "UnRen'den sonra hâlâ \"Metin bulunamadı\" görüyorsanız Gözat'a tıklayıp klasörü yeniden seçerek listeyi yenileyin.",
+  "starting_translation": "Çeviri başlatılıyor...",
+  "stopping": "Durduruluyor...",
+  "translation_completed": "Çeviri tamamlandı",
+  "auto_saved": "Otomatik kaydedildi",
+  "success": "Başarılı",
+  "failed": "Başarısız",
+  "no_translations_warning": "Kaydedilecek çeviri bulunamadı!",
+  "select_output_directory": "Çıktı Klasörü Seçin",
+  "translations_saved": "{count} çeviri dosyası {directory} klasörüne kaydedildi.",
+  "error_saving": "Çeviriler kaydedilirken hata: {error}",
+  "auto_save_question": "Çeviriler otomatik olarak kaydedilsin mi?",
+  "auto_save_success": "{count} çeviri dosyası {directory} klasörüne otomatik kaydedildi.",
+  "auto_save_error": "Otomatik Kayıt Hatası",
+  "auto_save_error_message": "Çeviriler otomatik kaydedilemedi: {error}\\nManuel kayıt için 'Çevirileri Kaydet' butonunu kullanın.",
+  "translation_error": "Çeviri Hatası",
+  "no_directory_warning": "Lütfen önce bir klasör seçin.",
+  "glossary_save_error": "Sözlük kaydedilirken bir hata oluştu: {error}",
+  "about_title": "RenLocalizer V2 Hakkında",
+  "about_content": "<h3>RenLocalizer V2</h3><p>Ren'Py oyunları için gelişmiş çok-motorlu çeviri aracı.</p><p><b>Özellikler:</b></p><ul><li>Çok-motorlu çeviri desteği</li><li>Otomatik proxy rotasyonu</li><li>Toplu işlem</li><li>Modern kullanıcı arayüzü</li><li>UTF-8 Ren'Py format çıktısı</li></ul><p><b>Sürüm:</b> {version}</p><p><b>Framework:</b> {framework}</p><p>© {year} {team}</p>",
+  "btn_yes": "Evet",
+  "btn_no": "Hayır",
+  "btn_cancel": "İptal",
+  "btn_ok": "Tamam",
+  "general_tab": "Genel",
+  "translation_tab": "Çeviri",
+  "text_types_tab": "Metin Türleri",
+  "proxy_tab": "Proxy",
+  "advanced_tab": "Gelişmiş",
+  "text_types_description": "Hangi metin türlerinin çeviriye dahil edileceğini seçin. Varsayılan ayarlar çoğu proje için uygundur.",
+  "core_text_types_group": "Temel Metin Türleri",
+  "translate_dialogue_label": "Diyaloglar",
+  "translate_dialogue_tooltip": "Karakter konuşmaları ve anlatıcı metinleri",
+  "translate_menu_label": "Menü Seçenekleri",
+  "translate_menu_tooltip": "Oyuncu seçim menülerindeki seçenekler",
+  "translate_buttons_label": "Butonlar",
+  "translate_buttons_tooltip": "textbutton ve benzeri ekran öğeleri",
+  "ui_text_types_group": "Arayüz Metinleri",
+  "translate_ui_label": "UI Metinleri",
+  "translate_ui_tooltip": "Ekran text() öğeleri ve genel UI yazıları",
+  "translate_input_label": "Giriş Kutuları",
+  "translate_input_tooltip": "input default, prefix ve suffix değerleri",
+  "translate_alt_text_label": "Alternatif Metinler",
+  "translate_alt_text_tooltip": "imagebutton, hotspot ve hotbar alt metinleri (erişilebilirlik)",
+  "notifications_group": "Bildirimler ve Onaylar",
+  "translate_notifications_label": "Bildirimler",
+  "translate_notifications_tooltip": "Notify() eylemleri ve renpy.notify() çağrıları",
+  "translate_confirmations_label": "Onay Diyalogları",
+  "translate_confirmations_tooltip": "Confirm() eylemleri ve renpy.confirm() çağrıları",
+  "config_text_types_group": "Yapılandırma Metinleri",
+  "translate_config_label": "Config Stringleri",
+  "translate_config_tooltip": "config.* değişkenlerindeki metinler",
+  "translate_gui_label": "GUI Stringleri",
+  "translate_gui_tooltip": "gui.* değişkenlerindeki metinler",
+  "translate_define_label": "Define Stringleri",
+  "translate_define_tooltip": "define statements ile tanımlanan metinler (dikkatli kullanın)",
+  "deep_scan_group": "Gelişmiş Tarama",
+  "enable_deep_scan_label": "Derin Tarama (Deneysel)",
+  "enable_deep_scan_tooltip": "Normal pattern'lerin kaçırdığı gizli stringleri tarar (init python blokları, dictionary'ler, değişken atamaları). Yanlış pozitifler içerebilir.",
+  "enable_rpyc_reader_label": "RPYC Okuyucu (Deneysel)",
+  "enable_rpyc_reader_tooltip": "Derlenmiş .rpyc dosyalarını AST çıkarma ile doğrudan okur, decompile gerektirmez. Regex pattern'lerin kaçırabileceği stringleri bulur.",
+  "translate_style_label": "Style Stringleri",
+  "translate_style_tooltip": "style.* tanımlarındaki metinler",
+  "translate_renpy_func_label": "Ren'Py Fonksiyonları",
+  "translate_renpy_func_tooltip": "renpy.input() ve benzeri fonksiyonlardaki metinler",
+  "glossary_title": "Sözlük Düzenleyici",
+  "glossary_info": "Buradan sık kullanılan terimler için tercih ettiğiniz çevirileri tanımlayabilirsiniz. Bu sözlük çeviri sonrası çıktı üzerinde uygulanır.",
+  "glossary_source": "Kaynak Terim",
+  "glossary_target": "Tercih Edilen Çeviri",
+  "glossary_add": "Satır Ekle",
+  "glossary_remove": "Seçili Satırı Sil",
+  "glossary_extract_btn": "Projeden Otomatik Çıkar",
+  "glossary_extract_title": "Terim Çıkarma",
+  "glossary_extract_success": "{count} potansiyel terim bulundu ve eklendi.",
+  "glossary_extract_no_project": "Lütfen önce ana sayfadan bir proje klasörü seçin.",
+  "glossary_translate_btn": "Listeyi Çevir (Google)",
+  "glossary_translate_confirm": "Boş olan {count} terim Google Translate ile çevrilecek. Bu işlem biraz zaman alabilir.\nDevam etmek istiyor musunuz?",
+  "glossary_translate_done": "Çeviri tamamlandı.",
+  "glossary_copy_btn": "Boşları Aynen Doldur",
+  "glossary_copy_confirm": "{count} adet boş terim kaynak metinle doldurulacak.\nBu terimler çeviride olduğu gibi korunur (değişmez).\nDevam etmek istiyor musunuz?",
+  "glossary_copy_done": "Doldurma tamamlandı.",
+  "ui_language_label": "Arayüz Dili:",
+  "ui_language_tooltip": "Uygulamanın görüntüleneceği dil (Türkçe/English)",
+  "theme_label": "Tema:",
+  "theme_tooltip": "Uygulama renk teması - Karanlık veya Göz Dostu",
+  "auto_save_label": "Otomatik Ayar Kaydet",
+  "auto_save_tooltip": "Ayarlar değiştiğinde otomatik olarak config.json'a kaydet",
+  "auto_save_translations_label": "Çevirileri Otomatik Kaydet",
+  "auto_save_translations_tooltip": "Çeviri tamamlandığında dosyaları otomatik olarak kaydet",
+  "check_updates_label": "Güncellemeleri Kontrol Et",
+  "check_updates_tooltip": "Uygulama açılışında yeni sürüm kontrolü yap",
+  "check_updates_now_label": "Şimdi Kontrol:",
+  "check_updates_now_button": "Kontrol Et",
+  "check_updates_now_tooltip": "Güncellemeleri şimdi kontrol et",
+  "update_checking": "Güncellemeler kontrol ediliyor...",
+  "update_available_title": "Güncelleme Var",
+  "update_available_message": "Yeni sürüm mevcut: {latest} (şu an: {current}).\nSürüm sayfası açılsın mı?",
+  "update_up_to_date": "Güncelsiniz (v{current}).",
+  "update_check_failed": "Güncelleme kontrolü başarısız: {error}",
+  "update_check_unavailable": "Güncelleme kontrolü şu anda kullanılamıyor.",
+  "update_open_release": "Sürümler Sayfasını Aç",
+  "update_later": "Daha Sonra",
+  "update_check_title": "Güncelleme Kontrolü",
+  "unren_group_label": "UnRen Entegrasyonu",
+  "unren_auto_download_label": "UnRen'i otomatik indir",
+  "unren_auto_download_tooltip": "UnRen gerektiğinde otomatik olarak GitHub'dan indir",
+  "unren_custom_path_label": "Özel UnRen klasörü:",
+  "unren_custom_path_tooltip": "UnRen dosyalarının bulunduğu özel klasör (boş bırakılırsa varsayılan kullanılır)",
+  "default_languages_group": "Varsayılan Diller",
+  "performance_group": "Performans",
+  "max_threads_label": "Maksimum Thread:",
+  "max_threads_tooltip": "Eş zamanlı çalışan çeviri thread sayısı (8-64 önerilir)",
+  "max_batch_label": "Maksimum Batch:",
+  "max_batch_tooltip": "Bir seferde işlenen metin sayısı (100-500 önerilir)",
+  "request_delay_setting_label": "İstek Gecikmesi:",
+  "request_delay_tooltip": "İstekler arasındaki bekleme süresi - Rate limit'ten kaçınmak için",
+  "retry_settings_group": "Yeniden Deneme",
+  "max_retries_label": "Maksimum Deneme:",
+  "max_retries_tooltip": "Başarısız çeviriler için maksimum yeniden deneme sayısı",
+  "timeout_label": "Zaman Aşımı:",
+  "timeout_tooltip": "Bir çeviri isteğinin maksimum bekleme süresi",
+  "multi_endpoint_group": "Çoklu Google Endpoint (v2.1.0)",
+  "use_multi_endpoint_label": "Çoklu Endpoint Kullan",
+  "multi_endpoint_tooltip": "Birden fazla Google Çeviri sunucusuna paralel istek gönderir, en hızlı yanıtı alır",
+  "enable_lingva_fallback_label": "Lingva Fallback",
+  "lingva_fallback_tooltip": "Google başarısız olursa ücretsiz Lingva servisini dene (API key gerektirmez)",
+  "endpoint_concurrency_label": "Paralel İstek Sayısı:",
+  "endpoint_concurrency_tooltip": "Aynı anda kaç endpoint'e istek gönderileceği (8-16 önerilir)",
+  "max_chars_label": "İstek Başına Maks Karakter:",
+  "max_chars_tooltip": "Bir istekte gönderilecek maksimum karakter (10000-15000 önerilir)",
+  "enable_proxy_label": "Proxy Etkinleştir",
+  "enable_proxy_tooltip": "Çeviri isteklerinde proxy kullan - IP engellemelerini aşmak için",
+  "auto_rotate_label": "Otomatik Rotasyon",
+  "auto_rotate_tooltip": "Her istekte farklı bir proxy kullan - Daha iyi dağılım sağlar",
+  "test_startup_label": "Başlangıçta Test Et",
+  "test_startup_tooltip": "Uygulama açılışında proxy bağlantılarını test et",
+  "update_interval_label": "Güncelleme Aralığı:",
+  "update_interval_tooltip": "Proxy listesinin ne sıklıkla güncelleneceği (saniye)",
+  "max_failures_label": "Maksimum Hata:",
+  "max_failures_tooltip": "Bir proxy'nin devre dışı bırakılmadan önce izin verilen maksimum hata sayısı",
+  "manual_proxies_group": "Manuel Proxy'ler",
+  "manual_proxies_note": "Her satıra bir proxy adresi girin (host:port formatında):",
+  "log_level_label": "Log Seviyesi:",
+  "log_level_tooltip": "Kaydedilen log detay seviyesi - DEBUG en detaylı, ERROR en az",
+  "max_log_size_label": "Maksimum Log Boyutu:",
+  "max_log_size_tooltip": "Log dosyasının maksimum boyutu - Aşılınca eski kayıtlar silinir",
+  "memory_optimization_group": "Bellek Optimizasyonu",
+  "chunk_size_label": "Chunk Boyutu:",
+  "chunk_size_tooltip": "Büyük dosyaları işlerken kullanılan bellek parça boyutu",
+  "debugging_group": "Hata Ayıklama",
+  "debug_mode_label": "Debug Modu",
+  "debug_mode_tooltip": "Geliştiriciler için ekstra hata ayıklama bilgisi göster",
+  "verbose_logging_label": "Detaylı Log",
+  "verbose_logging_tooltip": "Tüm işlemleri detaylı olarak kaydet - Sorun tespiti için kullanışlı",
+  "proxy_refresh_started": "Proxy yenileme başlatıldı.",
+  "proxy_refresh_success": "Proxy listesi güncellendi: {working}/{total} aktif.",
+  "proxy_refresh_unavailable": "Proxy yenileme şu anda kullanılamıyor.",
+  "proxy_refreshing": "Proxy Yenileniyor",
+  "language_changed": "Dil Değiştirildi",
+  "language_restart": "Değişikliklerin tam olarak uygulanması için uygulamayı yeniden başlatın.",
+  "language_restart_message": "Yeni dil seçiminiz uygulandı. Değişikliklerin etkinleşmesi için uygulamayı yeniden başlatmanız gerekiyor.\n\nŞimdi yeniden başlatmak ister misiniz?",
+  "btn_restart": "Yeniden Başlat",
+  "app_theme": "Uygulama Teması",
+  "app_theme_desc": "Arayüz renklerini değiştir (Windows ayarlarından bağımsız)",
+  "app_theme_desc_dark": "Karanlık tema kullanılıyor (Windows ayarlarından bağımsız)",
+  "theme_dark": "🌙 Koyu",
+  "theme_light": "☀️ Açık",
+  "theme_auto": "🔄 Otomatik",
+  "theme_changed": "Tema Değiştirildi",
+  "theme_applied": "Yeni tema uygulandı.",
+  "theme_restart": "Temanın tam olarak uygulanması için uygulamayı yeniden başlatın.",
+  "confirm": "Onay",
+  "restore_confirm": "Tüm ayarlar varsayılan değerlere döndürülecek. Emin misiniz?",
+  "defaults_restored": "Ayarlar varsayılana döndürüldü. Lütfen uygulamayı yeniden başlatın.",
+  "unren_path_default": "Varsayılan konum",
+  "select_unren_folder": "UnRen Klasörü Seç",
+  "unren_title": "UnRen Araçları",
+  "unren_desc": "Ren'Py oyunlarındaki .rpa arşivlerini ve .rpyc dosyalarını açmak için UnRen kullanın.",
+  "unren_running": "UnRen Çalışıyor",
+  "unren_please_wait": "Lütfen bekleyin...",
+  "unren_redownloaded": "UnRen yeniden indirildi",
+  "unrpa_title": "RPA Arşiv Araçları",
+  "unrpa_desc": "Ren'Py oyunlarındaki .rpa arşivlerini açmak için modern ve hızlı UnRPA sistemini kullanın (Ren'Py 8.x uyumlu).",
+  "diagnostics_title": "Tanılama Araçları",
+  "diagnostics_desc": "Çeviri kalitesini artırmak için tanılama ve kontrol araçları.",
+  "translation_tools_title": "Çeviri Araçları",
+  "translation_tools_desc": "Gelişmiş çeviri ve test araçları.",
+  "feature_not_available": "Bu özellik henüz hazır değil.",
+  "developer": "Geliştirici",
+  "license": "Lisans",
+  "show_detailed_help": "Detaylı Yardımı Göster",
+  "support_title": "Destek Olun",
+  "support_description": "RenLocalizer'ı beğendiyseniz, Patreon üzerinden bizi destekleyebilirsiniz. Desteğiniz, yeni özellikler geliştirmemize ve projeyi sürdürmemize yardımcı olur.",
+  "features_title": "Özellikler",
+  "links_title": "Bağlantılar",
+  "github": "GitHub",
+  "documentation": "Dokümantasyon",
+  "report_issue": "Hata Bildir",
+  "feature_unren": "Entegre UnRen desteği - .rpa ve .rpyc dosyalarını otomatik açar",
+  "feature_google": "Google Translate - Ücretsiz, hızlı, 100+ dil desteği",
+  "feature_deepl": "DeepL API - Yüksek kaliteli çeviriler (API key gerektirir)",
+  "feature_batch": "Akıllı batch işleme - Hızlı ve verimli çeviri",
+  "feature_fuzzy": "Fuzzy matching - Mevcut çevirileri güncelle",
+  "feature_glossary": "Özel sözlük desteği - Tutarlı terminoloji",
+  "feature_pseudo": "Pseudo-localization - UI testi için",
+  "unren_prompt_title": "UnRen Önerisi",
+  "unren_prompt_message": "Kaynak .rpy dosyası yok ancak derlenmiş Ren'Py dosyaları bulundu. Projeyi açmak için şimdi UnRen çalıştırılsın mı?",
+  "unren_windows_only": "UnRen otomasyonu yalnızca Windows'ta desteklenir.",
+  "unren_launching": "UnRen konsolu başlatılıyor...",
+  "unren_launch_failed": "UnRen başlatılamadı: {error}",
+  "unren_download_required": "UnRen yüklü değil ve otomatik indirme kapalı. Ayarlar → Genel bölümünden otomatik indirmeyi açın veya özel klasör seçin.",
+  "unren_download_failed": "UnRen indirilemedi: {error}",
+  "unren_download_success": "UnRen dosyaları hazır: {path}",
+  "unren_scan_hint": "Betik dosyası bulunamadı. Paket açıldıktan sonra Araçlar → UnRen'i Çalıştır menüsünü kullanın.",
+  "unren_auto_running": "UnRen otomasyonu çalıştırılıyor...",
+  "unren_auto_success": "Otomatik UnRen {path} için tamamlandı. {lines} satır günlük yakalandı. Süreci incelemek için Yardım → Bilgi → UnRen sekmesine bakabilirsiniz.",
+  "unren_auto_completion_hint": "İşlem tamamlandı. Eğer hâlâ \"Çevrilecek metin bulunamadı\" hatasını görüyorsanız lütfen Gözat'a tıklayıp proje klasörünü yeniden seçin.",
+  "unren_log_cannot_locate_game_title": "UnRen Hatası",
+  "unren_log_cannot_locate_game": "UnRen oyunu, lib veya renpy dizinlerini bulamadı. Lütfen doğru proje klasörünü seçtiğinizden ve 'game', 'lib' veya 'renpy' klasörlerinin bulunduğundan emin olun.",
+  "pipeline_project_normalized": "Seçilen EXE'nin bulunduğu klasör proje kökü olarak algılanmadı.\nOtomatik olarak proje kökü şu şekilde ayarlandı:\n{path}\n\nEğer farklı bir klasör kullanmak isterseniz lütfen 'Gözat' ile klasörü seçin.",
+  "pipeline_entries_to_translate": "Çevrilecek metin sayısı: {count}",
+  "pipeline_project_normalize_game": "Seçilen EXE 'game' klasörünün içindeydi; proje kökü bir üst klasör olarak ayarlandı.",
+  "pipeline_project_normalize_parent": "Seçilen EXE alt bir klasördeydi; proje kökü parent klasör olarak ayarlandı.",
+  "pipeline_tl_exists_skip": "tl/{lang} zaten mevcut, oluşturma atlanıyor",
+  "pipeline_lang_init_check": "Dil başlatma dosyası kontrol ediliyor: {path}",
+  "pipeline_lang_init_update": "Mevcut dil dosyası güncelleniyor...",
+  "pipeline_lang_init_created": "Dil başlatma dosyası oluşturuldu: {path}",
+  "pipeline_lang_init_failed": "Dil başlatma dosyası oluşturulamadı: {error}",
+  "unren_mode_dialog": {
+    "title": "UnRen Çalıştırma Şeklini Seç",
+    "description": "Deneyiminize göre uygun iş akışını seçin.",
+    "automatic": {
+      "title": "Otomatik Mod",
+      "details": [
+        "Önce .rpa arşivlerini çıkarır (orijinalleri korur)",
+        "Sonra .rpyc dosyalarını .rpy'ye dönüştürür",
+        "Mevcut .rpy dosyalarının üzerine yazmaz",
+        "Konsol çıktısını uygulama günlüğünde toplar"
+      ],
+      "button": "Otomatik Çalıştır"
+    },
+    "manual": {
+      "title": "Manuel Mod",
+      "details": [
+        "Klasik UnRen konsol penceresini açar",
+        "Gelişmiş seçenekleri ardışık kullanmanıza izin verir (3-6, a-l, kayıt defteri araçları vb.)"
+      ],
+      "button": "Konsolu Aç"
+    },
+    "manual_hint": "Otomatik mod deneyseldir; istendiği gibi çalışmayabilir ve menüler kendi kendine kapanmayabilir. Bu nedenle manuel mod önerilir. Ayrıntılar için Yardım → Bilgi → UnRen sekmesine bakın."
+  },
+  "info_dialog": {
+    "title": "Program Bilgi Merkezi",
+    "tabs": {
+      "formats": "Çıktı Formatları",
+      "performance": "Performans Ayarları",
+      "multi_endpoint": "Multi-Endpoint (v2.1.0)",
+      "features": "Özellikler",
+      "troubleshooting": "Sorun Giderme",
+      "unren": "UnRen"
+    },
+    "formats": {
+      "title": "Çeviri Dosya Formatı",
+      "description": "RenLocalizer v2.4.7, Ren'Py çeviri dosyaları için resmi OLD_NEW formatını kullanır:",
+      "old_new": {
+        "title": "🟩 OLD_NEW Format",
+        "features": [
+          "Ren'Py'nin resmi export formatı",
+          "Tüm Ren'Py sürümleri ile uyumlu (6.0+)",
+          "Eski/yeni metin açık ayrımı",
+          "Ren'Py araçları ile tam uyumluluk",
+          "Otomatik language init dosyası oluşturma"
+        ],
+        "example": "translate tr hello_world:\n    old \"Hello, world!\"\n    new \"Merhaba, dünya!\"",
+        "recommended_for": "Tüm Ren'Py projeleri için önerilen standart format"
+      },
+      "note": "Çıktı dosyaları game/tl/<dil>/ klasörüne kaydedilir."
+    },
+    "translation_engines": {
+      "title": "🤖 Çeviri Motorları (v2.4.7)",
+      "description": "RenLocalizer, 6 farklı çeviri motoru destekler:",
+      "engines": [
+        {
+          "name": "Google Web Translate",
+          "type": "Ücretsiz",
+          "description": "Multi-Endpoint teknolojisiyle 4 farklı Google sunucusu + Lingva fallback."
+        },
+        {
+          "name": "DeepL API",
+          "type": "API Anahtarı",
+          "description": "Ücretsiz tier ayda 500.000 karakter. Yüksek kaliteli çeviri."
+        },
+        {
+          "name": "OpenAI (GPT-4/3.5)",
+          "type": "API Anahtarı",
+          "description": "Base URL ile OpenRouter veya yerel LLM (Ollama) da kullanılabilir."
+        },
+        {
+          "name": "Google Gemini",
+          "type": "API Anahtarı",
+          "description": "Gemini Pro ve Gemini Flash modelleri. Ücretsiz tier mevcuttur."
+        },
+        {
+          "name": "🖥️ Yerel LLM (Ollama/LM Studio...)",
+          "type": "Ücretsiz/Yerel",
+          "description": "Ollama, LM Studio gibi OpenAI uyumlu yerel sunucular. İnternet gerektirmez."
+        },
+        {
+          "name": "Pseudo-Yerelleştirme",
+          "type": "Test",
+          "description": "UI test için sahte çeviri. [!!! işaretler !!!] ve àksànlı karakterler."
+        }
+      ],
+      "ai_note": "AI motorları (OpenAI, Gemini, Yerel LLM) özel ayarlara sahiptir: Temperature, Timeout, Max Tokens, Custom Prompt."
+    },
+    "multi_endpoint": {
+      "title": "🚀 Multi-Endpoint Google Translator",
+      "description": "Google Web Translate motoru, birden fazla sunucuya paralel istek göndererek çeviri hızını 2-3 kat artırır.",
+      "how_it_works": {
+        "title": "Nasıl Çalışır?",
+        "steps": [
+          "Metinler slice'lara bölünür, 3 endpoint'e paralel istek gönderilir",
+          "İlk başarılı yanıt kabul edilir, diğerleri iptal edilir",
+          "Tüm endpoint'ler başarısız olursa Lingva fallback devreye girer"
+        ]
+      },
+      "endpoints": {
+        "title": "Kullanılan Endpoint'ler",
+        "google": [
+          "translate.googleapis.com (Ana)",
+          "translate.google.com (Yedek 1)",
+          "translate.google.com.tr (Yedek 2)",
+          "translate.google.co.uk (Yedek 3)"
+        ],
+        "lingva": [
+          "lingva.ml",
+          "lingva.lunar.icu"
+        ]
+      },
+      "performance": {
+        "title": "Performans",
+        "before": "Tek endpoint: ~3-4 metin/saniye",
+        "after": "Multi-endpoint: ~8-10 metin/saniye",
+        "note": "AI motorları daha yavaştır ama daha yüksek kalite sunar."
+      }
+    },
+    "text_types": {
+      "title": "Metin Türleri Filtresi",
+      "description": "RenLocalizer V2, Ren'Py projelerindeki farklı metin türlerini ayırt eder ve hangi türlerin çeviriye dahil edileceğini seçmenize olanak tanır.",
+      "core_types": {
+        "title": "Temel Metin Türleri",
+        "items": [
+          {
+            "name": "Diyaloglar",
+            "description": "Karakter konuşmaları ve anlatıcı (narrator) metinleri. Oyunun ana hikaye içeriğini oluşturur.",
+            "example": "e \"Merhaba, nasılsın?\""
+          },
+          {
+            "name": "Menü Seçenekleri",
+            "description": "Oyuncu seçim menülerindeki seçenekler. Oyuncunun hikaye akışını belirlediği kritik metinler.",
+            "example": "menu:\n    \"Kabul et\":\n        ..."
+          },
+          {
+            "name": "Butonlar",
+            "description": "textbutton ve benzeri ekran öğeleri. Oyun arayüzündeki tıklanabilir öğeler.",
+            "example": "textbutton \"Oyuna Başla\""
+          }
+        ]
+      },
+      "ui_types": {
+        "title": "Arayüz Metinleri",
+        "items": [
+          {
+            "name": "UI Metinleri",
+            "description": "Ekran text() öğeleri ve genel arayüz yazıları.",
+            "example": "text \"Ayarlar\""
+          },
+          {
+            "name": "Giriş Kutuları",
+            "description": "input elementlerinin default, prefix ve suffix değerleri.",
+            "example": "input default \"İsminizi girin\""
+          },
+          {
+            "name": "Alternatif Metinler (Alt Text)",
+            "description": "imagebutton, hotspot ve hotbar elementlerinin erişilebilirlik için kullanılan alt metinleri.",
+            "example": "imagebutton ... alt \"Kaydet butonu\""
+          }
+        ]
+      },
+      "notification_types": {
+        "title": "Bildirimler ve Onaylar",
+        "items": [
+          {
+            "name": "Bildirimler",
+            "description": "Notify() eylemleri ve renpy.notify() çağrıları ile gösterilen anlık mesajlar.",
+            "example": "$ renpy.notify(\"Oyun kaydedildi!\")"
+          },
+          {
+            "name": "Onay Diyalogları",
+            "description": "Confirm() eylemleri ve renpy.confirm() çağrıları ile gösterilen onay pencereleri.",
+            "example": "Confirm(\"Çıkmak istediğinize emin misiniz?\")"
+          }
+        ]
+      },
+      "config_types": {
+        "title": "Yapılandırma Metinleri",
+        "items": [
+          {
+            "name": "Config Stringleri",
+            "description": "config.* değişkenlerinde tanımlanan metinler (oyun adı, versiyon vb.).",
+            "example": "define config.name = \"Oyun Adı\""
+          },
+          {
+            "name": "GUI Stringleri",
+            "description": "gui.* değişkenlerinde tanımlanan arayüz metinleri.",
+            "example": "define gui.main_menu_title = \"Ana Menü\""
+          },
+          {
+            "name": "Define Stringleri",
+            "description": "define statements ile tanımlanan genel metinler. Dikkatli kullanın - bazıları kod içerir.",
+            "example": "define about_text = \"Bu oyun...\""
+          },
+          {
+            "name": "Ren'Py Fonksiyonları",
+            "description": "renpy.input() ve benzeri fonksiyonlardaki metinler.",
+            "example": "$ player_name = renpy.input(\"Adınız nedir?\")"
+          }
+        ]
+      },
+      "tips": {
+        "title": "Kullanım İpuçları",
+        "items": [
+          "Varsayılan ayarlar çoğu proje için uygundur - sadece ihtiyaç duyduğunuzda değiştirin.",
+          "Define Stringleri dikkatli kullanın - bazen değişken adları veya kod parçaları içerebilir.",
+          "Alt Text çevirisi erişilebilirlik için önemlidir - ekran okuyucu kullanan oyuncular için.",
+          "Config ve GUI stringleri genellikle options.rpy ve gui.rpy dosyalarında bulunur.",
+          "Bir metin türünü kapatırsanız, o türdeki metinler çıktı dosyasına dahil edilmez."
+        ]
+      },
+      "note": "Metin türü filtreleri Ayarlar → Metin Türleri sekmesinden yapılandırılabilir."
+    },
+    "performance": {
+      "title": "Performans Ayarları Rehberi",
+      "description": "Sistem performansını optimize etmek için kritik ayarlar:",
+      "parser_workers": {
+        "title": "Parser Workers (Parser İş Parçacıkları)",
+        "description": "Dosyaları paralel olarak işlemek için kullanılan iş parçacığı sayısı.",
+        "ideal_settings": [
+          "Düşük sistemler (2-4 çekirdek): 2-4",
+          "Orta sistemler (4-8 çekirdek): 4-8",
+          "Güçlü sistemler (8+ çekirdek): 8-16"
+        ],
+        "note": "CPU çekirdek sayınızdan fazla ayarlamak performansı düşürür."
+      },
+      "concurrent_threads": {
+        "title": "Eş Zamanlı Thread",
+        "description": "Çeviri işlemi sırasında eş zamanlı çalışan thread sayısı.",
+        "ideal_settings": [
+          "Yavaş internet: 8-16",
+          "Orta internet: 16-32",
+          "Hızlı internet: 32-64"
+        ],
+        "note": "Çok yüksek değerler rate limit sorunları yaratabilir."
+      },
+      "batch_size": {
+        "title": "Batch Boyutu",
+        "description": "Tek seferde işlenecek çeviri isteklerinin sayısı.",
+        "ideal_settings": [
+          "Küçük projeler: 50-100",
+          "Orta projeler: 100-200",
+          "Büyük projeler: 200-500"
+        ],
+        "note": "Büyük batch boyutları daha hızlı ama daha fazla bellek kullanır."
+      },
+      "request_delay": {
+        "title": "İstek Gecikmesi",
+        "description": "Çeviri istekleri arasındaki bekleme süresi (milisaniye).",
+        "ideal_settings": [
+          "Premium API: 50-100ms",
+          "Ücretsiz API: 200-500ms",
+          "Rate limit sorunu varsa: 1000ms+"
+        ],
+        "note": "Çok düşük değerler API limitine takılmanıza neden olur."
+      }
+    },
+    "features": {
+      "title": "Program Özellikleri (v2.4.7)",
+      "description": "RenLocalizer'in sundugu gelişmiş özellikler:",
+      "current": [
+        {
+          "title": "🤖 AI Çeviri Motorları",
+          "description": "OpenAI (GPT-4/3.5), Google Gemini ve yerel Ollama desteği. Custom System Prompt ile özelleştirilebilir."
+        },
+        {
+          "title": "🚀 Multi-Endpoint Google",
+          "description": "4 farklı Google sunucusu + Lingva fallback ile hızlı ve güvenilir çeviri"
+        },
+        {
+          "title": "🎨 6 Tema Desteği",
+          "description": "Dark, Light, Red, Turquoise, Green ve Neon temaları arasında anlık geçiş"
+        },
+        {
+          "title": "📦 Native UnRPA",
+          "description": "Tüm platformlarda çalışan dahili RPA arşiv çıkarma. .bat dosyalarına ihtiyaç yok."
+        },
+        {
+          "title": "🔍 Derin String Tarama",
+          "description": "init python blokları, dictionary'ler ve değişken atamalarındaki gizli stringleri tarar"
+        },
+        {
+          "title": "📦 RPYC Okuyucu",
+          "description": "Derlenmiş .rpyc dosyalarını AST ile doğrudan okur - decompile gerekmez"
+        },
+        {
+          "title": "🎯 Akıllı Pattern Tanıma",
+          "description": "Diyaloglar, menüler, UI elementleri için 40+ regex pattern"
+        },
+        {
+          "title": "🔄 Değişken Koruma",
+          "description": "[player], {b}, {color} gibi etiketleri çeviri sırasında güvenle korur"
+        },
+        {
+          "title": "⚡ Paralel İşleme",
+          "description": "Async worker'lar ile birden fazla dosyayı eş zamanlı işler"
+        },
+        {
+          "title": "📚 Sözlük Sistemi",
+          "description": "Sık kullanılan terimler için tercih edilen çevirileri tanımlayın"
+        },
+        {
+          "title": " Sağlık Kontrolü",
+          "description": "Çeviriden önce sarmalanmamış stringler ve sözdizimi hatalarını tespit eder"
+        },
+        {
+          "title": "🔤 Font Yardımcısı",
+          "description": "Oyun fontlarının hedef dil karakterlerini destekleyip desteklemediğini kontrol eder"
+        },
+        {
+          "title": "🧪 Pseudo-Yerelleştirme",
+          "description": "UI sınırlarını ve font uyumluluğunu test etmek için sahte çeviri"
+        },
+        {
+          "title": "🔄 Fuzzy Eşleşme",
+          "description": "Kaynak dosyalar değiştiğinde akıllı benzerlik eşleşmesi ile çevirileri kurtarın"
+        },
+        {
+          "title": "� CLI Desteği",
+          "description": "Windows, Linux ve macOS'ta komut satırından tam çeviri"
+        }
+      ],
+      "upcoming": [
+        {
+          "title": "📊 İlerleme Analizi",
+          "description": "Detaylı çeviri raporu ve istatistikler"
+        },
+        {
+          "title": "🎨 Metin Türleri UI",
+          "description": "Hangi metin türlerinin çevrileceğini seçmek için görsel arayüz"
+        }
+      ],
+      "new_tools_v240": {
+        "title": "Yeni Araçlar (v2.4.0)",
+        "description": "RenLocalizer v2.4.0, güçlü yeni analiz ve test araçları sunar:",
+        "tools": [
+          {
+            "name": "🔍 Sağlık Kontrolü",
+            "menu_path": "Araçlar → Sağlık Kontrolü",
+            "description": "Çeviriden önce yaygın yerelleştirme sorunlarını tespit eden statik analiz.",
+            "features": [
+              "_() ile sarmalanmamış UI stringlerini tespit eder",
+              "Yer tutucu tutarlılığını kontrol eder ([var], {tag})",
+              "Boş çevirileri bulur",
+              "Sözdizimini doğrular (dengesiz tırnak işaretleri)"
+            ],
+            "usage": "Araçlar → Sağlık Kontrolü'nü seçin ve taramak için bir oyun dizini seçin."
+          },
+          {
+            "name": "🔤 Font Uyumluluğu",
+            "menu_path": "Araçlar → Font Uyumluluğu",
+            "description": "Oyun fontlarının hedef dil karakterlerini destekleyip desteklemediğini doğrular.",
+            "features": [
+              "15+ dil karakter seti (CJK, Kiril, Arapça vb.)",
+              "Kapsam yüzdesi raporlaması",
+              "Her dil için font önerileri",
+              "□□□ (eksik glif) sorunlarını önler"
+            ],
+            "usage": "Araçlar → Font Uyumluluğu'nu seçin, dizin seçin, ardından hedef dilinize göre kontrol edin."
+          },
+          {
+            "name": "🧪 Pseudo-Yerelleştirme",
+            "menu_path": "Çeviri Motoru açılır listesi",
+            "description": "Gerçek çeviri olmadan UI'ı test edin - düzen ve font sorunlarını anında ortaya çıkarır.",
+            "features": [
+              "[!!! işaretçiler !!!] metin taşmasını gösterir",
+              "àksànlı karakterler font kapsamını test eder",
+              "API çağrısı yok - anında yerel dönüşüm",
+              "Üç mod: genişlet, aksan veya her ikisi"
+            ],
+            "usage": "Çeviri Motoru'ndan '🧪 Pseudo-Yerelleştirme (Test)' seçin, ardından çeviriyi başlatın."
+          },
+          {
+            "name": "🔄 Akıllı Güncelleme (Fuzzy)",
+            "menu_path": "Araçlar → Akıllı Güncelleme (Fuzzy)",
+            "description": "Kaynak betikler sürümler arasında hafif değiştiğinde çevirileri kurtarın.",
+            "features": [
+              "Otomatik uygulama için %90 benzerlik eşiği",
+              "Düşük benzerlik eşleşmeleri için insan incelemesi",
+              "Yaygın UI stringleri ile Çeviri Belleği",
+              "Toplu işlemler için tam CLI desteği"
+            ],
+            "usage": "CLI kullanın: python run_cli.py fuzzy eski_tl/ yeni_tl/ --threshold 0.9"
+          }
+        ]
+      }
+    },
+    "troubleshooting": {
+      "title": "Sorun Giderme Rehberi",
+      "description": "Sık karşılaşılan sorunlar ve çözümleri:",
+      "common_issues": [
+        {
+          "problem": "Çeviri çok yavaş",
+          "solutions": [
+            "Parser Workers sayısını artırın",
+            "Batch Size'ı büyütün",
+            "İstek Gecikmesi'ni azaltın",
+            "Daha hızlı çeviri motoru seçin"
+          ]
+        },
+        {
+          "problem": "Bellek kullanımı yüksek",
+          "solutions": [
+            "Batch Size'ı küçültün",
+            "Parser Workers sayısını azaltın",
+            "Büyük dosyaları parçalara bölün"
+          ]
+        },
+        {
+          "problem": "API rate limit hatası",
+          "solutions": [
+            "İstek Gecikmesi'ni artırın",
+            "Eş Zamanlı Thread sayısını azaltın",
+            "Premium API anahtarı kullanın"
+          ]
+        },
+        {
+          "problem": "Çıktı dosyası bozuk",
+          "solutions": [
+            "Farklı output format deneyin",
+            "Encoding ayarlarını kontrol edin",
+            "Parser ayarlarını sıfırlayın"
+          ]
+        }
+      ]
+    },
+    "unren": {
+      "title": "RPA Ar\u015fiv \u00c7\u0131karma (v2.4.7)",
+      "description": "RenLocalizer, .rpa ar\u015fivlerini \u00e7\u0131karmak i\u00e7in unrpa k\u00fct\u00fcphanesini ve dahili native parser'\u0131 kullan\u0131r. .bat dosyalar\u0131na ihtiya\u00e7 yoktur.",
+      "how_it_works": {
+        "title": "Nas\u0131l \u00c7al\u0131\u015f\u0131r?",
+        "steps": [
+          "Ara\u00e7lar \u2192 RPA Ar\u015fivlerini A\u00e7 butonuna t\u0131klay\u0131n",
+          "Oyun klas\u00f6r\u00fcn\u00fc se\u00e7in (game/ alt klas\u00f6r\u00fc olan dizin)",
+          "T\u00fcm .rpa dosyalar\u0131 otomatik olarak \u00e7\u0131kar\u0131l\u0131r",
+          "\u00c7\u0131kar\u0131lan dosyalar game/ klas\u00f6r\u00fcne yerle\u015ftirilir"
+        ]
+      },
+      "features": [
+        "T\u00fcm platformlarda \u00e7al\u0131\u015f\u0131r (Windows, Linux, macOS)",
+        "RPA-3.0 ve RPA-2.0 formatlar\u0131n\u0131 destekler",
+        "unrpa ba\u015far\u0131s\u0131z olursa native parser otomatik devreye girer",
+        "PyInstaller build'lerde de sorunsuz \u00e7al\u0131\u015f\u0131r"
+      ],
+      "troubleshooting": [
+        {
+          "problem": "RPA dosyas\u0131 bulunamad\u0131",
+          "solution": "Oyun k\u00f6k klas\u00f6r\u00fcn\u00fc (game/ alt klas\u00f6r\u00fc olan dizin) se\u00e7ti\u011finizden emin olun."
+        },
+        {
+          "problem": "\u00c7\u0131karma ba\u015far\u0131s\u0131z",
+          "solution": "Disk alan\u0131 yeterli mi kontrol edin. RPA boyutunun 2 kat\u0131 kadar bo\u015f alan gerekir."
+        },
+        {
+          "problem": ".rpy dosyalar\u0131 g\u00f6r\u00fcnm\u00fcyor",
+          "solution": "Baz\u0131 oyunlar sadece .rpyc dosyalar\u0131 i\u00e7erir. RenLocalizer bunlar\u0131 da okuyabilir."
+        }
+      ],
+      "note": "Eski UnRen .bat dosyalar\u0131 art\u0131k kullan\u0131lm\u0131yor. T\u00fcm \u00e7\u0131karma i\u015flemi Python k\u00fct\u00fcphaneleri ile yap\u0131l\u0131r."
+    }
+  },
+  "translation_engines": {
+    "google": "Google Translate (WEB - Ücretsiz)",
+    "deepl": "DeepL (API - Anahtar Gerekli)",
+    "openai": "🤖 OpenAI / OpenRouter",
+    "gemini": "✨ Google Gemini",
+    "local_llm": "🖥️ Yerel LLM (Ollama/LM Studio...)"
+  },
+  "pipeline_logs": {
+    "rpymc_entry_count": "[DEBUG] .rpymc entry sayısı: {count}",
+    "unren_needed": "UnRen gerekli: rpy={has_rpy}, rpyc={has_rpyc}, rpa={has_rpa}",
+    "other_lang_folder_skipped": "Başka dil klasörü atlandı: {path}",
+    "deep_scan_running": "Deep Scan (RPYC/Python) çalıştırılıyor...",
+    "deep_scan_found": "Deep Scan: {count} adet eksik metin bulundu.",
+    "deep_scan_error": "Deep Scan hatası: {error}",
+    "tl_normalized": "{count} tl dosyası UTF-8'e normalize edildi",
+    "target_lang_auto": "tl dizininden otomatik dil seçildi: {lang}",
+    "target_lang_default": "Hedef dil belirlenemedi; 'turkish' kullanılıyor",
+    "old_lang_init_deleted": "Eski dil başlatıcısı silindi: {name}",
+    "encoding_normalize_failed": "Encoding normalize başarısız ({path}): {error}",
+    "engine_file_skipped": "Motor dosyası atlanıyor (Write Protection): {filename}",
+    "backup_failed_skipped": "Yedek alınamadı, işlem atlanıyor: {filename}",
+    "file_made_translatable": "Çevrilebilir yapıldı: {filename}",
+    "source_files_error": "Kaynak dosyalar işlenirken hata: {error}",
+    "unren_starting": "UnRen başlatılıyor...",
+    "unren_downloading": "UnRen indiriliyor...",
+    "unren_download_error": "UnRen indirilemedi: {error}",
+    "unren_scripts_not_found": "UnRen scriptleri bulunamadı: {path}",
+    "unren_auto_mode": "UnRen otomatik mod ile çalıştırılıyor...",
+    "unren_preflight_scripts": "UnRen preflight scripts: {scripts}",
+    "unren_game_not_found": "UnRen çalıştırıldı ama oyun dizini bulunamadı. Çeviri iptal ediliyor.",
+    "unren_process_null_checking": "UnRen process None döndü, .rpy dosyaları kontrol ediliyor...",
+    "unren_rpy_created_success": "✅ .rpy dosyaları oluşturuldu, UnRen başarılı!",
+    "unren_rpy_not_found_fail": ".rpy dosyaları bulunamadı, UnRen başarısız olabilir",
+    "unren_completed": "UnRen tamamlandı",
+    "unren_completed_code": "UnRen tamamlandı (kod: {code})",
+    "unren_rpy_created_continue": ".rpy dosyaları oluşturuldu, devam ediliyor",
+    "unren_error": "UnRen çalıştırma hatası: {error}",
+    "unren_error_but_rpy_found": "Hata oluştu ama .rpy dosyaları mevcut, devam ediliyor",
+    "unren_general_error": "UnRen hatası: {error}",
+    "unren_mod_deleted": "🧹 UnRen mod dosyası silindi: {filename}",
+    "unren_mod_delete_failed": "UnRen dosyası silinemedi: {filename} ({error})",
+    "unren_mod_cleanup_done": "✅ {count} UnRen mod dosyası temizlendi (uyumluluk için)",
+    "translation_files_creating": "Çeviri dosyaları oluşturuluyor: {lang}",
+    "scanning_renpy_common": "Scanning Ren'Py common directory: {path}",
+    "engine_rpyc_scan_failed": "Engine common RPYC taraması başarısız: {error}",
+    "scanning_sdk_dirs": "Scanning installed Ren'Py SDK 'common' directories: {count} SDKs found",
+    "scanning_sdk_common": "Scanning SDK common: {path}",
+    "sdk_rpyc_scan_failed": "SDK engine RPYC taraması başarısız: {error}",
+    "sdk_scan_failed": "Failed to scan installed Ren'Py SDK common directories: {error}",
+    "deep_scan_running_short": "Deep Scan çalıştırılıyor...",
+    "rpyc_scan_running": "RPYC taraması yapılıyor...",
+    "rpyc_module_not_found": "RPYC modülü bulunamadı, atlanıyor.",
+    "deep_scan_merging": "Deep Scan verileri birleştiriliyor...",
+    "rpyc_data_merging": "RPYC verileri birleştiriliyor...",
+    "no_translatable_texts": "Kaynak dosyalarda çevrilecek metin bulunamadı",
+    "texts_found_creating": "{count} metin bulundu, çeviri dosyaları oluşturuluyor...",
+    "unique_texts_found": "{count} benzersiz metin bulundu",
+    "strings_rpy_created": "strings.rpy oluşturuldu: {count} string",
+    "strings_rpy_error": "strings.rpy oluşturulamadı: {error}",
+    "translation_file_error": "Çeviri dosyası oluşturma hatası: {error}",
+    "technical_entries_skipped": "strings.rpy oluşturulurken teknik {count} giriş atlandı",
+    "placeholder_excluded": "Teknik/yer tutucu {count} giriş çeviri dışı bırakıldı",
+    "translation_lang_api": "Dil: {lang} -> API: {api}",
+    "placeholder_corrupted": "PLACEHOLDER BOZULDU: {original} -> {translated}",
+    "diagnostic_written": "Diagnostic report yazıldı: {path}",
+    "source_files_made_translatable": "{count} kaynak dosya çevrilebilir hale getirildi",
+    "log_rpa_failed_rpyc_continue": "RPA çıkarma başarısız, ancak RPYC dosyaları bulundu. RPYC Reader ile devam ediliyor...",
+    "log_unrpa_not_installed": "unrpa kütüphanesi yüklü değil. Lütfen 'pip install unrpa' çalıştırın.",
+    "log_rpa_extracting": "RPA arşivleri açılıyor: {path}",
+    "log_rpa_not_found_or_extracted": "RPA dosyası bulunamadı veya zaten çıkarılmış.",
+    "log_rpyc_continue": "RPYC dosyaları mevcut, devam ediliyor...",
+    "log_rpa_error": "RPA çıkarma hatası: {error}",
+    "log_rpyc_fallback_continue": "Hata olmasına rağmen RPYC dosyaları bulundu, devam ediliyor...",
+    "log_tl_normalized": "{count} tl dosyası UTF-8'e normalize edildi",
+    "log_diagnostic_written": "Tanılama raporu yazıldı: {path}",
+    "log_other_lang_skipped": "Başka dil klasörü atlandı: {path}",
+    "log_translation_files_creating": "Çeviri dosyaları oluşturuluyor: {lang}",
+    "log_scanning_renpy_common": "Ren'Py common dizini taranıyor: {path}",
+    "log_scanning_sdk_common": "SDK common taranıyor: {path}",
+    "log_sdk_scan_failed": "SDK engine RPYC taraması başarısız: {error}",
+    "log_engine_common_scan_failed": "Engine common RPYC taraması başarısız: {error}",
+    "log_sdks_found": "Kurulu Ren'Py SDK 'common' dizinleri taranıyor: {count} SDK bulundu"
+  },
+  "pseudo_engine_name": "🧪 Pseudo-Localization (Test)",
+  "stats_total_info": "📊 Toplam: {count}",
+  "stats_translated_info": "✅ Çevrilen: {count}",
+  "stats_untranslated_info": "⏳ Çevrilmeyen: {count}",
+  "output_path_info": "📁 Çıktı: {path}",
+  "detail_info": "Detay: {error}",
+  "font_check_summary": "Kontrol edilen font: {total}\nUyumlu: {comp}\nUyumsuz: {incomp}",
+  "pseudo_engine_hint": "Pseudo-Localization yeteneği Ana Sayfa'da 'Çeviri Motoru' olarak seçilebilir.",
+  "fuzzy_engine_hint": "Fuzzy Matching motoru arka planda aktiftir. Detaylı rapor için logları kontrol edin.",
+  "developer_label": "Geliştirici: {name}",
+  "license_label": "Lisans: {type}",
+  "output_format_official": "OLD_NEW (Resmi)",
+  "output_format_modern": "SIMPLE (Modern)",
+  "google_api_title": "Google Translate API Anahtarı",
+  "deepl_api_title": "DeepL API Anahtarı",
+  "auto_unren": "Otomatik UnRen",
+  "auto_unren_desc": "Gerektiğinde otomatik olarak UnRen çalıştır",
+  "unren_path": "UnRen Yolu",
+  "deep_scan": "Derin Tarama",
+  "deep_scan_desc": "RPYC dosyalarını AST ile analiz et (yavaş)",
+  "show_debug_engines": "Geliştirici Araçlarını Göster",
+  "show_debug_engines_desc": "Pseudo-Localization gibi hata ayıklama motorlarını ana listede göster",
+  "debug_engines_changed": "Liste güncellendi: Geliştirici motorları artık seçilebilir.",
+  "restore_defaults_title": "Ayarları Sıfırla",
+  "output_format_desc": "Ren'Py çeviri dosyası formatı",
+  "manual_proxies_desc": "Kendi proxylerinizi buraya ekleyin (host:port)",
+  "google_api_desc": "Ücretsiz web sürümü API key gerektirmez",
+  "deepl_api_desc": "Yüksek kalite çeviri için API key gereklidir",
+  "opening_link": "Bağlantı Açılıyor",
+  "showing_help": "Detaylı yardım penceresi açılıyor...",
+  "settings_general": "Genel Ayarlar",
+  "settings_translation": "Çeviri Ayarları",
+  "settings_api": "API Anahtarları",
+  "settings_proxy": "Proxy Ayarları",
+  "settings_advanced": "Gelişmiş",
+  "batch_size": "Toplu İşlem Boyutu",
+  "batch_size_desc": "Aynı anda çevrilecek metin sayısı",
+  "max_concurrent": "Eşzamanlı İstek",
+  "max_concurrent_desc": "Aynı anda yapılacak maksimum istek sayısı",
+  "retry_count": "Yeniden Deneme",
+  "retry_count_desc": "Hata durumunda yeniden deneme sayısı",
+  "ai_censorship_warning": "⚠️ DİKKAT: Cinsel içerikler standart AI modellerinin (GPT/Gemini) güvenlik filtrelerine takılabilir ve çeviri başarısız olabilir. Lütfen 'sansürsüz' (uncensored) modeller kullanmaya özen gösterin.",
+  "glossary": "Sözlük",
+  "glossary_desc": "Özel çeviri terimleri tanımla",
+  "restore_defaults": "Varsayılanlara Dön",
+  "restore_defaults_desc": "Tüm ayarları varsayılan değerlere döndür",
+  "tools_subtitle": "Yardımcı araçlar ve ek özellikler",
+  "refresh_proxies": "Proxy Listesini Yenile",
+  "log_openrouter_hint": "💡 İpucu: OpenRouter kullanıyorsunuz. 'dolphin-mistral', 'lzlv', 'psyfighter' gibi sansürsüz modelleri deneyebilirsiniz.",
+  "log_gemini_safety_warning": "⚠️ Gemini Güvenlik Filtresi Aktif. Bazı oyun metinleri engellenebilir. Ayarlardan 'BLOCK_NONE' seçmeniz önerilir.",
+  "ai_temp_short": "Sıcaklık:",
+  "ai_timeout_short": "Süre:",
+  "ai_tokens_short": "Token:",
+  "ai_retry_short": "Tekrar:",
+  "error_library_missing": "Kütüphane Hatası",
+  "error_library_missing_detail": "Gerekli AI kütüphanesi eksik.\nLütfen pip install ile yükleyin.\nHata: {error}",
+  "error_init_failed": "Başlatma Hatası",
+  "error_init_failed_detail": "Çeviri motoru hazırlanamadı: {error}",
+  "settings_ai_title": "Yapay Zeka (AI) Ayarları",
+  "settings_openai_title": "OpenAI / OpenRouter",
+  "settings_openai_desc": "ChatGPT, OpenRouter ayarları",
+  "placeholder_openai_model": "Model (örn: gpt-3.5-turbo)",
+  "placeholder_openai_base_url": "Base URL (Opsiyonel)",
+  "tooltip_openai_base_url": "OpenRouter için: https://openrouter.ai/api/v1\\nLocal için: http://localhost:11434/v1",
+  "placeholder_openai_key": "API Anahtarı (sk-...)",
+  "settings_gemini_title": "Google Gemini",
+  "settings_gemini_desc": "Gemini Pro/Flash API ayarları",
+  "settings_local_llm_title": "🖥️ Yerel LLM (Ollama/LM Studio...)",
+  "settings_local_llm_desc": "Yerel yapay zeka sunucusu ayarları",
+  "placeholder_local_llm_model": "Model (örn: llama3.2)",
+  "placeholder_local_llm_url": "URL (örn: http://localhost:11434/v1)",
+  "placeholder_gemini_model": "Model (örn: gemini-pro)",
+  "tooltip_gemini_safety": "NSFW içerikler için BLOCK_NONE önerilir",
+  "placeholder_gemini_key": "Gemini API Anahtarı",
+  "log_rpa_failed_rpyc_continue": "RPA çıkarma başarısız, ancak RPYC dosyaları bulundu. RPYC Reader ile devam ediliyor...",
+  "log_unrpa_not_installed": "unrpa kütüphanesi yüklü değil. Lütfen 'pip install unrpa' çalıştırın.",
+  "log_rpa_extracting": "RPA arşivleri açılıyor: {path}",
+  "log_rpa_not_found_or_extracted": "RPA dosyası bulunamadı veya zaten çıkarılmış.",
+  "log_rpyc_continue": "RPYC dosyaları mevcut, devam ediliyor...",
+  "log_rpa_error": "RPA çıkarma hatası: {error}",
+  "log_rpyc_fallback_continue": "Hata olmasına rağmen RPYC dosyaları bulundu, devam ediliyor...",
+  "log_tl_normalized": "{count} tl dosyası UTF-8'e normalize edildi",
+  "log_diagnostic_written": "Tanılama raporu yazıldı: {path}",
+  "log_other_lang_skipped": "Başka dil klasörü atlandı: {path}",
+  "log_translation_files_creating": "Çeviri dosyaları oluşturuluyor: {lang}",
+  "log_scanning_renpy_common": "Ren'Py common dizini taranıyor: {path}",
+  "log_scanning_sdk_common": "SDK common taranıyor: {path}",
+  "log_sdk_scan_failed": "SDK engine RPYC taraması başarısız: {error}",
+  "log_engine_common_scan_failed": "Engine common RPYC taraması başarısız: {error}",
+  "log_sdks_found": "Kurulu Ren'Py SDK 'common' dizinleri taranıyor: {count} SDK bulundu",
+  "dialog_info_title": "Bilgi",
+  "dialog_info_loading": "Bilgi diyaloğu yükleniyor...",
+  "log_ai_safety_fallback": "AI Güvenlik Filtresine Takıldı ({error}). {engine} motoruna geçiliyor...",
+  "error_ai_filtered": "AI tarafından filtrelendi: {error}",
+  "error_ai_empty_response": "AI'dan boş yanıt alındı",
+  "error_ai_content_filter": "İçerik AI güvenlik politikası tarafından engellendi",
+  "ai_system_prompt": "Siz Ren'Py görsel romanlarında uzmanlaşmış profesyonel bir video oyunu yerelleştiricisisiniz.\nGöreviniz, verilen metni {source_lang} dilinden {target_lang} diline çevirmektir.\n\nKRİTİK KURALLAR:\n1. [değişken], ?V000? gibi yer tutucuları ve {{tag}} gibi etiketleri koruyun.\n2. Köşeli parantez [] veya süslü parantez {{}} içindeki içeriği çevirmeyin.\n3. Görsel romanın orijinal tonunu ve stilini koruyun.\n4. YALNIZCA çevrilmiş metni döndürün. Not, açıklama veya tırnak eklemeyin.\n5. Metin yalnızca teknik kodlar içeriyorsa veya çevrilemez durumdaysa, aynen döndürün.",
+  "error_deepl_key_required": "DeepL API anahtarı gerekli",
+  "error_no_translations": "Yanıt içinde çeviri bulunamadı",
+  "error_all_engines_failed": "Tüm çeviri yöntemleri başarısız oldu",
+  "error_http": "HTTP {status}",
+  "error_unsupported_method": "Desteklenmeyen yöntem",
+  "error_ai_content_policy": "İçerik Politikası İhlali: {error}",
+  "error_ai_blocked": "Engellendi: {reason}",
+  "error_gemini_safety": "Gemini Güvenlik Filtresi: {error}",
+  "settings_ai_advanced_title": "Gelişmiş AI Ayarları",
+  "settings_ai_advanced_desc": "Temperature, Timeout, Max Tokens ve Tekrar Deneme ayarları",
+  "tooltip_ai_temperature": "Yaratıcılık seviyesi (0=tutarlı, 10=yaratıcı). Varsayılan: 3",
+  "tooltip_ai_timeout": "AI yanıt bekleme süresi (saniye). Yerel modeller için 120+ önerilir.",
+  "tooltip_ai_max_tokens": "Maksimum çıktı token sayısı. Varsayılan: 2048",
+  "tooltip_ai_retry": "Başarısız isteklerde tekrar deneme sayısı. Varsayılan: 3",
+  "settings_ai_prompt_title": "Özel Sistem Prompt",
+  "settings_ai_prompt_desc": "Boş = varsayılan prompt. {source_lang} ve {target_lang} değişkenleri kullanılabilir.",
+  "placeholder_ai_prompt": "Sen bir çevirmenisin. {source_lang} dilinden {target_lang} diline çevir...",
+  "tooltip_ai_prompt": "AI'a verilen yönerge. Boş bırakırsanız dahili VN çeviri promptu kullanılır.",
+  "nav_info_center": "Bilgi Merkezi",
+  "info_formats_title": "Çıktı Dosya Formatları",
+  "info_unren_what": "UnRen Nedir?",
+  "info_unren_features": "Özellikler"
+}

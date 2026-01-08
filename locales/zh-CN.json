@@ -1,0 +1,1103 @@
+{
+  "app_title": "RenLocalizer V2",
+  "file_menu": "文件",
+  "open_directory": "打开目录",
+  "save_translations": "保存翻译",
+  "exit": "退出",
+  "edit_menu": "设置",
+  "settings": "设置",
+  "api_keys": "API 密钥",
+  "glossary_menu": "术语表",
+  "help_menu": "帮助",
+  "about": "关于",
+  "info": "信息",
+  "support_patreon": "在 Patreon 上支持",
+  "view_menu": "视图",
+  "theme_menu": "主题",
+  "dark_theme": "深色主题",
+  "solarized_theme": "护眼主题",
+  "tools_menu": "工具",
+  "run_unren_menu": "运行 UnRen...",
+  "redownload_unren_menu": "重新下载 UnRen 文件",
+  "health_check_menu": "健康检查",
+  "font_check_menu": "字体兼容性",
+  "pseudo_menu": "伪本地化",
+  "fuzzy_menu": "智能更新 (Fuzzy)",
+  "tl_menu": "TL 翻译",
+  "tl_translate_menu": "翻译 TL 文件夹...",
+  "extract_rpa_menu": "提取 RPA 归档",
+  "tl_translate_title": "翻译现有的 tl/<lang> 文件夹",
+  "tl_directory_label": "TL 目录",
+  "tl_directory_placeholder": "tl/<lang> 或 tl 目录",
+  "tl_invalid_dir": "无效目录",
+  "health_check_select_dir": "选择游戏目录进行健康检查",
+  "health_check_title": "健康检查",
+  "health_issues_found": "发现的问题：",
+  "font_check_select_dir": "选择游戏目录进行字体检查",
+  "font_check_title": "字体兼容性检查",
+  "font_check_results": "字体兼容性结果",
+  "font_suggestions": "建议的字体：",
+  "pseudo_title": "伪本地化",
+  "pseudo_select_dir": "选择游戏目录进行伪本地化",
+  "fuzzy_title": "智能更新 (Fuzzy Matching)",
+  "fuzzy_old_dir": "选择旧的翻译文件夹",
+  "fuzzy_new_dir": "选择新的翻译文件夹",
+  "input_section": "输入区域",
+  "directory_label": "目录：",
+  "directory_placeholder": "选择目录路径",
+  "browse": "浏览",
+  "game_exe_label": "游戏 EXE：",
+  "game_exe_placeholder": "选择游戏 EXE 文件 (例如 Game.exe)",
+  "select_game_exe_title": "选择游戏 EXE",
+  "auto_detect": "自动检测",
+  "log_placeholder": "日志消息将显示在这里...",
+  "exe_selected": "已选择 EXE：{path}",
+  "valid_renpy_project": "✓ 找到有效的 Ren'Py 项目",
+  "rpy_files_found": "✓ 存在 .rpy 文件",
+  "only_rpyc_files": "⚠ 仅有 .rpyc 文件 - 需要反编译",
+  "game_folder_not_found": "✗ 未找到 'game' 文件夹",
+  "pipeline_starting": "🚀 正在启动流程...",
+  "pipeline_invalid_exe": "无效的游戏 EXE 路径",
+  "pipeline_game_folder_missing": "未找到 'game' 文件夹",
+  "pipeline_no_rpy_files": "未找到 .rpy 文件。需要反编译。",
+  "pipeline_no_rpyc_files": "未找到 RPYC 文件！RPYC 阅读器已启用，但不存在已编译的 .rpyc 文件。请运行游戏一次或在设置中禁用 RPYC 阅读器。",
+  "pipeline_rpyc_not_found_title": "未找到 RPYC 文件！",
+  "pipeline_rpyc_not_found_reason1": "游戏仅分发了 .rpy 源文件",
+  "pipeline_rpyc_not_found_reason2": ".rpyc 文件已被删除或丢失",
+  "pipeline_rpyc_not_found_reason3": "游戏从未运行过",
+  "pipeline_rpyc_solution": "运行游戏一次（主菜单出现后即可关闭）。Ren'Py 将自动创建 .rpyc 文件。",
+  "pipeline_rpyc_alternative": "在设置中禁用“RPYC 阅读器”选项。翻译将仅使用 .rpy 文件。",
+  "pipeline_rpyc_only_mode": "仅 RPYC 模式：未找到 .rpy 文件，直接从 .rpyc 文件读取。",
+  "folder_cleaned": "文件夹已清理",
+  "folder_cleanup_failed": "文件夹清理失败",
+  "pipeline_files_not_found_parse": "未找到翻译文件或解析错误",
+  "pipeline_all_already_translated": "所有文本已翻译！",
+  "pipeline_translate_failed": "翻译失败",
+  "pipeline_completed_summary": "翻译了 {translated} 个文本，保存了 {saved} 个文件",
+  "pipeline_user_stopped": "用户已停止",
+  "please_select_exe": "请选择一个游戏 EXE。",
+  "exe_not_found": "未找到所选的 EXE 文件。",
+  "translation_settings": "翻译设置",
+  "source_lang_label": "源语言：",
+  "target_lang_label": "目标语言：",
+  "translation_engine_label": "翻译引擎：",
+  "output_format_label": "输出格式：",
+  "advanced_settings": "高级设置",
+  "concurrent_threads_label": "并发线程：",
+  "batch_size_label": "批次大小 (Batch)：",
+  "request_delay_label": "请求延迟：",
+  "parser_workers_label": "解析器 Worker：",
+  "proxy_enabled_label": "启用代理：",
+  "refresh_proxies_btn": "刷新代理",
+  "source_language": "源语言",
+  "target_language": "目标语言",
+  "translation_engine": "翻译引擎",
+  "start_translation": "开始翻译",
+  "stop_translation": "停止翻译",
+  "progress": "进度",
+  "status": "状态",
+  "ready": "就绪",
+  "translating": "翻译中...",
+  "completed": "已完成",
+  "error": "错误",
+  "stage_idle": "就绪",
+  "stage_validating": "🔍 验证中...",
+  "stage_unren": "📦 反编译 (UnRen)...",
+  "stage_generating": "📝 生成翻译文件...",
+  "stage_parsing": "📖 读取文件...",
+  "stage_translating": "🌐 翻译中...",
+  "stage_saving": "💾 保存中...",
+  "stage_completed": "✅ 完成！",
+  "stage_error": "❌ 错误！",
+  "stop_requested": "⏹ 已请求停止...",
+  "translating_progress": "翻译中：{current}/{total}",
+  "stats_total": "📊 总计：{count} 条目",
+  "stats_translated": "✓ 已翻译：{count}",
+  "stats_untranslated": "○ 未翻译：{count}",
+  "output_folder": "📁 输出：{path}",
+  "detail": "详情：{error}",
+  "pipeline_failed": "流程失败：\n\n{message}",
+  "output_folder_label": "输出文件夹：",
+  "translation_in_progress_close": "翻译正在进行中。要停止并关闭吗？",
+  "files_status": "文件：{count}",
+  "texts_status": "文本：{count}",
+  "translations_status": "翻译：{count}",
+  "select_directory_title": "选择目录",
+  "scanning_directory": "正在扫描目录...",
+  "directory_scanned": "目录已扫描",
+  "error_scanning_directory": "扫描目录时出错",
+  "warning": "警告",
+  "no_texts_warning": "未找到需要翻译的文本！",
+  "no_texts_unren_hint": "如果项目仍然被打包，请尝试运行 UnRen（工具 → 运行 UnRen）。",
+  "no_texts_reselect_hint": "如果在 UnRen 之后仍然看到“未找到文本”，请点击浏览并重新选择项目文件夹。",
+  "starting_translation": "开始翻译...",
+  "stopping": "正在停止...",
+  "translation_completed": "翻译完成",
+  "auto_saved": "自动保存",
+  "success": "成功",
+  "failed": "失败",
+  "no_translations_warning": "未找到需要保存的翻译！",
+  "select_output_directory": "选择输出目录",
+  "translations_saved": "{count} 个翻译文件已保存到 {directory}。",
+  "error_saving": "保存翻译时出错：{error}",
+  "auto_save_question": "你想自动保存翻译吗？",
+  "auto_save_success": "{count} 个翻译文件已自动保存到 {directory}。",
+  "auto_save_error": "自动保存错误",
+  "auto_save_error_message": "无法自动保存翻译：{error}\\n请使用“保存翻译”按钮手动保存。",
+  "translation_error": "翻译错误",
+  "no_directory_warning": "请先选择一个文件夹。",
+  "glossary_save_error": "保存术语表时出错：{error}",
+  "about_title": "关于 RenLocalizer V2",
+  "about_content": "<h3>RenLocalizer V2</h3><p>用于 Ren'Py 游戏的高级多引擎翻译工具。</p><p><b>功能：</b></p><ul><li>支持多种翻译引擎</li><li>自动代理轮换</li><li>批处理</li><li>现代用户界面</li><li>Ren'Py UTF-8 格式输出</li></ul><p><b>版本：</b> {version}</p><p><b>框架：</b> {framework}</p><p>© {year} {team}</p>",
+  "btn_yes": "是",
+  "btn_no": "否",
+  "btn_cancel": "取消",
+  "btn_ok": "确定",
+  "general_tab": "常规",
+  "translation_tab": "翻译",
+  "text_types_tab": "文本类型",
+  "proxy_tab": "代理",
+  "advanced_tab": "高级",
+  "text_types_description": "选择要包含在翻译中的文本类型。默认设置适用于大多数项目。",
+  "core_text_types_group": "核心文本类型",
+  "translate_dialogue_label": "对话",
+  "translate_dialogue_tooltip": "角色对话和旁白文本",
+  "translate_menu_label": "菜单选项",
+  "translate_menu_tooltip": "玩家菜单中的选择",
+  "translate_buttons_label": "按钮",
+  "translate_buttons_tooltip": "textbutton 和类似的屏幕元素",
+  "ui_text_types_group": "界面文本",
+  "translate_ui_label": "UI 文本",
+  "translate_ui_tooltip": "屏幕的 text() 元素和通用 UI 字符串",
+  "translate_input_label": "输入字段",
+  "translate_input_tooltip": "input 元素的默认值、前缀和后缀",
+  "translate_alt_text_label": "替换文本 (Alt Text)",
+  "translate_alt_text_tooltip": "imagebutton, hotspot 和 hotbar 的替换文本 (无障碍)",
+  "notifications_group": "通知和确认",
+  "translate_notifications_label": "通知",
+  "translate_notifications_tooltip": "Notify() 操作和 renpy.notify() 调用",
+  "translate_confirmations_label": "确认对话框",
+  "translate_confirmations_tooltip": "Confirm() 操作和 renpy.confirm() 调用",
+  "config_text_types_group": "配置文本",
+  "translate_config_label": "Config 字符串",
+  "translate_config_tooltip": "config.* 变量中的文本",
+  "translate_gui_label": "GUI 字符串",
+  "translate_gui_tooltip": "gui.* 变量中的文本",
+  "translate_define_label": "Define 字符串",
+  "translate_define_tooltip": "使用 define 语句定义的文本 (请谨慎使用)",
+  "deep_scan_group": "高级扫描",
+  "enable_deep_scan_label": "深度扫描 (实验性)",
+  "enable_deep_scan_tooltip": "搜索普通模式遗漏的隐藏字符串 (init python 块, 字典)。可能包含误报。",
+  "enable_rpyc_reader_label": "RPYC 阅读器 (实验性)",
+  "enable_rpyc_reader_tooltip": "通过 AST 提取直接读取已编译的 .rpyc 文件，无需反编译。能找到正则表达式遗漏的字符串。",
+  "translate_style_label": "Style 字符串",
+  "translate_style_tooltip": "style.* 定义中的文本",
+  "translate_renpy_func_label": "Ren'Py 函数",
+  "translate_renpy_func_tooltip": "renpy.input() 和类似函数中的文本",
+  "glossary_title": "术语表编辑器",
+  "glossary_info": "在此定义常见术语的首选翻译。此术语表将应用于翻译输出。",
+  "glossary_source": "源术语",
+  "glossary_target": "首选翻译",
+  "glossary_add": "添加行",
+  "glossary_remove": "移除所选",
+  "glossary_extract_btn": "从项目提取",
+  "glossary_extract_title": "术语提取",
+  "glossary_extract_success": "找到并添加了 {count} 个潜在术语。",
+  "glossary_extract_no_project": "请先在主页选择一个项目文件夹。",
+  "glossary_translate_btn": "翻译列表 (Google)",
+  "glossary_translate_confirm": "{count} 个空术语将通过 Google Translate 翻译。这可能需要一点时间。\n继续吗？",
+  "glossary_translate_done": "翻译完成。",
+  "glossary_copy_btn": "用原文填充空项",
+  "glossary_copy_confirm": "{count} 个空术语将被源文本填充。\n这些术语在翻译过程中将受到保护（保持原样）。\n继续吗？",
+  "glossary_copy_done": "填充完成。",
+  "ui_language_label": "界面语言：",
+  "ui_language_tooltip": "应用程序界面的语言",
+  "theme_label": "主题：",
+  "theme_tooltip": "应用程序颜色主题 - 深色或护眼",
+  "auto_save_label": "自动保存设置",
+  "auto_save_tooltip": "更改时自动将设置保存到 config.json",
+  "auto_save_translations_label": "自动保存翻译",
+  "auto_save_translations_tooltip": "完成后自动保存翻译文件",
+  "check_updates_label": "检查更新",
+  "check_updates_tooltip": "启动时检查新版本",
+  "check_updates_now_label": "立即检查：",
+  "check_updates_now_button": "检查",
+  "check_updates_now_tooltip": "立即检查更新",
+  "update_checking": "正在检查更新...",
+  "update_available_title": "可用更新",
+  "update_available_message": "有新版本可用：{latest} (当前：{current})。\n打开发布页面？",
+  "update_up_to_date": "你是最新的 (v{current})。",
+  "update_check_failed": "检查更新失败：{error}",
+  "update_check_unavailable": "检查更新不可用。",
+  "update_open_release": "打开发布页面",
+  "update_later": "稍后",
+  "update_check_title": "更新检查",
+  "unren_group_label": "UnRen 集成",
+  "unren_auto_download_label": "自动下载 UnRen",
+  "unren_auto_download_tooltip": "需要时自动从 GitHub 下载 UnRen",
+  "unren_custom_path_label": "自定义 UnRen 文件夹：",
+  "unren_custom_path_tooltip": "包含 UnRen 文件的自定义文件夹（留空以使用默认值）",
+  "default_languages_group": "默认语言",
+  "performance_group": "性能",
+  "max_threads_label": "最大线程数：",
+  "max_threads_tooltip": "并发翻译线程数 (推荐 8-64)",
+  "max_batch_label": "最大批次 (Batch)：",
+  "max_batch_tooltip": "一次处理的文本数量 (推荐 100-500)",
+  "request_delay_setting_label": "请求延迟：",
+  "request_delay_tooltip": "请求之间的延迟 - 有助于避免速率限制",
+  "retry_settings_group": "重试设置",
+  "max_retries_label": "最大重试次数：",
+  "max_retries_tooltip": "翻译失败的最大重试尝试次数",
+  "timeout_label": "超时 (Timeout)：",
+  "timeout_tooltip": "翻译请求的最大等待时间",
+  "multi_endpoint_group": "多端点 Google (v2.1.0)",
+  "use_multi_endpoint_label": "使用多端点",
+  "multi_endpoint_tooltip": "向多个 Google Translate 服务器发送并行请求",
+  "enable_lingva_fallback_label": "Lingva 回退",
+  "lingva_fallback_tooltip": "如果 Google 失败，尝试免费的 Lingva 服务",
+  "endpoint_concurrency_label": "并行请求：",
+  "endpoint_concurrency_tooltip": "向端点的并行请求数 (推荐 8-16)",
+  "max_chars_label": "每请求最大字符数：",
+  "max_chars_tooltip": "每请求的最大字符建议 (10000-15000)",
+  "enable_proxy_label": "启用代理",
+  "enable_proxy_tooltip": "使用代理进行翻译请求 - 有助于避免 IP 封锁",
+  "auto_rotate_label": "自动轮换",
+  "auto_rotate_tooltip": "每个请求使用不同的代理",
+  "test_startup_label": "启动时测试",
+  "test_startup_tooltip": "应用程序启动时测试代理连接",
+  "update_interval_label": "更新间隔：",
+  "update_interval_tooltip": "代理列表更新频率 (秒)",
+  "max_failures_label": "最大失败次数：",
+  "max_failures_tooltip": "代理禁用前的最大错误数",
+  "manual_proxies_group": "手动代理",
+  "manual_proxies_note": "每行输入一个代理地址 (格式 host:port)：",
+  "log_level_label": "日志级别：",
+  "log_level_tooltip": "日志详细程度 - DEBUG 最详细",
+  "max_log_size_label": "最大日志大小：",
+  "max_log_size_tooltip": "日志文件最大大小",
+  "memory_optimization_group": "内存优化",
+  "chunk_size_label": "块大小 (Chunk Size)：",
+  "chunk_size_tooltip": "处理大文件时的内存块大小",
+  "debugging_group": "调试",
+  "debug_mode_label": "调试模式",
+  "debug_mode_tooltip": "显示开发人员的额外调试信息",
+  "verbose_logging_label": "详细日志记录",
+  "verbose_logging_tooltip": "详细记录所有操作",
+  "proxy_refresh_started": "代理刷新已开始。",
+  "proxy_refresh_success": "代理列表已更新：{working}/{total} 处于活动状态。",
+  "proxy_refresh_unavailable": "代理刷新当前不可用。",
+  "language_changed": "语言已更改",
+  "language_restart": "请重新启动应用程序以使更改完全生效。",
+  "language_restart_message": "语言选择已应用。您需要重新启动应用程序才能使更改生效。\n\n现在重新启动吗？",
+  "btn_restart": "重新启动",
+  "app_theme": "应用程序主题",
+  "app_theme_desc": "更改界面颜色（独立于 Windows 设置）",
+  "app_theme_desc_dark": "深色主题已激活（独立于 Windows 设置）",
+  "theme_dark": "🌙 深色",
+  "theme_light": "☀️ 浅色",
+  "theme_auto": "🔄 自动",
+  "theme_changed": "主题已更改",
+  "theme_applied": "新主题已应用。",
+  "theme_restart": "请重新启动应用程序以完全应用主题。",
+  "confirm": "确认",
+  "restore_confirm": "所有设置将恢复为默认值。确定吗？",
+  "defaults_restored": "设置已恢复为默认值。请重新启动应用程序。",
+  "unrpa_title": "RPA 归档工具",
+  "unrpa_desc": "使用现代且快速的 UnRPA 系统在 Ren'Py 游戏中提取 .rpa 归档（兼容 Ren'Py 8.x）。",
+  "unren_prompt_title": "推荐 UnRen",
+  "unren_prompt_message": "未找到 .rpy 源文件，但存在已编译的 Ren'Py 文件。现在运行 UnRen 来解包项目吗？",
+  "unren_log_cannot_locate_game_title": "UnRen 错误",
+  "unren_log_cannot_locate_game": "UnRen 无法找到 'game'、'lib' 或 'renpy' 文件夹。请确保您选择了项目根目录并且存在游戏文件。",
+  "pipeline_project_normalized": "包含所选 EXE 的文件夹未被视为项目根目录。\n项目根目录已自动设置为：\n{path}\n\n如果您更喜欢其他文件夹，请通过浏览重新选择。",
+  "pipeline_entries_to_translate": "要翻译的条目：{count}",
+  "pipeline_project_normalize_game": "所选 EXE 位于 'game' 文件夹内；项目根目录设置为父目录。",
+  "pipeline_project_normalize_parent": "所选 EXE 位于子文件夹内；项目根目录设置为它的父目录。",
+  "pipeline_tl_exists_skip": "tl/{lang} 已存在，跳过生成",
+  "pipeline_lang_init_check": "检查语言初始化文件：{path}",
+  "pipeline_lang_init_update": "现有语言文件将被更新...",
+  "pipeline_lang_init_created": "语言初始化文件已创建：{path}",
+  "pipeline_lang_init_failed": "创建语言初始化文件失败：{error}",
+  "unren_windows_only": "UnRen 自动化仅在 Windows 上可用。",
+  "unren_launching": "正在启动 UnRen 控制台...",
+  "unren_launch_failed": "无法启动 UnRen：{error}",
+  "unren_download_required": "未安装 UnRen 且自动下载已禁用。请启用自动下载或在设置 → 常规中设置自定义文件夹。",
+  "unren_download_failed": "无法下载 UnRen：{error}",
+  "unren_download_success": "UnRen 文件已就绪于 {path}。",
+  "unren_scan_hint": "未检测到脚本文件。解包后请使用工具 → 运行 UnRen。",
+  "unren_auto_running": "正在运行 UnRen 自动化...",
+  "unren_auto_success": "UnRen 自动化已完成（针对 {path}）。捕获了 {lines} 行日志。如果需要检查工作流程，请参阅帮助 → 信息 → UnRen。",
+  "unren_auto_completion_hint": "流程已完成。如果你仍然看到“未找到文本”，请点击浏览并重新选择项目文件夹。",
+  "unren_mode_dialog": {
+    "title": "选择如何运行 UnRen",
+    "description": "选择最适合您经验水平的工作流程。",
+    "automatic": {
+      "title": "自动模式",
+      "details": [
+        "首先提取 .rpa 归档（保留原件）",
+        "然后将 .rpyc 文件反编译为 .rpy",
+        "不会覆盖现有的 .rpy 文件",
+        "将控制台输出捕获到应用程序日志中"
+      ],
+      "button": "自动运行"
+    },
+    "manual": {
+      "title": "手动模式",
+      "details": [
+        "打开经典的 UnRen 控制台窗口",
+        "您可以通过链式使用高级选项（3-6, a-l, 注册表助手等）"
+      ],
+      "button": "打开控制台"
+    },
+    "manual_hint": "自动模式是实验性的；其行为可能不符合预期。建议使用手动模式。"
+  },
+  "info_dialog": {
+    "title": "程序信息中心",
+    "tabs": {
+      "formats": "输出格式",
+      "performance": "性能设置",
+      "multi_endpoint": "Multi-Endpoint (v2.1.0)",
+      "features": "功能",
+      "troubleshooting": "故障排除",
+      "unren": "UnRen"
+    },
+    "formats": {
+      "title": "翻译文件格式",
+      "description": "RenLocalizer V2 支持两种 Ren'Py 翻译文件输出格式：",
+      "simple": {
+        "title": "🟦 SIMPLE 格式（默认）",
+        "features": [
+          "语法干净易读",
+          "原文在注释中",
+          "代码行数更少",
+          "适合手动编辑",
+          "兼容现代 Ren'Py (7.0+)"
+        ],
+        "example": "translate en hello_world:\n    # \"Hello, world!\"\n    \"Hello, world!\"",
+        "recommended_for": "现代项目，手动编辑，整洁输出"
+      },
+      "old_new": {
+        "title": "🟩 OLD_NEW 格式（官方）",
+        "features": [
+          "官方 Ren'Py 导出格式",
+          "兼容所有 Ren'Py 版本 (6.0+)",
+          "显式分离旧/新文本",
+          "完全兼容 Ren'Py 工具",
+          "更结构化的方法"
+        ],
+        "example": "translate en hello_world:\n    old \"Hello, world!\"\n    new \"Hello, world!\"",
+        "recommended_for": "遗留项目，官方工具，最大兼容性"
+      },
+      "note": "两种格式在 Ren'Py 引擎中都能完美运行。区别仅在于语法风格和可读性。",
+      "change_setting": "您可以在 设置 → 常规 → 输出格式 中更改输出格式。"
+    },
+    "multi_endpoint": {
+      "title": "🚀 多端点 Google 翻译器 (v2.1.0)",
+      "description": "新的翻译架构向多个 Google 服务器发送并行请求，将翻译速度提高 2-3 倍。",
+      "how_it_works": {
+        "title": "它是如何工作的",
+        "steps": [
+          "文本被分成 12,000 个字符的“切片”",
+          "每个切片向 3 个不同的 Google 端点发送并行请求",
+          "接受第一个成功的响应，其他的被取消",
+          "失败的端点暂时降低优先级",
+          "如果所有 Google 端点都失败，Lingva 介入"
+        ]
+      },
+      "endpoints": {
+        "title": "使用的端点",
+        "google": [
+          "translate.googleapis.com (主要)",
+          "translate.google.com (备份 1)",
+          "translate.google.com.tr (备份 2)",
+          "translate.google.co.uk (备份 3)"
+        ],
+        "lingva": [
+          "lingva.ml",
+          "lingva.lunar.icu"
+        ]
+      },
+      "settings": {
+        "title": "设置说明",
+        "items": [
+          {
+            "name": "使用多端点",
+            "description": "向多个 Google 服务器发送并行请求。"
+          },
+          {
+            "name": "Lingva 回退",
+            "description": "如果所有 Google 端点都失败，Lingva Translate 会介入。"
+          },
+          {
+            "name": "并行请求",
+            "description": "同时处理多少个切片。"
+          },
+          {
+            "name": "每请求最大字符数",
+            "description": "一个切片中的最大字符数。"
+          }
+        ]
+      },
+      "performance": {
+        "title": "性能比较",
+        "before": "以前的系统 (v2.0.x)：~3-4 文本/秒",
+        "after": "新系统 (v2.1.0)：~8-10 文本/秒",
+        "note": "实际性能取决于互联网速度。"
+      },
+      "tips": {
+        "title": "提示",
+        "items": [
+          "如果遇到速率限制错误，请将并行请求减少到 8",
+          "对于非常长的文本，将最大字符数减少到 8000",
+          "Lingva 有时可能很慢 - 对于紧急工作请禁用它"
+        ]
+      }
+    },
+    "text_types": {
+      "title": "文本类型过滤器",
+      "description": "RenLocalizer V2 区分不同的文本类型。",
+      "core_types": {
+        "title": "核心类型",
+        "items": [
+          {
+            "name": "对话",
+            "description": "角色对话和旁白文本。",
+            "example": "e \"Hello, how are you?\""
+          },
+          {
+            "name": "菜单选项",
+            "description": "玩家菜单中的选择。",
+            "example": "menu:\n    \"Accept\":\n        ..."
+          },
+          {
+            "name": "按钮",
+            "description": "textbutton 和类似元素。",
+            "example": "textbutton \"Start Game\""
+          }
+        ]
+      },
+      "ui_types": {
+        "title": "界面文本",
+        "items": [
+          {
+            "name": "UI 文本",
+            "description": "屏幕 text() 元素。",
+            "example": "text \"Settings\""
+          },
+          {
+            "name": "输入字段",
+            "description": "input 默认值。",
+            "example": "input default \"Enter name\""
+          },
+          {
+            "name": "Alt 文本",
+            "description": "无障碍 Alt 文本。",
+            "example": "imagebutton ... alt \"Save\""
+          }
+        ]
+      },
+      "notification_types": {
+        "title": "通知",
+        "items": [
+          {
+            "name": "通知",
+            "description": "Notify() 操作。",
+            "example": "$ renpy.notify(\"Saved!\")"
+          },
+          {
+            "name": "确认对话框",
+            "description": "Confirm() 窗口。",
+            "example": "Confirm(\"Quit?\")"
+          }
+        ]
+      },
+      "config_types": {
+        "title": "配置字符串",
+        "items": [
+          {
+            "name": "Config 字符串",
+            "description": "config.* 变量。",
+            "example": "define config.name = \"Game Name\""
+          },
+          {
+            "name": "GUI 字符串",
+            "description": "gui.* 变量。",
+            "example": "define gui.main_menu_title = \"Main Menu\""
+          },
+          {
+            "name": "Define 字符串",
+            "description": "一般定义的字符串。",
+            "example": "define about_text = \"This game...\""
+          },
+          {
+            "name": "Ren'Py 函数",
+            "description": "renpy.input() 中的文本。",
+            "example": "$ name = renpy.input(\"Name?\")"
+          }
+        ]
+      },
+      "tips": {
+        "title": "提示",
+        "items": [
+          "默认设置通常效果很好。",
+          "谨慎使用 Define 字符串。",
+          "Alt 文本对无障碍很重要。",
+          "Config/GUI 字符串通常在 options.rpy/gui.rpy 中。"
+        ]
+      },
+      "note": "可以在文本类型选项卡中配置过滤器。"
+    },
+    "performance": {
+      "title": "性能指南",
+      "description": "关键设置：",
+      "parser_workers": {
+        "title": "解析器 Worker",
+        "description": "工作线程数。",
+        "ideal_settings": [
+          "低端：2-4",
+          "中端：4-8",
+          "高端：8-16"
+        ],
+        "note": "超过 CPU 核心数会降低性能。"
+      },
+      "concurrent_threads": {
+        "title": "并发线程",
+        "description": "同时翻译的线程。",
+        "ideal_settings": [
+          "慢速网络：8-16",
+          "中速网络：16-32",
+          "快速网络：32-64"
+        ],
+        "note": "过高可能导致速率限制。"
+      },
+      "batch_size": {
+        "title": "批次大小",
+        "description": "每批请求数。",
+        "ideal_settings": [
+          "小型项目：50-100",
+          "中型项目：100-200",
+          "大型项目：200-500"
+        ],
+        "note": "更大更快但使用更多内存。"
+      },
+      "request_delay": {
+        "title": "请求延迟",
+        "description": "请求之间的等待时间 (毫秒)。",
+        "ideal_settings": [
+          "高级 API：50-100ms",
+          "免费 API：200-500ms",
+          "速率限制：1000ms+"
+        ],
+        "note": "太低可能会阻塞 API。"
+      }
+    },
+    "features": {
+      "title": "程序功能",
+      "description": "高级功能：",
+      "current": [
+        {
+          "title": "🚀 多端点 Google",
+          "description": "通过多个服务器更快翻译。"
+        },
+        {
+          "title": "🔍 深度扫描",
+          "description": "在 Python 块中查找隐藏字符串。"
+        },
+        {
+          "title": "📦 RPYC 阅读器",
+          "description": "无需反编译即可读取已编译文件。"
+        },
+        {
+          "title": "🎯 智能模式",
+          "description": "识别对话、菜单、UI 等。"
+        },
+        {
+          "title": "🔄 变量保护",
+          "description": "保护 [player] 或 {b} 等标签。"
+        },
+        {
+          "title": "⚡ 并行处理",
+          "description": "同时处理多个文件。"
+        },
+        {
+          "title": "📚 术语表",
+          "description": "定义首选术语。"
+        },
+        {
+          "title": "🌐 引擎",
+          "description": "Google (免费), DeepL, OpenAI, Gemini。"
+        },
+        {
+          "title": "🔧 UnRen",
+          "description": "内置解包支持。"
+        },
+        {
+          "title": "💾 自动保存",
+          "description": "自动保存进度。"
+        },
+        {
+          "title": "🔍 健康检查",
+          "description": "翻译前分析问题。"
+        },
+        {
+          "title": "🔤 字体助手",
+          "description": "检查字体兼容性。"
+        },
+        {
+          "title": "🧪 伪本地化",
+          "description": "测试 UI 边界。"
+        },
+        {
+          "title": "🔄 模糊匹配",
+          "description": "原文更改时更新翻译。"
+        },
+        {
+          "title": "📝 翻译记忆",
+          "description": "内置常见 UI 字符串。"
+        },
+        {
+          "title": "🗂️ 上下文查看器",
+          "description": "显示文本出现的位置。"
+        }
+      ],
+      "upcoming": [
+        {
+          "title": "📊 分析",
+          "description": "详细报告。"
+        },
+        {
+          "title": "🎨 文本类型 UI",
+          "description": "可视化选择。"
+        }
+      ],
+      "new_tools_v240": {
+        "title": "新工具 (v2.4.0)",
+        "description": "新分析工具：",
+        "tools": [
+          {
+            "name": "🔍 健康检查",
+            "menu_path": "工具 → 健康检查",
+            "description": "翻译前发现问题。",
+            "features": [
+              "检测未包裹字符串",
+              "检查占位符",
+              "查找空翻译",
+              "验证语法"
+            ],
+            "usage": "选择 工具 → 健康检查。"
+          },
+          {
+            "name": "🔤 字体兼容性",
+            "menu_path": "工具 → 字体兼容性",
+            "description": "检查字体是否支持字符。",
+            "features": [
+              "15+ 语言",
+              "百分比报告",
+              "字体建议",
+              "防止 □□□ 方块"
+            ],
+            "usage": "选择 工具 → 字体兼容性。"
+          },
+          {
+            "name": "🧪 伪本地化",
+            "menu_path": "翻译选择",
+            "description": "无需真实翻译即可测试 UI。",
+            "features": [
+              "[!!!] 标记",
+              "重音字符",
+              "无 API 调用",
+              "三种模式"
+            ],
+            "usage": "选择 '🧪 伪本地化' 作为引擎。"
+          },
+          {
+            "name": "🔄 智能更新",
+            "menu_path": "工具 → Smart Update",
+            "description": "恢复翻译。",
+            "features": [
+              "90% 相似度阈值",
+              "人工审阅",
+              "翻译记忆",
+              "CLI 支持"
+            ],
+            "usage": "使用 CLI 或菜单。"
+          }
+        ]
+      }
+    },
+    "troubleshooting": {
+      "title": "故障排除",
+      "description": "常见问题：",
+      "common_issues": [
+        {
+          "problem": "翻译太慢",
+          "solutions": [
+            "增加 Worker",
+            "增加批次",
+            "减少延迟",
+            "选择更快的引擎"
+          ]
+        },
+        {
+          "problem": "内存使用率高",
+          "solutions": [
+            "减少批次",
+            "减少 Worker",
+            "分割文件"
+          ]
+        },
+        {
+          "problem": "API 速率限制错误",
+          "solutions": [
+            "增加延迟",
+            "减少线程",
+            "使用高级密钥"
+          ]
+        },
+        {
+          "problem": "输出文件损坏",
+          "solutions": [
+            "尝试不同格式",
+            "检查编码",
+            "重置解析器"
+          ]
+        }
+      ]
+    },
+    "unren": {
+      "title": "UnRen 指南",
+      "description": "RenLocalizer 下载并缓存 UnRen。",
+      "versions": {
+        "title": "运行哪个版本？",
+        "description": "前两个选项指向不同的运行时。",
+        "options": [
+          {
+            "title": "UnRen-current.bat",
+            "description": "适用于现代 Ren'Py (7.4+, 8.x) 的 Python 3。",
+            "versions_label": "最适合：",
+            "versions": "Ren'Py 7.4+, Ren'Py 8",
+            "note": "如果 version.txt 显示 7.4+ 或 8.x。"
+          },
+          {
+            "title": "UnRen-legacy.bat",
+            "description": "经典 Python 2 工具链。",
+            "versions_label": "最适合：",
+            "versions": "Ren'Py 6.x, 7.0-7.3",
+            "note": "用于旧游戏或 32 位系统。"
+          }
+        ]
+      },
+      "automatic": {
+        "title": "自动模式",
+        "points": [
+          "按顺序执行选项 1+2",
+          "将输出流式传输到日志",
+          "如果控制台未关闭，请手动退出"
+        ]
+      },
+      "manual": {
+        "title": "手动模式",
+        "points": [
+          "打开 UnRen 控制台进行完全控制",
+          "适合高级选项 (3-6)",
+          "如果自动模式卡住则作为后备"
+        ],
+        "warning": "错误的选择可能会损坏项目。"
+      },
+      "checklist": {
+        "title": "检查清单",
+        "items": [
+          "确保存在 game/ 文件夹",
+          "进行备份",
+          "检查杀毒软件",
+          "注意可用空间"
+        ]
+      },
+      "manual_flow": {
+        "title": "手动流程",
+        "steps": [
+          {
+            "title": "1) 下载并检查",
+            "detail": "记下路径。"
+          },
+          {
+            "title": "2) 启动",
+            "detail": "在控制台确认路径。"
+          },
+          {
+            "title": "3) 提取 RPA",
+            "detail": "等待完成。"
+          },
+          {
+            "title": "4) 反编译 RPYC",
+            "detail": "允许覆盖。"
+          },
+          {
+            "title": "5) 额外",
+            "detail": "如果需要，选项 3-6。"
+          },
+          {
+            "title": "6) 保持打开",
+            "detail": "完成后再关闭。"
+          }
+        ],
+        "note": "如果出错请截图。"
+      },
+      "verification": {
+        "title": "验证",
+        "items": [
+          "检查新鲜的 .rpy 文件",
+          "保留原始 .rpa",
+          "再次运行扫描文件",
+          "检查日志"
+        ]
+      },
+      "tips_title": "提示",
+      "tips": [
+        "从根目录运行 UnRen",
+        "进行备份",
+        "使用手动模式作为后备",
+        "使用“标记”进行复制"
+      ],
+      "troubleshooting": {
+        "title": "故障排除",
+        "items": [
+          {
+            "issue": "控制台立即关闭",
+            "resolution": "权限/杀毒软件。以管理员身份运行。"
+          },
+          {
+            "issue": "自动模式冻结",
+            "resolution": "检查日志，尝试手动。"
+          },
+          {
+            "issue": "RenLocalizer 中未找到文件",
+            "resolution": "检查路径，重新扫描。"
+          }
+        ]
+      },
+      "footer": "在 UnRen-current.bat 中检查文档。"
+    }
+  },
+  "translation_engines": {
+    "google": "Google Translate (Web - 免费)",
+    "deepl": "DeepL (API - 需要密钥)",
+    "openai": "🤖 OpenAI / OpenRouter",
+    "gemini": "✨ Google Gemini",
+    "local_llm": "🖥️ 本地 LLM (Ollama/LM Studio...)"
+  },
+  "pipeline_logs": {
+    "rpymc_entry_count": "[DEBUG] .rpymc 条目计数：{count}",
+    "unren_needed": "需要 UnRen：rpy={has_rpy}, rpyc={has_rpyc}, rpa={has_rpa}",
+    "other_lang_folder_skipped": "已跳过其他语言文件夹：{path}",
+    "deep_scan_running": "正在运行 Deep Scan (RPYC/Python)...",
+    "deep_scan_found": "Deep Scan：找到 {count} 个缺失文本。",
+    "deep_scan_error": "Deep Scan 错误：{error}",
+    "tl_normalized": "{count} 个 tl 文件已规范化为 UTF-8",
+    "target_lang_auto": "自动检测到目标语言：{lang}",
+    "target_lang_default": "无法检测目标语言；使用 'turkish'",
+    "old_lang_init_deleted": "已删除旧语言初始化器：{name}",
+    "encoding_normalize_failed": "编码规范化失败 ({path})：{error}",
+    "engine_file_skipped": "文件已跳过（写保护）：{filename}",
+    "backup_failed_skipped": "备份失败，跳过操作：{filename}",
+    "file_made_translatable": "已设为可翻译：{filename}",
+    "source_files_error": "处理源文件时出错：{error}",
+    "unren_starting": "正在启动 UnRen...",
+    "unren_downloading": "正在下载 UnRen...",
+    "unren_download_error": "下载 UnRen 失败：{error}",
+    "unren_scripts_not_found": "未找到 UnRen 脚本：{path}",
+    "unren_auto_mode": "正在以自动模式运行 UnRen...",
+    "unren_preflight_scripts": "UnRen 预检脚本：{scripts}",
+    "unren_game_not_found": "UnRen 已运行但未找到游戏文件夹。取消。",
+    "unren_process_null_checking": "UnRen 进程返回 None，正在检查 .rpy 文件...",
+    "unren_rpy_created_success": "✅ .rpy 文件已创建，UnRen 成功！",
+    "unren_rpy_not_found_fail": "未找到 .rpy 文件，UnRen 可能已失败",
+    "unren_completed": "UnRen 已完成",
+    "unren_completed_code": "UnRen 已完成（代码：{code}）",
+    "unren_rpy_created_continue": ".rpy 文件已创建，继续",
+    "unren_error": "UnRen 执行错误：{error}",
+    "unren_error_but_rpy_found": "发生错误但存在 .rpy 文件，继续",
+    "unren_general_error": "UnRen 错误：{error}",
+    "unren_mod_deleted": "🧹 UnRen mod 文件已删除：{filename}",
+    "unren_mod_delete_failed": "删除 UnRen 文件失败：{filename} ({error})",
+    "unren_mod_cleanup_done": "✅ {count} 个 UnRen mod 文件已清理",
+    "translation_files_creating": "正在创建翻译文件：{lang}",
+    "scanning_renpy_common": "正在扫描 Ren'Py Common：{path}",
+    "engine_rpyc_scan_failed": "Engine Common RPYC 扫描失败：{error}",
+    "scanning_sdk_dirs": "正在扫描已安装的 Ren'Py SDK 'common'：找到 {count} 个 SDK",
+    "scanning_sdk_common": "正在扫描 SDK Common：{path}",
+    "sdk_rpyc_scan_failed": "SDK Engine RPYC 扫描失败：{error}",
+    "sdk_scan_failed": "扫描 Ren'Py SDK Common 失败：{error}",
+    "deep_scan_running_short": "正在运行 Deep Scan...",
+    "rpyc_scan_running": "正在运行 RPYC 扫描...",
+    "rpyc_module_not_found": "未找到 RPYC 模块，跳过。",
+    "deep_scan_merging": "正在合并 Deep Scan 数据...",
+    "rpyc_data_merging": "正在合并 RPYC 数据...",
+    "no_translatable_texts": "在源文件中未找到可翻译文本",
+    "texts_found_creating": "找到 {count} 个文本，正在创建翻译文件...",
+    "unique_texts_found": "找到 {count} 个唯一文本",
+    "strings_rpy_created": "strings.rpy 已创建：{count} 个字符串",
+    "strings_rpy_error": "创建 strings.rpy 失败：{error}",
+    "translation_file_error": "创建翻译文件错误：{error}",
+    "technical_entries_skipped": "已跳过 strings.rpy 中的 {count} 个技术条目",
+    "placeholder_excluded": "已排除 {count} 个技术/占位符条目",
+    "translation_lang_api": "语言：{lang} -> API：{api}",
+    "placeholder_corrupted": "占位符损坏：{original} -> {translated}",
+    "diagnostic_written": "诊断报告已写入：{path}",
+    "source_files_made_translatable": "{count} 个源文件已设为可翻译",
+    "log_rpa_failed_rpyc_continue": "RPA 失败，但找到 RPYC。继续使用 RPYC 阅读器...",
+    "log_unrpa_not_installed": "未安装 unrpa 库。请运行 'pip install unrpa'。",
+    "log_rpa_extracting": "正在提取 RPA 归档：{path}",
+    "log_rpa_not_found_or_extracted": "RPA 文件未找到或已提取。",
+    "log_rpyc_continue": "RPYC 文件可用，继续...",
+    "log_rpa_error": "RPA 提取错误：{error}",
+    "log_rpyc_fallback_continue": "尽管出错，但找到 RPYC，继续...",
+    "log_tl_normalized": "{count} 个 TL 文件已规范化为 UTF-8",
+    "log_diagnostic_written": "诊断报告：{path}",
+    "log_other_lang_skipped": "已跳过其他语言文件夹：{path}",
+    "log_translation_files_creating": "正在创建翻译文件：{lang}",
+    "log_scanning_renpy_common": "正在扫描 Ren'Py Common：{path}",
+    "log_scanning_sdk_common": "正在扫描 SDK Common：{path}",
+    "log_sdk_scan_failed": "SDK Engine RPYC 扫描失败：{error}",
+    "log_engine_common_scan_failed": "Engine Common RPYC 扫描失败：{error}",
+    "log_sdks_found": "正在扫描已安装的 Ren'Py SDK 'common'：找到 {count} 个 SDK"
+  },
+  "nav_home": "主页",
+  "nav_tools": "工具",
+  "nav_settings": "设置",
+  "nav_about": "关于",
+  "nav_support": "支持",
+  "app_subtitle": "专业的 Ren'Py 翻译工具",
+  "app_description": "RenLocalizer 是一个专业的 Ren'Py 游戏翻译工具，内置 UnRen 支持，多种翻译引擎和智能批处理。",
+  "patreon_thanks_title": "谢谢！",
+  "patreon_thanks_content": "谢谢您的支持！",
+  "settings_general": "常规设置",
+  "settings_translation": "翻译设置",
+  "settings_api": "API 密钥",
+  "settings_proxy": "代理设置",
+  "settings_advanced": "高级",
+  "ui_language": "应用程序语言",
+  "ui_language_desc": "更改界面语言",
+  "check_updates": "检查更新",
+  "check_updates_desc": "启动时检查",
+  "batch_size": "批次大小",
+  "batch_size_desc": "一次翻译的文本数量",
+  "max_concurrent": "并发请求",
+  "max_concurrent_desc": "最大并发请求数",
+  "retry_count": "重试次数",
+  "retry_count_desc": "错误时重试次数",
+  "glossary": "术语表",
+  "glossary_desc": "定义自定义术语",
+  "edit": "编辑",
+  "configure": "配置",
+  "google_api_desc": "网页版免费，无需密钥",
+  "deepl_api_desc": "高质量，需要 API 密钥",
+  "opening_link": "打开链接",
+  "showing_help": "显示详细帮助...",
+  "proxy_enabled": "使用代理",
+  "proxy_enabled_desc": "使用代理进行请求",
+  "refresh": "刷新",
+  "refresh_proxies": "刷新代理列表",
+  "refresh_proxies_desc": "更新免费列表",
+  "proxy_refreshing": "正在刷新代理",
+  "manual_proxies": "手动代理",
+  "manual_proxies_desc": "添加您自己的代理 (host:port)",
+  "auto_unren": "自动 UnRen",
+  "auto_unren_desc": "需要时自动运行 UnRen",
+  "unren_path": "UnRen 路径",
+  "unren_path_default": "默认位置",
+  "select_unren_folder": "选择 UnRen 文件夹",
+  "deep_scan": "深度扫描",
+  "deep_scan_desc": "使用 AST 分析 RPYC (较慢)",
+  "show_debug_engines": "显示开发者引擎",
+  "show_debug_engines_desc": "显示测试引擎，如伪本地化",
+  "debug_engines_changed": "列表已更新：开发者引擎可选。",
+  "restore_defaults": "恢复默认值",
+  "restore_defaults_title": "重置设置",
+  "restore_defaults_desc": "将所有设置重置为原始值",
+  "developer": "开发者",
+  "license": "许可证",
+  "support_title": "支持我们",
+  "support_description": "如果你喜欢 RenLocalizer，可以在 Patreon 上支持我们。",
+  "features_title": "功能",
+  "feature_unren": "内置 UnRen 支持",
+  "feature_google": "Google Translate - 免费",
+  "feature_deepl": "DeepL API - 高质量",
+  "ai_censorship_warning": "⚠️ 警告：露骨内容可能会触发标准 AI 模型（GPT/Gemini）的安全过滤器，导致翻译失败。请务必使用“无审查”（uncensored）模型。",
+  "log_openrouter_hint": "💡 提示：检测到 OpenRouter。尝试使用“无审查”模型，如 'dolphin-mistral'。",
+  "log_gemini_safety_warning": "⚠️ Gemini 安全过滤器已激活。部分文本可能被阻止。建议设置为 'BLOCK_NONE'。",
+  "ai_temp_short": "温度:",
+  "ai_timeout_short": "超时:",
+  "ai_tokens_short": "令牌:",
+  "ai_retry_short": "重试:",
+  "feature_batch": "批处理",
+  "feature_fuzzy": "模糊匹配",
+  "feature_glossary": "自定义术语表",
+  "feature_pseudo": "伪本地化",
+  "links_title": "链接",
+  "github": "GitHub",
+  "documentation": "文档",
+  "report_issue": "报告问题",
+  "tools_subtitle": "实用工具和附加功能",
+  "unren_title": "UnRen 工具",
+  "unren_desc": "使用 UnRen 提取归档。",
+  "diagnostics_title": "诊断工具",
+  "diagnostics_desc": "提高翻译质量。",
+  "translation_tools_title": "翻译工具",
+  "translation_tools_desc": "高级翻译和测试。",
+  "unren_running": "UnRen 正在运行",
+  "unren_please_wait": "请稍候...",
+  "unren_redownloaded": "UnRen 已重新下载",
+  "feature_not_available": "此功能尚不可用。",
+  "pseudo_engine_name": "🧪 伪本地化 (测试)",
+  "stats_total_info": "📊 总计：{count}",
+  "stats_translated_info": "✅ 已翻译：{count}",
+  "stats_untranslated_info": "⏳ 未翻译：{count}",
+  "output_path_info": "📁 输出：{path}",
+  "detail_info": "详情：{error}",
+  "font_check_summary": "检查字体：{total}\n兼容：{comp}\n不兼容：{incomp}",
+  "pseudo_engine_hint": "您可以选择伪本地化作为引擎。",
+  "fuzzy_engine_hint": "模糊匹配引擎在后台运行。",
+  "developer_label": "开发者：{name}",
+  "license_label": "许可证：{type}",
+  "output_format_official": "OLD_NEW (官方)",
+  "output_format_modern": "SIMPLE (现代)",
+  "output_format_desc": "Ren'Py 翻译文件格式",
+  "google_api_title": "Google Translate API 密钥",
+  "deepl_api_title": "DeepL API 密钥",
+  "error_library_missing": "库错误",
+  "error_library_missing_detail": "缺少所需的 AI 库。\n错误：{error}",
+  "error_init_failed": "初始化错误",
+  "error_init_failed_detail": "无法初始化翻译引擎：{error}",
+  "settings_ai_title": "AI 设置",
+  "settings_openai_title": "OpenAI / OpenRouter / Local",
+  "settings_openai_desc": "ChatGPT, OpenRouter 或本地 LLM",
+  "placeholder_openai_model": "模型 (例如 gpt-3.5-turbo)",
+  "placeholder_openai_base_url": "Base URL (可选)",
+  "tooltip_openai_base_url": "OpenRouter: https://openrouter.ai/api/v1\\nLocal: http://localhost:11434/v1",
+  "placeholder_openai_key": "API Key (sk-...)",
+  "settings_gemini_title": "Google Gemini",
+  "settings_gemini_desc": "Gemini Pro/Flash API 设置",
+  "placeholder_gemini_model": "模型 (例如 gemini-pro)",
+  "tooltip_gemini_safety": "对于 NSFW 内容建议使用 BLOCK_NONE",
+  "placeholder_gemini_key": "Gemini API 密钥",
+  "error_ai_filtered": "AI 已过滤: {error}",
+  "error_ai_empty_response": "AI 响应为空",
+  "error_ai_content_filter": "内容已被 AI 安全策略过滤",
+  "error_ai_content_policy": "违反内容策略: {error}",
+  "error_ai_blocked": "已阻止: {reason}",
+  "error_gemini_safety": "Gemini 安全过滤器: {error}",
+  "settings_ai_advanced_title": "高级 AI 设置",
+  "settings_ai_advanced_desc": "温度、超时、最大 Token 和重试次数设置",
+  "tooltip_ai_temperature": "创造力水平 (0=一致, 10=创造性)。默认：3",
+  "tooltip_ai_timeout": "AI 响应等待时间（秒）。本地模型建议 120+。",
+  "tooltip_ai_max_tokens": "最大输出 Token 数量。默认：2048",
+  "tooltip_ai_retry": "请求失败时的重试次数。默认：3",
+  "settings_ai_prompt_title": "自定义系统提示词",
+  "settings_ai_prompt_desc": "空白 = 默认提示词。可用变量 {source_lang} 和 {target_lang}。",
+  "placeholder_ai_prompt": "你是一位翻译员。从 {source_lang} 翻译到 {target_lang}...",
+  "tooltip_ai_prompt": "给 AI 的指令。留空以使用内置的 VN 翻译提示词。",
+  "nav_info_center": "信息中心",
+  "info_formats_title": "输出文件格式",
+  "info_unren_what": "什么是 UnRen？",
+  "info_unren_features": "功能"
+}
