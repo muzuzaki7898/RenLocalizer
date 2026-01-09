@@ -1,0 +1,312 @@
+<!DOCTYPE html>
+<html lang="tr">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RenLocalizer - Ren'Py Auto Translation Tool</title>
+    <meta name="description"
+        content="Automate Ren'Py game translations with AI. Supports Google Translate, DeepL, OpenAI, Gemini and Local LLMs.">
+
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
+    <style>
+        :root {
+            --bg-color: #0d1117;
+            --card-bg: #161b22;
+            --text-main: #c9d1d9;
+            --text-muted: #8b949e;
+            --accent: #58a6ff;
+            --primary: #238636;
+            --neon-purple: #bd34fe;
+            --neon-blue: #00e5ff;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-main);
+            line-height: 1.6;
+        }
+
+        /* Header */
+        header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 20px 5%;
+            border-bottom: 1px solid #30363d;
+        }
+
+        .logo {
+            font-size: 1.5rem;
+            font-weight: 800;
+            background: linear-gradient(90deg, var(--neon-blue), var(--neon-purple));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            letter-spacing: -1px;
+        }
+
+        .nav-links a {
+            color: var(--text-main);
+            text-decoration: none;
+            margin-left: 20px;
+            font-weight: 600;
+            transition: 0.3s;
+        }
+
+        .nav-links a:hover {
+            color: var(--neon-blue);
+        }
+
+        /* Hero Section */
+        .hero {
+            text-align: center;
+            padding: 100px 20px;
+            background: radial-gradient(circle at top, #1f293a 0%, var(--bg-color) 70%);
+        }
+
+        .hero h1 {
+            font-size: 3.5rem;
+            margin-bottom: 20px;
+            font-weight: 800;
+        }
+
+        .hero h1 span {
+            color: var(--neon-blue);
+        }
+
+        .hero p {
+            font-size: 1.2rem;
+            color: var(--text-muted);
+            max-width: 700px;
+            margin: 0 auto 40px auto;
+        }
+
+        .btn-group {
+            display: flex;
+            justify-content: center;
+            gap: 20px;
+            flex-wrap: wrap;
+        }
+
+        .btn {
+            padding: 15px 30px;
+            border-radius: 8px;
+            text-decoration: none;
+            font-weight: 600;
+            font-size: 1.1rem;
+            transition: transform 0.2s, box-shadow 0.2s;
+            display: inline-flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .btn-primary {
+            background: linear-gradient(45deg, var(--neon-purple), #7928ca);
+            color: white;
+            box-shadow: 0 0 20px rgba(189, 52, 254, 0.4);
+        }
+
+        .btn-secondary {
+            background: #21262d;
+            color: white;
+            border: 1px solid #30363d;
+        }
+
+        .btn:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+        }
+
+        /* Features Grid */
+        .features {
+            padding: 80px 5%;
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        .section-title {
+            text-align: center;
+            margin-bottom: 50px;
+        }
+
+        .section-title h2 {
+            font-size: 2.5rem;
+            margin-bottom: 10px;
+        }
+
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 30px;
+        }
+
+        .card {
+            background: var(--card-bg);
+            padding: 30px;
+            border-radius: 12px;
+            border: 1px solid #30363d;
+            transition: 0.3s;
+        }
+
+        .card:hover {
+            border-color: var(--neon-blue);
+            transform: translateY(-5px);
+        }
+
+        .card i {
+            font-size: 2rem;
+            color: var(--neon-blue);
+            margin-bottom: 20px;
+        }
+
+        .card h3 {
+            margin-bottom: 10px;
+            font-size: 1.3rem;
+        }
+
+        .card p {
+            color: var(--text-muted);
+            font-size: 0.95rem;
+        }
+
+        /* Supported APIs */
+        .apis {
+            text-align: center;
+            padding: 50px 20px;
+            background: #161b22;
+            border-top: 1px solid #30363d;
+            border-bottom: 1px solid #30363d;
+        }
+
+        .api-logos {
+            display: flex;
+            justify-content: center;
+            gap: 30px;
+            flex-wrap: wrap;
+            margin-top: 30px;
+            font-size: 1.2rem;
+            font-weight: 600;
+            color: var(--text-muted);
+        }
+
+        .api-item {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        /* Footer */
+        footer {
+            text-align: center;
+            padding: 40px;
+            color: var(--text-muted);
+            font-size: 0.9rem;
+        }
+
+        footer a {
+            color: var(--accent);
+            text-decoration: none;
+        }
+
+        /* Mobile Responsive */
+        @media (max-width: 768px) {
+            .hero h1 {
+                font-size: 2.5rem;
+            }
+
+            .btn-group {
+                flex-direction: column;
+            }
+        }
+    </style>
+</head>
+
+<body>
+
+    <header>
+        <div class="logo">RenLocalizer</div>
+        <nav class="nav-links">
+            <a href="https://github.com/Lord0fTurk/RenLocalizer" target="_blank"><i class="fab fa-github"></i>
+                GitHub</a>
+            <a href="https://lordofturk.itch.io/renlocalizer" target="_blank"><i class="fab fa-itch-io"></i> Itch.io</a>
+        </nav>
+    </header>
+
+    <section class="hero">
+        <h1>Localize Ren'Py Games in <br><span>Minutes, Not Months</span></h1>
+        <p>The ultimate open-source tool to automate your visual novel translation process.
+            Powered by AI, built for developers.</p>
+
+        <div class="btn-group">
+            <a href="https://lordofturk.itch.io/renlocalizer" class="btn btn-primary">
+                <i class="fas fa-download"></i> Download on Itch.io
+            </a>
+            <a href="https://github.com/Lord0fTurk/RenLocalizer" class="btn btn-secondary">
+                <i class="fab fa-github"></i> View Source
+            </a>
+        </div>
+    </section>
+
+    <section class="apis">
+        <h3>Powered By Top-Tier AI Models</h3>
+        <div class="api-logos">
+            <div class="api-item"><i class="fab fa-google"></i> Google Translate</div>
+            <div class="api-item"><i class="fas fa-language"></i> DeepL API</div>
+            <div class="api-item"><i class="fas fa-robot"></i> OpenAI (GPT)</div>
+            <div class="api-item"><i class="fas fa-star"></i> Google Gemini</div>
+            <div class="api-item"><i class="fas fa-laptop-code"></i> Local LLM (Ollama)</div>
+        </div>
+    </section>
+
+    <section class="features">
+        <div class="section-title">
+            <h2>Why RenLocalizer?</h2>
+            <p>Designed to save you time and money.</p>
+        </div>
+
+        <div class="grid">
+            <div class="card">
+                <i class="fas fa-magic"></i>
+                <h3>Fully Automated</h3>
+                <p>No more copy-pasting. RenLocalizer parses your Ren'Py script files and translates dialogue
+                    automatically.</p>
+            </div>
+            <div class="card">
+                <i class="fas fa-code"></i>
+                <h3>Code Safe</h3>
+                <p>It understands Ren'Py syntax. It ignores code blocks, variables, and tags, translating only what the
+                    player sees.</p>
+            </div>
+            <div class="card">
+                <i class="fas fa-shield-alt"></i>
+                <h3>Privacy Focused</h3>
+                <p>Don't want to send data to the cloud? Use Local LLM support (Ollama/LM Studio) to translate offline.
+                </p>
+            </div>
+            <div class="card">
+                <i class="fas fa-wallet"></i>
+                <h3>Free & Open Source</h3>
+                <p>Community driven. Use the free version forever, or support development on Itch.io.</p>
+            </div>
+        </div>
+    </section>
+
+    <footer>
+        <p>&copy; 2024 RenLocalizer. Developed by <a href="https://github.com/Lord0fTurk">Lord0fTurk</a>.</p>
+        <p style="margin-top: 10px; font-size: 0.8rem;">
+            Windows (Stable) • macOS & Linux (Experimental)
+        </p>
+    </footer>
+
+</body>
+
+</html>
