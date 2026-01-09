@@ -142,7 +142,7 @@ jobs:
             RenLocalizer-Windows-x64.zip
             RenLocalizer-Linux-x64.tar.gz
             RenLocalizer-macOS-x64.zip
-          body: "Release automated by GitHub Actions"
+          body: ""
           draft: false
           prerelease: false
         env:
