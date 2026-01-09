@@ -1,6 +1,7 @@
 # Core GUI Framework
 PyQt6>=6.4.0
 PyQt6-Fluent-Widgets[full]>=1.4.0
+darkdetect>=0.8.0
 
 # HTTP and async support
 aiohttp>=3.8.0
@@ -21,6 +22,7 @@ packaging>=23.0
 
 # RPA Extraction
 unrpa>=2.3.0
+PyYAML>=6.0
 
 # Tools Support
 fonttools>=4.40.0  # Required for Font Compatibility tool

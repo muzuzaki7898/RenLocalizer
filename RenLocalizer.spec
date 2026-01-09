@@ -25,6 +25,8 @@ hidden_imports += collect_submodules('charset_normalizer')
 hidden_imports += collect_submodules('unrpa')
 hidden_imports += collect_submodules('openai')
 hidden_imports += collect_submodules('google.generativeai')
+hidden_imports += collect_submodules('yaml')
+hidden_imports += collect_submodules('darkdetect')
 
 # Manual additions for specific edge cases
 hidden_imports.extend([
