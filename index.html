@@ -6,6 +6,17 @@
     <title>RenLocalizer - Ren'Py Auto Translation Tool</title>
     <meta name="description" content="Automate Ren'Py game translations with AI. Supports Google Translate, DeepL, OpenAI, Gemini and Local LLMs.">
     
+    <link rel="icon" href="icon.ico" type="image/x-icon">
+    <link rel="shortcut icon" href="icon.ico" type="image/x-icon">
+
+    <meta property="og:locale" content="en_US">
+    <meta property="og:type" content="website">
+    <meta property="og:title" content="RenLocalizer - Ren'Py Auto Translation Tool">
+    <meta property="og:description" content="Translate your Ren'Py games in minutes using AI. Supports Google, DeepL, GPT, Gemini & Local LLMs. Free & Open Source.">
+    <meta property="og:image" content="https://img.itch.zone/aW1nLzI0OTMyNzM4LnBuZw==/original/FEXLQ6.png">
+    <meta property="og:url" content="https://lord0fturk.github.io/RenLocalizer/">
+    <meta name="twitter:card" content="summary_large_image">
+
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 
@@ -17,7 +28,7 @@
             --text-muted: #9b9b9b;
             --neon-blue: #00e5ff;
             --neon-purple: #d600ff;
-            --patreon-red: #ff424d; /* Patreon Rengi */
+            --patreon-red: #ff424d; /* Patreon Marka Rengi */
             --gradient: linear-gradient(90deg, var(--neon-blue), var(--neon-purple));
         }
 
@@ -51,6 +62,7 @@
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
             letter-spacing: 1px;
+            text-decoration: none;
         }
 
         .nav-right {
@@ -67,7 +79,7 @@
             transition: 0.3s;
             display: inline-flex;
             align-items: center;
-            gap: 5px;
+            gap: 6px;
         }
 
         .nav-links a:hover { color: var(--neon-blue); }
@@ -141,9 +153,9 @@
             background: #2f363d; border-color: white; transform: translateY(-3px);
         }
 
-        /* Patreon Butonu (Yeni) */
+        /* Patreon Butonu */
         .btn-patreon {
-            background: linear-gradient(45deg, #ff424d, #ff8a92); /* Patreon Kırmızısı */
+            background: linear-gradient(45deg, #ff424d, #ff8a92);
             color: white;
             box-shadow: 0 0 15px rgba(255, 66, 77, 0.3);
         }
@@ -189,14 +201,14 @@
             .hero h1 { font-size: 2.5rem; }
             .btn-group { flex-direction: column; width: 100%; }
             .btn { width: 100%; justify-content: center; }
-            .nav-links { display: none; } /* Mobilde üst menüyü gizle (sade görünüm için) */
+            .nav-links { display: none; } /* Mobilde üst menüyü gizle */
         }
     </style>
 </head>
 <body>
 
     <header>
-        <div class="logo">RenLocalizer</div>
+        <a href="#" class="logo">RenLocalizer</a>
         <div class="nav-right">
             <nav class="nav-links">
                 <a href="https://github.com/Lord0fTurk/RenLocalizer" target="_blank"><i class="fab fa-github"></i> GitHub</a>
