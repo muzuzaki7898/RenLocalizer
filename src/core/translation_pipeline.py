@@ -12,7 +12,7 @@ import os
 import logging
 import asyncio
 import re
-from typing import Optional, List, Dict, Callable
+from typing import Optional, List, Dict, Callable, Tuple
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
@@ -146,7 +146,7 @@ class TranslationPipeline(QObject):
         walk(ast_root)
         result = list(strings)
         for i, s in enumerate(result[:3]):
-            self.log_message.emit('info', f"[DEBUG] .rpymc extract örnek string {i+1}: {repr(s)[:120]}")
+            self.log_message.emit('debug', f".rpymc sample string {i+1}: {repr(s)[:120]}")
         return result
     
     # Signals
@@ -385,8 +385,8 @@ class TranslationPipeline(QObject):
                     self.log_message.emit('warning', msg)
                     self._log_error(msg)
 
-            # DEBUG: .rpymc entry sayısını logla
-            self.log_message.emit('info', self.config.get_log_text('rpymc_entry_count', count=len(self.rpymc_entries)))
+            # Log .rpymc entry count
+            self.log_message.emit('debug', self.config.get_log_text('rpymc_entry_count', count=len(self.rpymc_entries)))
         
         if self.should_stop:
             return self._stopped_result()
@@ -1796,6 +1796,7 @@ class TranslationPipeline(QObject):
 
                 # Batch çeviri
                 self.translation_manager.set_proxy_enabled(self.use_proxy)
+                self.translation_manager.ai_request_delay = getattr(self.config.translation_settings, 'ai_request_delay', 1.5)
                 results = loop.run_until_complete(
                     self.translation_manager.translate_batch(requests)
                 )

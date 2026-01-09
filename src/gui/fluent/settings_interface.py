@@ -16,7 +16,7 @@ from PyQt6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QFileDialog
 from qfluentwidgets import (
     ScrollArea, ExpandLayout, SettingCardGroup, PushSettingCard,
     SwitchSettingCard, PrimaryPushSettingCard, HyperlinkCard,
-    SettingCard, ComboBox, Slider, LineEdit, PasswordLineEdit, SpinBox,
+    SettingCard, ComboBox, Slider, LineEdit, PasswordLineEdit, SpinBox, DoubleSpinBox,
     FluentIcon as FIF, TitleLabel, BodyLabel, InfoBar, InfoBarPosition,
     qconfig, MessageBox
 )
@@ -184,6 +184,18 @@ class SettingsInterface(ScrollArea):
         # Output Format setting removed - defaulting to 'old_new' always
         
         self.expand_layout.addWidget(self.general_group)
+
+    def _on_ai_retry_changed(self, value: int):
+        self.config_manager.translation_settings.ai_retry_count = value
+        self.config_manager.save_config()
+
+    def _on_ai_delay_changed(self, value: float):
+        self.config_manager.translation_settings.ai_request_delay = value
+        self.config_manager.save_config()
+
+    def _on_ai_concurrency_changed(self, value: int):
+        self.config_manager.translation_settings.ai_concurrency = value
+        self.config_manager.save_config()
 
     def _on_openai_model_changed(self, text: str):
         self.config_manager.translation_settings.openai_model = text
@@ -443,68 +455,108 @@ class SettingsInterface(ScrollArea):
         
         self.ai_group.addSettingCard(self.local_llm_subset)
 
-        # Advanced AI Settings Card
-        self.ai_advanced_subset = SettingCard(
+        # 1. AI Model Parameters Card
+        self.ai_model_params_card = SettingCard(
             icon=FIF.DEVELOPER_TOOLS,
-            title=self.config_manager.get_ui_text("settings_ai_advanced_title", "Gelişmiş AI Ayarları"),
-            content=self.config_manager.get_ui_text("settings_ai_advanced_desc", "Temperature, Timeout, Max Tokens, Retry Count"),
+            title=self.config_manager.get_ui_text("settings_ai_model_params", "AI Model Parametreleri"),
+            content=self.config_manager.get_ui_text("settings_ai_model_params_desc", "Sıcaklık (Temperature) ve Maksimum Token ayarları"),
+            parent=self.ai_group
+        )
+        
+        # Temperature
+        self.ai_temperature = SpinBox(self.ai_model_params_card)
+        self.ai_temperature.setRange(0, 10)
+        self.ai_temperature.setValue(int(self.config_manager.translation_settings.ai_temperature * 10))
+        self.ai_temperature.setMinimumWidth(80)
+        self.ai_temperature.valueChanged.connect(self._on_ai_temperature_changed)
+
+        # Max Tokens
+        self.ai_max_tokens = SpinBox(self.ai_model_params_card)
+        self.ai_max_tokens.setRange(256, 8192)
+        self.ai_max_tokens.setValue(self.config_manager.translation_settings.ai_max_tokens)
+        self.ai_max_tokens.setMinimumWidth(100)
+        self.ai_max_tokens.valueChanged.connect(self._on_ai_max_tokens_changed)
+
+        temp_label = BodyLabel(self.config_manager.get_ui_text("ai_temp_short", "Sıcaklık:"), self.ai_model_params_card)
+        tokens_label = BodyLabel(self.config_manager.get_ui_text("ai_tokens_short", "Token:"), self.ai_model_params_card)
+
+        mp_layout = self.ai_model_params_card.hBoxLayout
+        mp_layout.addWidget(temp_label, 0, Qt.AlignmentFlag.AlignRight)
+        mp_layout.addWidget(self.ai_temperature, 0, Qt.AlignmentFlag.AlignRight)
+        mp_layout.addSpacing(20)
+        mp_layout.addWidget(tokens_label, 0, Qt.AlignmentFlag.AlignRight)
+        mp_layout.addWidget(self.ai_max_tokens, 0, Qt.AlignmentFlag.AlignRight)
+        mp_layout.addSpacing(10)
+        self.ai_group.addSettingCard(self.ai_model_params_card)
+
+        # 2. AI Connection Settings Card
+        self.ai_connection_card = SettingCard(
+            icon=FIF.SYNC,
+            title=self.config_manager.get_ui_text("settings_ai_connection", "AI Bağlantı Ayarları"),
+            content=self.config_manager.get_ui_text("settings_ai_connection_desc", "Zaman aşımı ve yeniden deneme sayısı"),
             parent=self.ai_group
         )
 
-        # Temperature (0.0 - 1.0)
-        self.ai_temperature = SpinBox(self.ai_advanced_subset)
-        self.ai_temperature.setRange(0, 10)  # Will be divided by 10 to get 0.0-1.0
-        self.ai_temperature.setValue(int(self.config_manager.translation_settings.ai_temperature * 10))
-        self.ai_temperature.setMinimumWidth(90)
-        self.ai_temperature.setToolTip(self.config_manager.get_ui_text("tooltip_ai_temperature", "Yaratıcılık (0=tutarlı, 10=yaratıcı). Varsayılan: 3"))
-        self.ai_temperature.valueChanged.connect(self._on_ai_temperature_changed)
-
-        # Timeout (seconds)
-        self.ai_timeout = SpinBox(self.ai_advanced_subset)
+        # Timeout
+        self.ai_timeout = SpinBox(self.ai_connection_card)
         self.ai_timeout.setRange(10, 300)
         self.ai_timeout.setValue(self.config_manager.translation_settings.ai_timeout)
-        self.ai_timeout.setMinimumWidth(100)
-        self.ai_timeout.setToolTip(self.config_manager.get_ui_text("tooltip_ai_timeout", "AI yanıt bekleme süresi (saniye). Yerel model için 120+ önerilir."))
+        self.ai_timeout.setMinimumWidth(80)
         self.ai_timeout.valueChanged.connect(self._on_ai_timeout_changed)
 
-        # Max Tokens
-        self.ai_max_tokens = SpinBox(self.ai_advanced_subset)
-        self.ai_max_tokens.setRange(256, 8192)
-        self.ai_max_tokens.setValue(self.config_manager.translation_settings.ai_max_tokens)
-        self.ai_max_tokens.setMinimumWidth(110)
-        self.ai_max_tokens.setToolTip(self.config_manager.get_ui_text("tooltip_ai_max_tokens", "Maksimum çıktı token sayısı. Varsayılan: 2048"))
-        self.ai_max_tokens.valueChanged.connect(self._on_ai_max_tokens_changed)
-
         # Retry Count
-        self.ai_retry = SpinBox(self.ai_advanced_subset)
+        self.ai_retry = SpinBox(self.ai_connection_card)
         self.ai_retry.setRange(1, 10)
         self.ai_retry.setValue(self.config_manager.translation_settings.ai_retry_count)
         self.ai_retry.setMinimumWidth(80)
-        self.ai_retry.setToolTip(self.config_manager.get_ui_text("tooltip_ai_retry", "Başarısız isteklerde tekrar deneme sayısı. Varsayılan: 3"))
         self.ai_retry.valueChanged.connect(self._on_ai_retry_changed)
 
-        # Labels
-        temp_label = BodyLabel(self.config_manager.get_ui_text("ai_temp_short", "Temp:"), self.ai_advanced_subset)
-        timeout_label = BodyLabel(self.config_manager.get_ui_text("ai_timeout_short", "Timeout:"), self.ai_advanced_subset)
-        tokens_label = BodyLabel(self.config_manager.get_ui_text("ai_tokens_short", "Tokens:"), self.ai_advanced_subset)
-        retry_label = BodyLabel(self.config_manager.get_ui_text("ai_retry_short", "Retry:"), self.ai_advanced_subset)
+        timeout_label = BodyLabel(self.config_manager.get_ui_text("ai_timeout_short", "Süre (sn):"), self.ai_connection_card)
+        retry_label = BodyLabel(self.config_manager.get_ui_text("ai_retry_short", "Tekrar:"), self.ai_connection_card)
 
-        # Layout for Advanced AI
-        adv_layout = self.ai_advanced_subset.hBoxLayout
-        adv_layout.addWidget(temp_label, 0, Qt.AlignmentFlag.AlignRight)
-        adv_layout.addWidget(self.ai_temperature, 0, Qt.AlignmentFlag.AlignRight)
-        adv_layout.addSpacing(15)
-        adv_layout.addWidget(timeout_label, 0, Qt.AlignmentFlag.AlignRight)
-        adv_layout.addWidget(self.ai_timeout, 0, Qt.AlignmentFlag.AlignRight)
-        adv_layout.addSpacing(15)
-        adv_layout.addWidget(tokens_label, 0, Qt.AlignmentFlag.AlignRight)
-        adv_layout.addWidget(self.ai_max_tokens, 0, Qt.AlignmentFlag.AlignRight)
-        adv_layout.addSpacing(15)
-        adv_layout.addWidget(retry_label, 0, Qt.AlignmentFlag.AlignRight)
-        adv_layout.addWidget(self.ai_retry, 0, Qt.AlignmentFlag.AlignRight)
-        adv_layout.addSpacing(10)
+        conn_layout = self.ai_connection_card.hBoxLayout
+        conn_layout.addWidget(timeout_label, 0, Qt.AlignmentFlag.AlignRight)
+        conn_layout.addWidget(self.ai_timeout, 0, Qt.AlignmentFlag.AlignRight)
+        conn_layout.addSpacing(20)
+        conn_layout.addWidget(retry_label, 0, Qt.AlignmentFlag.AlignRight)
+        conn_layout.addWidget(self.ai_retry, 0, Qt.AlignmentFlag.AlignRight)
+        conn_layout.addSpacing(10)
+        self.ai_group.addSettingCard(self.ai_connection_card)
 
-        self.ai_group.addSettingCard(self.ai_advanced_subset)
+        # 3. AI Rate Limits & Performance Card
+        self.ai_speed_card = SettingCard(
+            icon=FIF.SPEED_HIGH,
+            title=self.config_manager.get_ui_text("settings_ai_speed", "AI Hız Sınırları ve Performans"),
+            content=self.config_manager.get_ui_text("settings_ai_speed_desc", "Eşzamanlılık ve istekler arası gecikme"),
+            parent=self.ai_group
+        )
+
+        # Concurrency
+        self.ai_concurrency = SpinBox(self.ai_speed_card)
+        self.ai_concurrency.setRange(1, 32)
+        self.ai_concurrency.setValue(self.config_manager.translation_settings.ai_concurrency)
+        self.ai_concurrency.setMinimumWidth(80)
+        self.ai_concurrency.valueChanged.connect(self._on_ai_concurrency_changed)
+
+        # Delay
+        self.ai_delay = DoubleSpinBox(self.ai_speed_card)
+        self.ai_delay.setRange(0.0, 30.0)
+        self.ai_delay.setSingleStep(0.5)
+        self.ai_delay.setValue(self.config_manager.translation_settings.ai_request_delay)
+        self.ai_delay.setMinimumWidth(90)
+        self.ai_delay.valueChanged.connect(self._on_ai_delay_changed)
+
+        concurrency_label = BodyLabel(self.config_manager.get_ui_text("ai_concurrency_short", "Parallel:"), self.ai_speed_card)
+        delay_label = BodyLabel(self.config_manager.get_ui_text("ai_delay_short", "Gecikme (sn):"), self.ai_speed_card)
+
+        speed_layout = self.ai_speed_card.hBoxLayout
+        speed_layout.addWidget(concurrency_label, 0, Qt.AlignmentFlag.AlignRight)
+        speed_layout.addWidget(self.ai_concurrency, 0, Qt.AlignmentFlag.AlignRight)
+        speed_layout.addSpacing(20)
+        speed_layout.addWidget(delay_label, 0, Qt.AlignmentFlag.AlignRight)
+        speed_layout.addWidget(self.ai_delay, 0, Qt.AlignmentFlag.AlignRight)
+        speed_layout.addSpacing(10)
+        self.ai_group.addSettingCard(self.ai_speed_card)
 
         # Custom System Prompt Card
         self.ai_prompt_subset = SettingCard(
@@ -773,6 +825,16 @@ class SettingsInterface(ScrollArea):
     def _on_ai_system_prompt_changed(self, text: str):
         """Handle AI custom system prompt changes."""
         self.config_manager.translation_settings.ai_custom_system_prompt = text
+        self.config_manager.save_config()
+
+    def _on_ai_concurrency_changed(self, value: int):
+        """Handle AI concurrency changes."""
+        self.config_manager.translation_settings.ai_concurrency = value
+        self.config_manager.save_config()
+
+    def _on_ai_delay_changed(self, value: float):
+        """Handle AI delay changes."""
+        self.config_manager.translation_settings.ai_request_delay = value
         self.config_manager.save_config()
 
     def _on_batch_size_slider_changed(self, value: int):

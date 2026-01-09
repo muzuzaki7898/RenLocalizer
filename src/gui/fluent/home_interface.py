@@ -49,7 +49,7 @@ class HomeInterface(ScrollArea):
         
         # Initialize managers
         self.proxy_manager = ProxyManager()
-        self.translation_manager = TranslationManager(self.proxy_manager)
+        self.translation_manager = TranslationManager(self.proxy_manager, self.config_manager)
         self._setup_translation_engines()
         
         # Setup UI

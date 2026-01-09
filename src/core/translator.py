@@ -896,8 +896,9 @@ class DeepLTranslator(BaseTranslator):
 
 
 class TranslationManager:
-    def __init__(self, proxy_manager=None):
+    def __init__(self, proxy_manager=None, config_manager=None):
         self.proxy_manager = proxy_manager
+        self.config_manager = config_manager
         self.logger = logging.getLogger(__name__)
         self.translators: Dict[TranslationEngine, BaseTranslator] = {}
         self.max_retries = 1
@@ -917,6 +918,7 @@ class TranslationManager:
         self._adapt_lock = asyncio.Lock()
         self._last_adapt_time = 0.0
         self.adapt_interval_sec = 5.0
+        self.ai_request_delay = 1.5  # Default, will be updated by Pipeline
 
     def add_translator(self, engine: TranslationEngine, translator: BaseTranslator):
         self.translators[engine] = translator
@@ -996,10 +998,16 @@ class TranslationManager:
                 for idx, r in items:
                     buffer.append((idx, TranslationResult(r.text, "", r.source_lang, r.target_lang, r.engine, False, f"Translator {engine.value} not available")))
                 continue
+            # Determine if this is an AI engine
+            is_ai = engine in (TranslationEngine.OPENAI, TranslationEngine.GEMINI, TranslationEngine.LOCAL_LLM)
+            
             only = [r for _, r in items]
             used_batch = False
-            if isinstance(tr, GoogleTranslator) and len(only) > 1:
+            
+            # Google and AI engines support batching
+            if (isinstance(tr, GoogleTranslator) or is_ai) and len(only) > 1:
                 try:
+                    # AI engines now implement translate_batch for better performance
                     bout = await tr.translate_batch(only)
                     if bout and len(bout) == len(only):
                         for (idx, _), res in zip(items, bout):
@@ -1014,10 +1022,28 @@ class TranslationManager:
             # No special-case for Deep-Translator; use generic per-request handling
             if used_batch:
                 continue
-            sem = asyncio.Semaphore(self.max_concurrent_requests)
+
+            # Check if this is an AI engine that needs delay
+            is_ai = engine in (TranslationEngine.OPENAI, TranslationEngine.GEMINI, TranslationEngine.LOCAL_LLM)
+            
+            # Determine concurrency for this engine group
+            concurrency = self.max_concurrent_requests
+            if is_ai:
+                # Use dedicated AI concurrency to better respect rate limits
+                # Default to 2 if not configured
+                concurrency = 2
+                if self.config_manager and hasattr(self.config_manager.translation_settings, 'ai_concurrency'):
+                    concurrency = self.config_manager.translation_settings.ai_concurrency
+            
+            sem = asyncio.Semaphore(concurrency)
             async def run_single(ix: int, rq: TranslationRequest):
                 async with sem:
-                    return ix, await self.translate_with_retry(rq)
+                    res = await self.translate_with_retry(rq)
+                    # For AI, the delay happens inside the semaphore to hold the 'slot'
+                    if is_ai and self.ai_request_delay > 0:
+                        await asyncio.sleep(self.ai_request_delay)
+                    return ix, res
+
             results = await asyncio.gather(*[run_single(i, r) for i, r in items])
             buffer.extend(results)
         await self._maybe_adapt_concurrency()

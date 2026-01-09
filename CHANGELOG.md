@@ -1,6 +1,27 @@
 # Changelog
 
 
+## [2.4.9] - 2026-01-09
+### 🚀 AI Performance & Batch Processing
+- **Batch Translation Support:** Added batch translation for OpenAI, Gemini, and Local LLM engines.
+  - Significantly improved translation speed (5-10x) and reduced API costs.
+  - Implemented an XML-based smart tagging system to protect Ren'Py syntax during batch operations.
+- **Refactored AI Settings UI:** Reorganized AI settings into three main categories:
+  - **Model Parameters:** Temperature and Max Tokens settings.
+  - **Connection Settings:** Timeout and retry count settings.
+  - **Speed & Performance:** Concurrency and request delay control.
+- **Rate Limiting & Stability:** Integrated semaphore-based concurrency control and jittered delay mechanisms to minimize API rate limit issues.
+
+### 🍱 Localization & Language Support
+- **Full Sync:** Synchronized all localization files (`tr`, `en`, `de`, `fr`, `es`, `fa`, `ru`, `zh-CN`) to 100% completeness.
+- **Turkish Improvements:** Completed 14+ missing critical keys in `tr.json`, ensuring the UI is fully localized in Turkish.
+- **Enhanced System Prompts:** Updated AI system prompts across all languages to maintain a professional localizer tone and ensure uncensored translation of NSFW content.
+
+### 🛠️ CI/CD & Infrastructure
+- **Windows Build Automation:** GitHub Actions (`release.yml`) now automatically builds and releases Windows packages.
+- **Python Stability:** Standardized Python version to `3.12` in CI/CD pipelines for better compatibility and stability.
+- **Code Cleanup:** Removed and standardized legacy Turkish debug logs within the translation pipeline.
+
 ## [2.4.8] - 2026-01-08
 ### 🚀 New Features: Local LLM Support
 - **Full Local LLM Integration:** Added dedicated "Local LLM" engine in translation options.

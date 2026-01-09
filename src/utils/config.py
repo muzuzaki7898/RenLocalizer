@@ -151,6 +151,8 @@ class TranslationSettings:
     ai_timeout: int = AI_DEFAULT_TIMEOUT  # seconds, timeout for AI requests
     ai_max_tokens: int = AI_DEFAULT_MAX_TOKENS  # max output tokens
     ai_retry_count: int = AI_MAX_RETRIES  # number of retries on failure
+    ai_concurrency: int = 2  # NEW: Maximum concurrent requests for AI engines
+    ai_request_delay: float = 1.5  # NEW: Delay between AI requests (seconds)
     ai_custom_system_prompt: str = ""  # User-defined system prompt (empty = use built-in)
     # Debug/Development settings
     show_debug_engines: bool = False  # Pseudo-Localization gibi debug motorlarını ana listede göster

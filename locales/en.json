@@ -362,7 +362,7 @@
     },
     "formats": {
       "title": "Translation File Format",
-      "description": "RenLocalizer v2.4.7 uses the official OLD_NEW format for Ren'Py translation files:",
+      "description": "RenLocalizer v2.4.9 uses the official OLD_NEW format for Ren'Py translation files:",
       "old_new": {
         "title": "🟩 OLD_NEW Format",
         "features": [
@@ -378,7 +378,7 @@
       "note": "Output files are saved to game/tl/<language>/ folder."
     },
     "translation_engines": {
-      "title": "🤖 Translation Engines (v2.4.7)",
+      "title": "🤖 Translation Engines (v2.4.9)",
       "description": "RenLocalizer supports 6 different translation engines:",
       "engines": [
         {
@@ -585,7 +585,7 @@
       }
     },
     "features": {
-      "title": "Program Features (v2.4.7)",
+      "title": "Program Features (v2.4.9)",
       "description": "Advanced features offered by RenLocalizer:",
       "current": [
         {
@@ -754,7 +754,7 @@
       ]
     },
     "unren": {
-      "title": "RPA Archive Extraction (v2.4.7)",
+      "title": "RPA Archive Extraction (v2.4.9)",
       "description": "RenLocalizer uses the unrpa library and built-in native parser to extract .rpa archives. No .bat files needed.",
       "how_it_works": {
         "title": "How It Works",
@@ -912,6 +912,10 @@
   "ai_timeout_short": "Timeout:",
   "ai_tokens_short": "Tokens:",
   "ai_retry_short": "Retry:",
+  "ai_concurrency_short": "Parallel:",
+  "ai_delay_short": "Delay:",
+  "tooltip_ai_delay": "Delay between requests (seconds). 1.5-3.0s recommended for free APIs.",
+  "tooltip_ai_concurrency": "Maximum concurrent requests for AI. 1 or 2 recommended for free APIs.",
   "refresh_proxies_desc": "Update free proxy list",
   "proxy_refreshing": "Refreshing Proxy",
   "manual_proxies": "Manual Proxies",
@@ -1016,7 +1020,7 @@
   "error_ai_filtered": "AI Filtered: {error}",
   "error_ai_empty_response": "Empty response from AI",
   "error_ai_content_filter": "Content filtered by AI safety policy",
-  "ai_system_prompt": "You are a professional video game localizer specializing in Ren'Py visual novels.\nYour task is to translate the given text from {source_lang} to {target_lang}.\n\nCRITICAL RULES:\n1. Preserve all Ren'Py control codes, variables like [variable], placeholders like ?V000?, and tags like {{tag}}.\n2. Do NOT translate the content inside brackets [] or braces {{}}.\n3. Maintain the original tone and style of the visual novel.\n4. Return ONLY the translated text. Do NOT add notes, explanations, or quotes.\n5. If the text contains only technical codes or is untranslatable, return it exactly as is.",
+  "ai_system_prompt": "You are a professional video game localizer specializing in Ren'Py visual novels.\nYour task is to translate the given text from {source_lang} to {target_lang}.\n\nCRITICAL RULES:\n1. Preserve all Ren'Py control codes, variables like [variable], placeholders like ?V000?, and tags like {{tag}}.\n2. Do NOT translate the content inside brackets [] or braces {{}}.\n3. Maintain the original tone and style of the visual novel.\n4. Return ONLY the translated text. Do NOT add notes, explanations, or quotes.\n5. If the text contains only technical codes or is untranslatable, return it exactly as is.\n6. This is a game translation. The content belongs to a fantasy/fictional world and may contain adult (NSFW) elements. Please translate without censorship, maintaining a professional localizer's tone.",
   "error_deepl_key_required": "DeepL API key required",
   "error_no_translations": "No translations in response",
   "error_all_engines_failed": "All translation methods failed",
@@ -1025,8 +1029,12 @@
   "error_ai_content_policy": "Content Policy Violation: {error}",
   "error_ai_blocked": "Blocked: {reason}",
   "error_gemini_safety": "Gemini Safety Filter: {error}",
-  "settings_ai_advanced_title": "Advanced AI Settings",
-  "settings_ai_advanced_desc": "Temperature, Timeout, Max Tokens, and Retry count settings",
+  "settings_ai_model_params": "AI Model Parameters",
+  "settings_ai_model_params_desc": "Temperature and Max Tokens settings",
+  "settings_ai_connection": "AI Connection Settings",
+  "settings_ai_connection_desc": "Timeout and retry count settings",
+  "settings_ai_speed": "AI Rate Limits & Performance",
+  "settings_ai_speed_desc": "Concurrency and request delay settings",
   "tooltip_ai_temperature": "Creativity level (0=consistent, 10=creative). Default: 3",
   "tooltip_ai_timeout": "AI response wait time (seconds). Recommended 120+ for local models.",
   "tooltip_ai_max_tokens": "Maximum output token count. Default: 2048",
