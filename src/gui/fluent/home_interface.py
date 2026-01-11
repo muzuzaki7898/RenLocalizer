@@ -398,6 +398,18 @@ class HomeInterface(ScrollArea):
         
         # Initialize/Update selected translator with latest settings
         try:
+            # Update TranslationManager settings from config
+            ts = self.config_manager.translation_settings
+            self.translation_manager.max_retries = ts.max_retries
+            self.translation_manager.max_batch_size = ts.max_batch_size
+            self.translation_manager.set_max_concurrency(ts.max_concurrent_threads)
+            
+            # Always refresh Google translator to pick up latest concurrency settings
+            self.translation_manager.add_translator(
+                TranslationEngine.GOOGLE, 
+                GoogleTranslator(proxy_manager=self.proxy_manager, config_manager=self.config_manager)
+            )
+
             if engine == TranslationEngine.OPENAI:
                 self.translation_manager.add_translator(
                     TranslationEngine.OPENAI,

@@ -560,7 +560,15 @@
     "log_scanning_sdk_common": "Scanning SDK common: {path}",
     "log_sdk_scan_failed": "SDK engine RPYC scan failed: {error}",
     "log_engine_common_scan_failed": "Engine common RPYC scan failed: {error}",
-    "log_sdks_found": "Scanning installed Ren'Py SDK 'common' directories: {count} SDKs found"
+    "log_sdks_found": "Scanning installed Ren'Py SDK 'common' directories: {count} SDKs found",
+    "error_api_quota": "⚠️ سهمیه API تمام شد! توقف ترجمه...",
+    "stage_translating": "🌐 در حال ترجمه...",
+    "stage_saving": "💾 در حال ذخیره...",
+    "stage_parsing": "🔍 در حال آنالیز...",
+    "stage_unren": "🔓 در حال اجرای UnRen...",
+    "stage_validating": "✅ در حال اعتبارسنجی...",
+    "stage_completed": "🎉 تکمیل شد",
+    "stage_error": "❌ خطا"
   },
   "pipeline_no_rpy_files": "فایل‌های .rpy یافت نشدند. دیکامپایل الزامی است.",
   "pipeline_no_rpyc_files": "فایل‌های RPYC یافت نشدند! RPYC Reader فعال است اما فایل کامپایل‌شده‌ای وجود ندارد. بازی را یک بار اجرا کنید یا RPYC Reader را در تنظیمات غیرفعال کنید.",
@@ -832,5 +840,7 @@
   "verbose_logging_label": "گزارش‌دهی گسترده",
   "verbose_logging_tooltip": "ثبت تمام عملیات با جزئیات کامل - مفید برای حل مشکلات",
   "view_menu": "نمایش",
-  "warning": "هشدار"
+  "warning": "هشدار",
+  "aggressive_retry": "ترجمه تهاجمی",
+  "aggressive_retry_desc": "تلاش مجدد برای ترجمه‌های بدون تغییر با روش‌های جایگزین (کندتر اما دقیق‌تر)"
 }

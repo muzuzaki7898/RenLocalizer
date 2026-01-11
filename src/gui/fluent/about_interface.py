@@ -49,7 +49,7 @@ class AboutInterface(ScrollArea):
         """Initialize the user interface."""
         # Banner Image
         self.banner = ImageLabel(self.scroll_widget)
-        banner_path = str(Path(__file__).parent / "resources" / "banner.png")
+        banner_path = str(Path(__file__).parent / "resources" / "renlocalizer-banner-min.png")
         if Path(banner_path).exists():
             self.banner.setImage(banner_path)
             self.banner.setFixedSize(930, 300)

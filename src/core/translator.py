@@ -70,10 +70,40 @@ def protect_renpy_syntax(text: str) -> Tuple[str, Dict[str, str]]:
 
 
 def restore_renpy_syntax(text: str, placeholders: Dict[str, str]) -> str:
-    """Placeholder'ları orijinal değerleriyle değiştirir."""
+    """Placeholder'ları orijinal değerleriyle değiştirir. Case-insensitive support for AI stability."""
+    if not text or not placeholders:
+        return text
     result = text
-    for placeholder, original in placeholders.items():
-        result = result.replace(placeholder, original)
+    # Sort placeholders by length descending to avoid partial replacement of similar keys
+    sorted_placeholders = sorted(placeholders.items(), key=lambda x: len(x[0]), reverse=True)
+    
+    for placeholder, original in sorted_placeholders:
+        # 1. Tam eşleşme (Hızlı)
+        if placeholder in result:
+            result = result.replace(placeholder, original)
+        else:
+            # 2. Case-insensitive ve ufak bozulma (boşluk vb.) temizliği
+            # Bazı motorlar "XRPYX VAR 0 XRPYX" veya "xrpyxvar0xrpyx" döndürebiliyor.
+            escaped = re.escape(placeholder)
+            # Harf aralarına ve yanlarına gelebilecek olası boşlukları temizleyen agresif regex
+            # Sadece XRPYX yapıları için özel bir esneklik tanıyalım
+            if placeholder.startswith("XRPYX") and placeholder.endswith("XRPYX"):
+                # İçerideki kısımları ayır: XRPYX[TAG|VAR|GLO][ID]XRPYX
+                core = placeholder[5:-5]
+                # Regex: X R P Y X (boşluklar?) [CORE] (boşluklar?) X R P Y X
+                # Ama daha basiti: xrpyx[core]xrpyx durumlarını yakalamak
+                pattern = re.compile(re.escape(placeholder), re.IGNORECASE)
+                result = pattern.sub(original, result)
+                
+                # Eğer hala bulamadıysa boşluklu halini dene
+                if original not in result:
+                    # XRPYX VAR 1 XRPYX gibi durumlar için
+                    spaced_pattern = re.compile(r'X\s*R\s*P\s*Y\s*X\s*' + re.escape(core) + r'\s*X\s*R\s*P\s*Y\s*X', re.IGNORECASE)
+                    result = spaced_pattern.sub(original, result)
+            else:
+                pattern = re.compile(re.escape(placeholder), re.IGNORECASE)
+                result = pattern.sub(original, result)
+                
     return result
 
 
@@ -105,6 +135,7 @@ class TranslationResult:
     success: bool
     error: Optional[str] = None
     confidence: float = 0.0
+    quota_exceeded: bool = False  # Flag for API quota exhaustion
     metadata: Dict = field(default_factory=dict)
     text_type: Optional[str] = None  # Type of text: 'paragraph', 'dialogue', etc.
 
@@ -116,8 +147,22 @@ class BaseTranslator(ABC):
         self.config_manager = config_manager
         self.use_proxy = True
         self.logger = logging.getLogger(self.__class__.__name__)
+        self.status_callback: Optional[Callable[[str, str], None]] = None  # (level, message)
+        self.should_stop_callback: Optional[Callable[[], bool]] = None
         self._session: Optional[aiohttp.ClientSession] = None
         self._connector: Optional[aiohttp.TCPConnector] = None
+
+    def emit_log(self, level: str, message: str):
+        """Emits log to both standard logger and UI status callback."""
+        if level.lower() == 'error':
+            self.logger.error(message)
+        elif level.lower() == 'warning':
+            self.logger.warning(message)
+        else:
+            self.logger.info(message)
+            
+        if self.status_callback:
+            self.status_callback(level, message)
 
     async def _get_session(self) -> aiohttp.ClientSession:
         if self._session is None or self._session.closed:
@@ -224,9 +269,13 @@ class GoogleTranslator(BaseTranslator):
             ts = config_manager.translation_settings
             self.use_multi_endpoint = getattr(ts, 'use_multi_endpoint', True)
             self.enable_lingva_fallback = getattr(ts, 'enable_lingva_fallback', True)
-            self.multi_q_concurrency = getattr(ts, 'endpoint_concurrency', 16)
+            # Slider ile kontrol edilen 'max_concurrent_threads' değerini baz alıyoruz
+            self.multi_q_concurrency = getattr(ts, 'max_concurrent_threads', 16)
             self.max_slice_chars = getattr(ts, 'max_chars_per_request', 5000)
             self.max_texts_per_slice = getattr(ts, 'max_texts_per_slice', 25)
+            self.aggressive_retry = getattr(ts, 'aggressive_retry_translation', False)
+        else:
+            self.aggressive_retry = False
         # Keep a baseline to restore when proxy adaptasyonu devre dışı
         self._base_multi_q_concurrency = self.multi_q_concurrency
     
@@ -308,6 +357,7 @@ class GoogleTranslator(BaseTranslator):
             return None
         
         translated_text = None
+        max_unchanged_retries = 2  # Retry limit for unchanged translations
         
         # Multi-endpoint mode: Try 2 endpoints in parallel (fastest wins)
         if self.use_multi_endpoint:
@@ -322,8 +372,45 @@ class GoogleTranslator(BaseTranslator):
                     for t in tasks:
                         if not t.done():
                             t.cancel()
-                    # Ren'Py değişkenlerini geri koy
+                    
+                    # Check if translation is unchanged (same as original)
                     final_text = restore_renpy_syntax(result, placeholders)
+                    
+                    # If translation equals original and aggressive_retry is enabled, try alternative methods
+                    if self.aggressive_retry and final_text.strip() == request.text.strip():
+                        self.logger.debug(f"Translation unchanged, retrying with Lingva: {request.text[:50]}")
+                        
+                        # Try Lingva fallback for unchanged translations
+                        if self.enable_lingva_fallback:
+                            for retry in range(max_unchanged_retries):
+                                lingva_result = await self._translate_via_lingva(
+                                    protected_text, request.source_lang, request.target_lang
+                                )
+                                if lingva_result:
+                                    lingva_final = restore_renpy_syntax(lingva_result, placeholders)
+                                    if lingva_final.strip() != request.text.strip():
+                                        return TranslationResult(
+                                            request.text, lingva_final, request.source_lang, request.target_lang,
+                                            TranslationEngine.GOOGLE, True, confidence=0.85, metadata=request.metadata
+                                        )
+                                await asyncio.sleep(0.5)  # Brief delay between retries
+                        
+                        # Try different Google endpoints sequentially
+                        for retry in range(max_unchanged_retries):
+                            alt_endpoint = self._get_next_endpoint()
+                            alt_result = await try_endpoint(alt_endpoint)
+                            if alt_result:
+                                alt_final = restore_renpy_syntax(alt_result, placeholders)
+                                if alt_final.strip() != request.text.strip():
+                                    return TranslationResult(
+                                        request.text, alt_final, request.source_lang, request.target_lang,
+                                        TranslationEngine.GOOGLE, True, confidence=0.85, metadata=request.metadata
+                                    )
+                            await asyncio.sleep(0.3)
+                        
+                        # All retries failed, return the unchanged text with lower confidence
+                        self.logger.warning(f"Translation unchanged after retries: {request.text[:50]}")
+                    
                     return TranslationResult(
                         request.text, final_text, request.source_lang, request.target_lang,
                         TranslationEngine.GOOGLE, True, confidence=0.9, metadata=request.metadata
@@ -332,8 +419,37 @@ class GoogleTranslator(BaseTranslator):
             # Single endpoint mode
             result = await try_endpoint(self._get_next_endpoint())
             if result:
-                # Ren'Py değişkenlerini geri koy
                 final_text = restore_renpy_syntax(result, placeholders)
+                
+                # Retry if unchanged and aggressive_retry is enabled
+                if self.aggressive_retry and final_text.strip() == request.text.strip():
+                    self.logger.debug(f"Single-mode: translation unchanged, retrying: {request.text[:50]}")
+                    
+                    # Try Lingva
+                    if self.enable_lingva_fallback:
+                        lingva_result = await self._translate_via_lingva(
+                            protected_text, request.source_lang, request.target_lang
+                        )
+                        if lingva_result:
+                            lingva_final = restore_renpy_syntax(lingva_result, placeholders)
+                            if lingva_final.strip() != request.text.strip():
+                                return TranslationResult(
+                                    request.text, lingva_final, request.source_lang, request.target_lang,
+                                    TranslationEngine.GOOGLE, True, confidence=0.85, metadata=request.metadata
+                                )
+                    
+                    # Try alternative endpoints
+                    for _ in range(max_unchanged_retries):
+                        alt_result = await try_endpoint(self._get_next_endpoint())
+                        if alt_result:
+                            alt_final = restore_renpy_syntax(alt_result, placeholders)
+                            if alt_final.strip() != request.text.strip():
+                                return TranslationResult(
+                                    request.text, alt_final, request.source_lang, request.target_lang,
+                                    TranslationEngine.GOOGLE, True, confidence=0.85, metadata=request.metadata
+                                )
+                        await asyncio.sleep(0.3)
+                
                 return TranslationResult(
                     request.text, final_text, request.source_lang, request.target_lang,
                     TranslationEngine.GOOGLE, True, confidence=0.9, metadata=request.metadata
@@ -505,6 +621,42 @@ class GoogleTranslator(BaseTranslator):
                     confidence=base_res.confidence,
                     metadata=req.metadata
                 )
+        
+        # POST-BATCH RETRY: Check for unchanged translations and retry them individually
+        # Only enabled when aggressive_retry is True (configurable in settings)
+        if self.aggressive_retry:
+            unchanged_indices = []
+            for idx, (req, res) in enumerate(zip(requests, final_results)):
+                if res and res.success and res.translated_text.strip() == req.text.strip():
+                    unchanged_indices.append(idx)
+            
+            if unchanged_indices and len(unchanged_indices) <= 100:  # Limit retry batch size
+                self.logger.info(f"Batch retry: {len(unchanged_indices)} unchanged translations found, retrying individually...")
+                
+                # Retry unchanged translations with translate_single (which has full retry logic)
+                sem = asyncio.Semaphore(self.multi_q_concurrency)
+                
+                async def retry_one(idx: int) -> Tuple[int, TranslationResult]:
+                    async with sem:
+                        req = requests[idx]
+                        result = await self.translate_single(req)
+                        return (idx, result)
+                
+                retry_tasks = [asyncio.create_task(retry_one(idx)) for idx in unchanged_indices]
+                retry_results = await asyncio.gather(*retry_tasks, return_exceptions=True)
+                
+                retry_success = 0
+                for item in retry_results:
+                    if isinstance(item, Exception):
+                        continue
+                    idx, new_result = item
+                    if new_result.success and new_result.translated_text.strip() != requests[idx].text.strip():
+                        final_results[idx] = new_result
+                        retry_success += 1
+                
+                if retry_success > 0:
+                    self.logger.info(f"Batch retry success: {retry_success}/{len(unchanged_indices)} translations recovered")
+        
         return final_results
 
     # Separator for batch translation
@@ -849,51 +1001,130 @@ class DeepLTranslator(BaseTranslator):
     base_url_paid = "https://api.deepl.com/v2/translate"
     base_url_free = "https://api-free.deepl.com/v2/translate"
 
+    def _map_lang(self, lang: str, is_target: bool = True) -> str:
+        """Map generic language codes to DeepL specific codes."""
+        if not lang: return "EN"
+        l = lang.lower()
+        
+        # DeepL specific target mappings
+        if is_target:
+            if l == 'en': return 'EN-US'
+            if l == 'pt': return 'PT-PT'
+            if l == 'zh-cn': return 'ZH'
+            if l == 'zh-tw': return 'ZH'
+        
+        # Source mappings
+        if l == 'en': return 'EN'
+        if l == 'ja': return 'JA'
+        if l == 'ko': return 'KO'
+        if l == 'zh-cn' or l == 'zh-tw': return 'ZH'
+        
+        return l.upper()
+
     async def translate_single(self, request: TranslationRequest) -> TranslationResult:
         if not self.api_key:
             return TranslationResult(request.text, "", request.source_lang, request.target_lang, TranslationEngine.DEEPL, False, self._get_text('error_deepl_key_required', "DeepL API key required"))
 
-        # DeepL is sensitive to special markers; protect Ren'Py placeholders
-        protected_text, placeholders = protect_renpy_syntax(request.text)
+        batch_res = await self.translate_batch([request])
+        return batch_res[0]
 
-        target_lang = request.target_lang.upper()
+    async def translate_batch(self, requests: List[TranslationRequest]) -> List[TranslationResult]:
+        if not requests: return []
+        if not self.api_key:
+            return [TranslationResult(r.text, "", r.source_lang, r.target_lang, TranslationEngine.DEEPL, False, "API Key Missing") for r in requests]
+
+        source_lang = self._map_lang(requests[0].source_lang, False) if requests[0].source_lang and requests[0].source_lang != "auto" else None
+        target_lang = self._map_lang(requests[0].target_lang, True)
+        
+        # DeepL XML tag handling is much more robust for placeholders
+        # Replace XRPYX style placeholders with XML tags
+        xml_protected_texts = []
+        all_placeholders = []
+        
+        for r in requests:
+            p_text, p_holders = protect_renpy_syntax(r.text)
+            # Map XRPYX to <x id="N"/> tags
+            # We must be careful not to break the mapping
+            temp_text = p_text
+            for i, (ph, orig) in enumerate(p_holders.items()):
+                # Use a very short tag to save characters/quota
+                xml_tag = f'<x i="{i}"/>'
+                temp_text = temp_text.replace(ph, xml_tag)
+            
+            xml_protected_texts.append(temp_text)
+            all_placeholders.append(p_holders)
+
         data = {
             "auth_key": self.api_key,
-            "text": protected_text,
             "target_lang": target_lang,
+            "text": xml_protected_texts,
+            "tag_handling": "xml",
+            "ignore_tags": "x" # Tell DeepL to ignore our 'x' tag
         }
-        if request.source_lang and request.source_lang.lower() != "auto":
-            data["source_lang"] = request.source_lang.upper()
+        if source_lang:
+            data["source_lang"] = source_lang
 
         base_url = self.base_url_free if ":fx" in self.api_key or self.api_key.startswith("free:") else self.base_url_paid
 
         try:
             session = await self._get_session()
-            proxy = None
-            if self.use_proxy and self.proxy_manager:
-                p = self.proxy_manager.get_next_proxy()
-                if p:
-                    proxy = p.url
+            proxy = self.proxy_manager.get_next_proxy().url if self.use_proxy and self.proxy_manager else None
 
-            async with session.post(base_url, data=data, proxy=proxy, timeout=aiohttp.ClientTimeout(total=15)) as resp:
+            async with session.post(base_url, data=data, proxy=proxy, timeout=aiohttp.ClientTimeout(total=45)) as resp:
                 if resp.status != 200:
-                    return TranslationResult(request.text, "", request.source_lang, request.target_lang, TranslationEngine.DEEPL, False, self._get_text('error_http', f"HTTP {resp.status}", status=resp.status))
+                    try:
+                        err_data = await resp.json()
+                        msg = err_data.get('message', f"HTTP {resp.status}")
+                        if resp.status == 456:
+                            msg = "Quota Exceeded"
+                            is_quota = True
+                    except:
+                        msg = await resp.text()
+                        is_quota = False
+                    
+                    return [TranslationResult(r.text, "", r.source_lang, r.target_lang, TranslationEngine.DEEPL, False, f"DeepL Error: {msg[:120]}", quota_exceeded=is_quota) for r in requests]
 
                 payload = await resp.json(content_type=None)
-                translations = payload.get("translations") if isinstance(payload, dict) else None
-                if not translations:
-                    return TranslationResult(request.text, "", request.source_lang, request.target_lang, TranslationEngine.DEEPL, False, self._get_text('error_no_translations', "No translations in response"))
+                translations = payload.get("translations", [])
+                
+                results = []
+                for i, r in enumerate(requests):
+                    if i < len(translations):
+                        translated = translations[i].get("text", "")
+                        # Map XML tags back to XRPYX placeholders
+                        final_v = translated
+                        for j, (ph, orig) in enumerate(all_placeholders[i].items()):
+                            xml_tag = f'<x i="{j}"/>'
+                            # Also handle cases where DeepL might add spaces: <x i = "0" />
+                            final_v = final_v.replace(xml_tag, ph)
+                            if ph not in final_v:
+                                # Regex fallback for corrupted tags
+                                pattern = re.compile(rf'<x\s+i\s*=\s*"{j}"\s*/>', re.IGNORECASE)
+                                final_v = pattern.sub(ph, final_v)
+                        
+                        # Apply standard restoration
+                        final_text = restore_renpy_syntax(final_v, all_placeholders[i])
+                        results.append(TranslationResult(r.text, final_text, r.source_lang, r.target_lang, TranslationEngine.DEEPL, True, confidence=0.98))
+                    else:
+                        results.append(TranslationResult(r.text, "", r.source_lang, r.target_lang, TranslationEngine.DEEPL, False, "Missing translation in response"))
+                return results
 
-                translated = translations[0].get("text", "") if isinstance(translations[0], dict) else ""
-                final_text = restore_renpy_syntax(translated, placeholders)
-
-                return TranslationResult(request.text, final_text, request.source_lang, request.target_lang, TranslationEngine.DEEPL, True, confidence=0.9)
         except Exception as e:
-            return TranslationResult(request.text, "", request.source_lang, request.target_lang, TranslationEngine.DEEPL, False, str(e))
+            is_quota = False
+            if "456" in msg: 
+                msg = "Quota Exceeded"
+                is_quota = True
+            return [TranslationResult(r.text, "", r.source_lang, r.target_lang, TranslationEngine.DEEPL, False, msg, quota_exceeded=is_quota) for r in requests]
 
     def get_supported_languages(self) -> Dict[str,str]:
-        return {'en':'English','tr':'Turkish','de':'German','fr':'French','es':'Spanish','it':'Italian','pt':'Portuguese'}
-
+        return {
+            'bg': 'Bulgarian', 'cs': 'Czech', 'da': 'Danish', 'de': 'German', 'el': 'Greek',
+            'en': 'English', 'es': 'Spanish', 'et': 'Estonian', 'fi': 'Finnish', 'fr': 'French',
+            'hu': 'Hungarian', 'id': 'Indonesian', 'it': 'Italian', 'ja': 'Japanese', 'ko': 'Korean',
+            'lt': 'Lithuanian', 'lv': 'Latvian', 'nb': 'Norwegian', 'nl': 'Dutch', 'pl': 'Polish',
+            'pt': 'Portuguese', 'ro': 'Romanian', 'ru': 'Russian', 'sk': 'Slovak', 'sl': 'Slovenian',
+            'sv': 'Swedish', 'tr': 'Turkish', 'uk': 'Ukrainian', 'zh': 'Chinese'
+        }
 
 class TranslationManager:
     def __init__(self, proxy_manager=None, config_manager=None):
@@ -901,10 +1132,19 @@ class TranslationManager:
         self.config_manager = config_manager
         self.logger = logging.getLogger(__name__)
         self.translators: Dict[TranslationEngine, BaseTranslator] = {}
+        self.should_stop_callback: Optional[Callable[[], bool]] = None
         self.max_retries = 1
-        self.retry_delays = [0.1,0.2]
+        self.retry_delays = [0.1, 0.2, 0.5, 1.0]
         self.max_batch_size = 500
-        self.max_concurrent_requests = 256
+        self.max_concurrent_requests = 32
+
+        # Sync with config if available
+        if self.config_manager:
+            ts = self.config_manager.translation_settings
+            self.max_retries = getattr(ts, 'max_retries', 1)
+            self.max_batch_size = getattr(ts, 'max_batch_size', 500)
+            self.max_concurrent_requests = getattr(ts, 'max_concurrent_threads', 32)
+
         self.cache_capacity = 20000
         self._cache: OrderedDict = OrderedDict()
         self._cache_lock = asyncio.Lock()
@@ -993,6 +1233,8 @@ class TranslationManager:
             groups.setdefault(r.engine, []).append((i, r))
         buffer: List[Tuple[int, TranslationResult]] = []
         for engine, items in groups.items():
+            if self.should_stop_callback and self.should_stop_callback():
+                break
             tr = self.translators.get(engine)
             if not tr:
                 for idx, r in items:
@@ -1003,9 +1245,12 @@ class TranslationManager:
             
             only = [r for _, r in items]
             used_batch = False
+
+            # Determine if this motor supports batching
+            can_batch = (isinstance(tr, GoogleTranslator) or is_ai or isinstance(tr, DeepLTranslator))
             
-            # Google and AI engines support batching
-            if (isinstance(tr, GoogleTranslator) or is_ai) and len(only) > 1:
+            # Google, DeepL and AI engines support batching
+            if can_batch and len(only) > 1:
                 try:
                     # AI engines now implement translate_batch for better performance
                     bout = await tr.translate_batch(only)
@@ -1037,7 +1282,11 @@ class TranslationManager:
             
             sem = asyncio.Semaphore(concurrency)
             async def run_single(ix: int, rq: TranslationRequest):
+                if self.should_stop_callback and self.should_stop_callback():
+                    return ix, TranslationResult(rq.text, "", rq.source_lang, rq.target_lang, rq.engine, False, "Stopped by user")
                 async with sem:
+                    if self.should_stop_callback and self.should_stop_callback():
+                        return ix, TranslationResult(rq.text, "", rq.source_lang, rq.target_lang, rq.engine, False, "Stopped by user")
                     res = await self.translate_with_retry(rq)
                     # For AI, the delay happens inside the semaphore to hold the 'slot'
                     if is_ai and self.ai_request_delay > 0:

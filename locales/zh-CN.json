@@ -808,6 +808,14 @@
     "file_made_translatable": "已设为可翻译：{filename}",
     "source_files_error": "处理源文件时出错：{error}",
     "unren_starting": "正在启动 UnRen...",
+    "error_api_quota": "⚠️ API 配额已超！停止翻译...",
+    "stage_translating": "🌐 正在翻译...",
+    "stage_saving": "💾 正在保存...",
+    "stage_parsing": "🔍 正在分析...",
+    "stage_unren": "🔓 正在运行 UnRen...",
+    "stage_validating": "✅ 正在验证...",
+    "stage_completed": "🎉 已完成",
+    "stage_error": "❌ 错误",
     "unren_downloading": "正在下载 UnRen...",
     "unren_download_error": "下载 UnRen 失败：{error}",
     "unren_scripts_not_found": "未找到 UnRen 脚本：{path}",
@@ -1136,5 +1144,7 @@
   "verbose_logging_label": "详细日志记录",
   "verbose_logging_tooltip": "详细记录所有操作",
   "view_menu": "视图",
-  "warning": "警告"
+  "warning": "警告",
+  "aggressive_retry": "激进翻译",
+  "aggressive_retry_desc": "使用替代方法重试未更改的翻译（较慢但更彻底）"
 }

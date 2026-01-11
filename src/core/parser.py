@@ -96,11 +96,11 @@ class RenPyParser:
         self._quoted_string = r'(?:[rRuUbBfF]{,2})?(?P<quote>"(?:[^"\\]|\\.)*"|\'(?:[^\\\']|\\.)*\')'
 
         self.char_dialog_re = re.compile(
-            r'^(?P<indent>\s*)(?P<char>[A-Za-z_]\w*)\s+'
+            r'^(?P<indent>\s*)(?P<char>[A-Za-z_][\w\.]*)\s+'
             r'(?P<quote>"(?:[^"\\]|\\.)*"|\'(?:[^\\\']|\\.)*\')'
         )
         self.narrator_re = re.compile(
-            r'^(?P<indent>\s*)(?P<quote>"(?:[^"\\]|\\.)*"|\'(?:[^\\\']|\\.)*\')\s*(?:#.*)?$'
+            r'^(?P<indent>\s*)(?P<quote>"(?:[^"\\]|\\.)*"|\'(?:[^\\\']|\\.)*\')(?P<trailing>.*)$'
         )
 
         self.char_multiline_re = re.compile(
@@ -660,8 +660,8 @@ class RenPyParser:
 
         def _in_tl_folder(path: Path) -> bool:
             try:
-                rel = path.relative_to(search_root)
-                return str(rel).replace('\\', '/').lower().startswith('tl/')
+                rel = str(path.relative_to(search_root)).replace('\\', '/').lower()
+                return rel.startswith('tl/') or '/tl/' in rel
             except Exception:
                 return False
 
@@ -805,13 +805,12 @@ class RenPyParser:
         # Normalize path to lowercase with forward slashes
         relative_path = str(file_path.relative_to(search_root)).replace('\\', '/').lower()
 
-        # CRITICAL: Always allow renpy/common (00layout.rpy, etc.)
-        if 'renpy/common' in relative_path:
-            return False
-
-        # Exclude engine-level renpy only when it's at the root of the search
-        # but allow project-copied renpy modules under subfolders like src/renpy/
-        if relative_path.startswith('renpy/'):
+        # CRITICAL: Always exclude renpy/common and internal renpy/ directories
+        # Also exclude 'tl/' folder to avoid duplicates and scanning existing translations
+        if 'renpy/common' in relative_path or relative_path.startswith('renpy/'):
+            return True
+        
+        if relative_path.startswith('tl/') or '/tl/' in relative_path:
             return True
 
         return False
@@ -1143,8 +1142,10 @@ class RenPyParser:
             if format_count >= 1:
                 # Remove format placeholders and check remaining content
                 remaining = re.sub(r'\{[^}]*\}', '', text_strip).strip()
-                # If remaining has no meaningful words (at least 3 consecutive letters), skip
-                if not any(ch.isalpha() for ch in remaining) or not re.search(r'.{3,}', remaining):
+                # If remaining has no meaningful words (at least 2 letters for non-Latin, 3 for Latin), skip
+                has_cyrillic = bool(re.search(r'[а-яА-ЯёЁ]', remaining))
+                min_len = 2 if has_cyrillic else 3
+                if not any(ch.isalpha() for ch in remaining) or len(remaining) < min_len:
                     return False
                 # If format placeholders dominate the string (2+ placeholders with short remaining), skip
                 if format_count >= 2 and len(remaining) < 10:
@@ -1169,6 +1170,16 @@ class RenPyParser:
 
         if re.match(r'^[-+]?\d+$', text.strip()):
             return False
+        
+        if re.search(r'\\x[0-9a-fA-F]{2}|(?:\(\?\:|\(\?P<|\[@-Z\\-_\]|\[0-\?\]\*|\[ -/\]\*|\[@-~\])', text):
+             return False
+        
+        # Heuristic: If string is long and has high punctuation/symbol density, it's likely code/regex
+        if len(text_strip) > 15:
+            symbol_count = len(re.findall(r'[\\#\[\](){}|*+?^$]', text_strip))
+            if symbol_count > len(text_strip) * 0.25:
+                return False
+
         if re.match(r'^\d+(?:\.\d+)+$', text.strip()):
             return True
 
@@ -1176,9 +1187,10 @@ class RenPyParser:
         if text[0].isupper() and ' ' in text:
             return True  # %99 metindir
 
-        # Küçük harf ve boşluksuz metinleri düşük güven olarak işaretle
+        # Küçük harf ve boşluksuz metinleri kontrol et (Rusça gibi dillerde 2 harf yeterli olabilir)
         if text.islower() and ' ' not in text:
-            return False
+            if len(text_strip) < (2 if re.search(r'[а-яА-ЯёЁ]', text_strip) else 3):
+                return False
 
         # FIX: Reject strings that are actually code wrappers captured by mistake
         # e.g. '_("Text")' or "_('Text')"
@@ -1199,7 +1211,9 @@ class RenPyParser:
         try:
             cleaned = re.sub(r'(\[[^\]]+\]|\{[^}]+\})', '', text_strip).strip()
             alpha_count = sum(1 for ch in cleaned if ch.isalpha())
-            if alpha_count < 2:
+            # Russian "Я" (I), "Да" (Yes) are 1-2 chars.
+            min_alpha = 1 if re.search(r'[а-яА-ЯёЁ]', cleaned) else 2
+            if alpha_count < min_alpha:
                 return False
         except Exception:
             pass
@@ -1513,27 +1527,86 @@ class RenPyParser:
             processed_text = processed_text.replace(match.group(0), placeholder_id, 1)
             placeholder_counter += 1
 
-        # RenPy variable placeholders like [variable_name] or [var!t] (translatable)
+        # RenPy variable placeholders like [variable_name], [var!t] (translatable),
+        # or complex expressions like [page['episode']], [var.attr], [func()]
         # The !t flag marks a variable as translatable - these are SPECIAL
         # [mood!t] - the value in 'mood' will be translated at display time
         # We need to preserve the whole placeholder but NOT translate the variable name
-        renpy_var_pattern = r'\[([^\]]+)\]'
-        for match in re.finditer(renpy_var_pattern, processed_text):
-            if match.group(0).startswith('⟦'):  # Already processed
+        # 
+        # CRITICAL: Must handle nested brackets for dictionary access patterns:
+        #   [page['episode']] - the inner ['episode'] must stay intact
+        #   [comment['author']] - don't translate 'comment' to anything
+        #
+        # Strategy: Find [ then capture until we find a matching ] that's not inside quotes
+        def find_bracket_content(text: str, start: int) -> Optional[Tuple[int, int]]:
+            """Find matching closing bracket, handling nested quotes and brackets."""
+            if start >= len(text) or text[start] != '[':
+                return None
+            
+            depth = 1
+            in_single_quote = False
+            in_double_quote = False
+            i = start + 1
+            
+            while i < len(text) and depth > 0:
+                char = text[i]
+                
+                if char == '\\' and i + 1 < len(text):
+                    i += 2  # Skip escape sequence
+                    continue
+                    
+                if char == "'" and not in_double_quote:
+                    in_single_quote = not in_single_quote
+                elif char == '"' and not in_single_quote:
+                    in_double_quote = not in_double_quote
+                elif not in_single_quote and not in_double_quote:
+                    if char == '[':
+                        depth += 1
+                    elif char == ']':
+                        depth -= 1
+                
+                i += 1
+            
+            if depth == 0:
+                return (start, i)
+            return None
+        
+        # Find all top-level bracket expressions
+        pos = 0
+        bracket_matches = []
+        while pos < len(processed_text):
+            idx = processed_text.find('[', pos)
+            if idx == -1:
+                break
+            
+            # Skip if already processed (part of placeholder)
+            if idx > 0 and processed_text[idx-1] == '⟦':
+                pos = idx + 1
                 continue
             
-            var_content = match.group(1)
+            result = find_bracket_content(processed_text, idx)
+            if result:
+                bracket_matches.append((result[0], result[1], processed_text[result[0]:result[1]]))
+                pos = result[1]
+            else:
+                pos = idx + 1
+        
+        # Process matches in reverse order to preserve indices
+        for start, end, match_text in reversed(bracket_matches):
+            # Skip if already a placeholder
+            if match_text.startswith('⟦'):
+                continue
+            
+            var_content = match_text[1:-1]  # Remove outer [ ]
             
             # Check for !t flag (translatable variable)
-            # The variable VALUE will be translated by Ren'Py at runtime
             if '!t' in var_content:
-                # Mark as translatable variable placeholder (still preserve it)
                 placeholder_id = f"⟦VT{placeholder_counter:03d}⟧"  # VT for translatable variable
             else:
                 placeholder_id = f"⟦V{placeholder_counter:03d}⟧"  # V for regular variable
             
-            placeholder_map[placeholder_id] = match.group(0)
-            processed_text = processed_text.replace(match.group(0), placeholder_id, 1)
+            placeholder_map[placeholder_id] = match_text
+            processed_text = processed_text[:start] + placeholder_id + processed_text[end:]
             placeholder_counter += 1
 
         # RenPy text tags like {color=#ff0000}, {/color}, {b}, {/b}, etc.
@@ -2308,7 +2381,8 @@ class RenPyParser:
         include_rpy: bool = True,
         include_rpyc: bool = False,
         include_deep_scan: bool = False,
-        recursive: bool = True
+        recursive: bool = True,
+        exclude_dirs: Optional[List[str]] = None
     ) -> Dict[Path, List[Dict[str, Any]]]:
         """
         Hem .rpy hem .rpyc dosyalarından metin çıkar.
@@ -2389,6 +2463,18 @@ class RenPyParser:
         Standart metinlerden daha esnek davranır (tek kelimelik eşya isimleri vb. için).
         """
         if not text:
+            return False
+
+        # --- CRITICAL SAFETY: Skip regexes and technical code sequences ---
+        # Strings containing regex syntax like (?:, (?P<, \x1B, or heavy regex markers
+        # Use common logic for technical detection
+        if self.is_meaningful_text and not self.is_meaningful_text(text):
+             # But check for regex specifically if is_meaningful_text didn't catch it
+             if re.search(r'\\x[0-9a-fA-F]{2}|(?:\(\?\:|\(\?P<|\[@-Z\\-_\]|\[0-\?\]\*|\[ -/\]\*|\[@-~\])', text):
+                  return False
+        
+        # Extra heuristic for data values: if it looks like a long technical regex or escape sequence string
+        if len(re.findall(r'[\\#\[\](){}|*+?^$]', text)) > len(text) * 0.3:
             return False
 
         # 1. If key is provided and it's a BLACKLIST key, it's not meaningful

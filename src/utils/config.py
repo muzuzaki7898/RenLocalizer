@@ -154,6 +154,8 @@ class TranslationSettings:
     ai_concurrency: int = 2  # NEW: Maximum concurrent requests for AI engines
     ai_request_delay: float = 1.5  # NEW: Delay between AI requests (seconds)
     ai_custom_system_prompt: str = ""  # User-defined system prompt (empty = use built-in)
+    # Aggressive Translation Retry: Retry unchanged translations with Lingva/alt endpoints (slower but more thorough)
+    aggressive_retry_translation: bool = False  # Default off for speed
     # Debug/Development settings
     show_debug_engines: bool = False  # Pseudo-Localization gibi debug motorlarını ana listede göster
 
@@ -602,7 +604,7 @@ class ConfigManager:
                 
         return result
     
-    def get_log_text(self, key: str, **kwargs) -> str:
+    def get_log_text(self, key: str, default: str = None, **kwargs) -> str:
         """
         Get localized log message from pipeline_logs section.
         Supports placeholder formatting with kwargs.
@@ -612,7 +614,8 @@ class ConfigManager:
             -> "UnRen tamamlandı (kod: 0)"
         """
         full_key = f"pipeline_logs.{key}"
-        template = self.get_ui_text(full_key, key)
+        # Use key as default if neither template nor explicit default provided
+        template = self.get_ui_text(full_key, default if default is not None else key)
         
         # Apply placeholders if any
         if kwargs and isinstance(template, str):

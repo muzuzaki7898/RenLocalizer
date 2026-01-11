@@ -55,7 +55,7 @@ The build output will be in the `dist/` directory.
 This project includes automated workflows for building and releasing on all platforms.
 
 - **File:** `.github/workflows/release.yml`
-- **Triggers:** Pushing any tag (e.g., `v2.4.9`)
+- **Triggers:** Pushing any tag (e.g., `v2.4.10`)
 - **Outputs:**
   - `RenLocalizer-Windows-x64.zip`
   - `RenLocalizer-Linux-x64.tar.gz`

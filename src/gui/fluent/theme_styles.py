@@ -753,24 +753,30 @@ def get_theme_stylesheet(c: dict) -> str:
     }}
     
     /* ===== SPIN BOX ===== */
-    QSpinBox {{
+    QSpinBox, QDoubleSpinBox, SpinBox, DoubleSpinBox {{
         background-color: {c['input_bg']};
-        color: {c['text_primary']};
+        color: {c['text_primary']} !important;
         border: 1px solid {c['input_border']};
         border-radius: 6px;
         padding: 4px 8px;
+        min-width: 80px;
+        selection-background-color: {c['accent']};
+        selection-color: #FFFFFF;
+        font-weight: bold;
     }}
     
-    QSpinBox:hover {{
+    QSpinBox:hover, QDoubleSpinBox:hover, SpinBox:hover, DoubleSpinBox:hover {{
         border-color: {c['input_hover_border']};
     }}
-    
-    QDoubleSpinBox {{
-        background-color: {c['input_bg']};
-        color: {c['text_primary']};
-        border: 1px solid {c['input_border']};
-        border-radius: 6px;
-        padding: 4px 8px;
+
+    QSpinBox::up-button, QDoubleSpinBox::up-button, SpinBox::up-button, DoubleSpinBox::up-button {{
+        border: none;
+        background: transparent;
+    }}
+
+    QSpinBox::down-button, QDoubleSpinBox::down-button, SpinBox::down-button, DoubleSpinBox::down-button {{
+        border: none;
+        background: transparent;
     }}
     
     /* ===== FRAME ===== */

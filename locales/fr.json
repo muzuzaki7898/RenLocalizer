@@ -808,6 +808,14 @@
     "file_made_translatable": "Rendu traduisible : {filename}",
     "source_files_error": "Erreur traitement fichiers source : {error}",
     "unren_starting": "Démarrage UnRen...",
+    "error_api_quota": "⚠️ Quota API dépassé ! Arrêt de la traduction...",
+    "stage_translating": "🌐 Traduction...",
+    "stage_saving": "💾 Sauvegarde...",
+    "stage_parsing": "🔍 Analyse...",
+    "stage_unren": "🔓 Exécution d'UnRen...",
+    "stage_validating": "✅ Validation...",
+    "stage_completed": "🎉 Terminé",
+    "stage_error": "❌ Erreur",
     "unren_downloading": "Téléchargement UnRen...",
     "unren_download_error": "Échec téléchargement UnRen : {error}",
     "unren_scripts_not_found": "Scripts UnRen introuvables : {path}",
@@ -1136,5 +1144,7 @@
   "verbose_logging_label": "Journalisation détaillée",
   "verbose_logging_tooltip": "Journaliser toutes les opérations en détail",
   "view_menu": "Affichage",
-  "warning": "Avertissement"
+  "warning": "Avertissement",
+  "aggressive_retry": "Traduction Agressive",
+  "aggressive_retry_desc": "Réessayer les traductions inchangées avec des méthodes alternatives (plus lent mais plus complet)"
 }

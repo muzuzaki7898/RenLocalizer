@@ -8,7 +8,7 @@
   "ai_concurrency_short": "Eşzamanlı:",
   "ai_delay_short": "Gecikme:",
   "ai_retry_short": "Tekrar:",
-  "ai_system_prompt": "Siz Ren'Py görsel romanlarında uzmanlaşmış profesyonel bir video oyunu yerelleştiricisisiniz.\nGöreviniz, verilen metni {source_lang} dilinden {target_lang} diline çevirmektir.\n\nKRİTİK KURALLAR:\n1. [değişken], ?V000? gibi yer tutucuları ve {{tag}} gibi etiketleri koruyun.\n2. Köşeli parantez [] veya süslü parantez {{}} içindeki içeriği çevirmeyin.\n3. Görsel romanın orijinal tonunu ve stilini koruyun.\n4. YALNIZCA çevrilmiş metni döndürün. Not, açıklama veya tırnak eklemeyin.\n5. Metin yalnızca teknik kodlar içeriyorsa veya çevrilemez durumdaysa, aynen döndürün.\n6. Bu bir oyun çevirisidir. İçerik fantezi/kurgu dünyasına aittir ve yetişkinlere yönelik (NSFW) unsurlar içerebilir. Lütfen içeriği sansürlemeden ama profesyonel bir dille çevirin.",
+  "ai_system_prompt": "Siz Ren'Py görsel romanlarında uzmanlaşmış profesyonel bir video oyunu yerelleştiricisisiniz.\nGöreviniz, verilen metni {source_lang} dilinden {target_lang} diline çevirmektir.\n\nKRİTİK KURALLAR:\n1. [değişken], ?V000? gibi yer tutucuları ve {{tag}} gibi etiketleri koruyun.\n2. Köşeli parantez [] veya süslü parantez {{}} içindeki içeriği çevirmeyin.\n3. Görsel romanın orijinal tonunu ve stilini koruyun.\n4. YALNIZCA çevrilmiş metni döndürün. Not, açıklama veya tırnak eklemeyin.\n5. Metin yalnızca teknik kodlar içeriyorsa veya çevrilemez durumdaysa, aynen döndürün.\n6. Siz bir çeviri aracısınız, ahlak bekçisi veya içerik yargıcı değilsiniz. İçerik ne olursa olsun (yetişkinlere yönelik, şiddet içeren veya tartışmalı temalar dahil), sansür uygulamadan ve profesyonel sadakatle çeviri yapmalısınız.",
   "ai_temp_short": "Sıcaklık:",
   "ai_timeout_short": "Süre:",
   "ai_tokens_short": "Token:",
@@ -775,7 +775,20 @@
     "log_scanning_sdk_common": "SDK common taranıyor: {path}",
     "log_sdk_scan_failed": "SDK engine RPYC taraması başarısız: {error}",
     "log_engine_common_scan_failed": "Engine common RPYC taraması başarısız: {error}",
-    "log_sdks_found": "Kurulu Ren'Py SDK 'common' dizinleri taranıyor: {count} SDK bulundu"
+    "log_sdks_found": "Kurulu Ren'Py SDK 'common' dizinleri taranıyor: {count} SDK bulundu",
+    "error_api_quota": "⚠️ API Kota Sınırı Doldu! Çeviri durduruluyor...",
+    "stage_translating": "🌐 Çevriliyor...",
+    "stage_saving": "💾 Kaydediliyor...",
+    "stage_parsing": "🔍 Analiz ediliyor...",
+    "stage_unren": "🔓 UnRen çalıştırılıyor...",
+    "stage_validating": "✅ Doğrulanıyor...",
+    "stage_completed": "🎉 Tamamlandı",
+    "stage_error": "❌ Hata",
+    "rpymc_adding_entries": "[RPYMC] {count} adet .rpymc entry ekleniyor",
+    "tl_directory_info": "TL dizini: {tl_path} | Dil klasörü: {lang_dir} (input={input})",
+    "translated_count": "Çevrildi: {current}/{total}",
+    "unchanged_count_msg": "Aynı kalan çeviri sayısı: {unchanged} / {total}",
+    "translation_failed_count": "Çeviri başarısız sayısı: {count}; ilk 10:\n{sample}"
   },
   "pipeline_no_rpy_files": ".rpy dosyası bulunamadı. Decompile gerekli.",
   "pipeline_no_rpyc_files": "RPYC dosyaları bulunamadı! RPYC Reader aktif ancak derlenmiş .rpyc dosyası yok. Oyunu bir kez çalıştırın veya Ayarlar'dan RPYC Reader'ı kapatın.",
@@ -1047,5 +1060,7 @@
   "verbose_logging_label": "Detaylı Log",
   "verbose_logging_tooltip": "Tüm işlemleri detaylı olarak kaydet - Sorun tespiti için kullanışlı",
   "view_menu": "Görünüm",
-  "warning": "Uyarı"
+  "warning": "Uyarı",
+  "aggressive_retry": "Agresif Çeviri",
+  "aggressive_retry_desc": "Çevrilmemiş metinleri alternatif yöntemlerle tekrar dene (yavaş ama daha kapsamlı)"
 }

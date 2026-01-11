@@ -907,6 +907,23 @@ class RenpyUnpickler(pickle.Unpickler):
             logger.debug(f"Store class: {module}.{name}")
             return FakeGeneric
         
+        # Allow Python AST nodes (_ast module) - used in .rpymc screen cache files
+        # AST nodes are safe data structures used by Ren'Py's screen language compiler
+        if module == "_ast":
+            import _ast
+            if hasattr(_ast, name):
+                return getattr(_ast, name)
+            logger.debug(f"Unknown AST node: {name}")
+            return FakeGeneric
+        
+        # Also allow 'ast' module (alternative import path)
+        if module == "ast":
+            import ast
+            if hasattr(ast, name):
+                return getattr(ast, name)
+            logger.debug(f"Unknown ast node: {name}")
+            return FakeGeneric
+        
         # Block everything else to avoid executing arbitrary globals during unpickle
         raise pickle.UnpicklingError(f"Disallowed global: {module}.{name}")
 
@@ -1198,8 +1215,8 @@ class ASTTextExtractor:
         text_lower = text_strip.lower()
         context_lower = context.lower() if context else ""
 
-        # Skip if too short
-        if len(text_strip) < 2:
+        # Skip if too short (one letter is fine for Russian "Я")
+        if len(text_strip) < (1 if re.search(r'[а-яА-ЯёЁ]', text_strip) else 2):
             return True
 
         # Skip file paths
@@ -1230,6 +1247,11 @@ class ASTTextExtractor:
 
         # Check against the whitelist
         if context and self._context_requires_whitelist(context_lower) and not any(key in context_lower for key in DATA_KEY_WHITELIST):
+            return True
+        
+        # Skip Ren'Py internal engine identifiers
+        # e.g., "renpy.dissolve renpy.dissolve", "renpy.mask renpy.mask", "renpy.matrixcolor renpy.texture"
+        if text_strip.startswith('renpy.') or ' renpy.' in text_strip:
             return True
 
         return False

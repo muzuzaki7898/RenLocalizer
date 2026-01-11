@@ -227,18 +227,15 @@ class SettingsInterface(ScrollArea):
             content=self.config_manager.get_ui_text("batch_size_desc", "Aynı anda çevrilecek metin sayısı"),
             parent=self.translation_group
         )
-        self.batch_size_slider = Slider(Qt.Orientation.Horizontal, self.batch_size_card)
-        self.batch_size_slider.setRange(1, 500)
-        self.batch_size_slider.setFixedWidth(200)
-        self.batch_size_label = BodyLabel(str(self.config_manager.translation_settings.max_batch_size), self.batch_size_card)
+        self.batch_size_spin = SpinBox(self.batch_size_card)
+        self.batch_size_spin.setRange(1, 1000)
+        self.batch_size_spin.setFixedWidth(100)
         
-        self.batch_size_card.hBoxLayout.addWidget(self.batch_size_label, 0, Qt.AlignmentFlag.AlignRight)
-        self.batch_size_card.hBoxLayout.addSpacing(8)
-        self.batch_size_card.hBoxLayout.addWidget(self.batch_size_slider, 0, Qt.AlignmentFlag.AlignRight)
+        self.batch_size_card.hBoxLayout.addWidget(self.batch_size_spin, 0, Qt.AlignmentFlag.AlignRight)
         self.batch_size_card.hBoxLayout.addSpacing(16)
         
-        self.batch_size_slider.setValue(self.config_manager.translation_settings.max_batch_size)
-        self.batch_size_slider.valueChanged.connect(self._on_batch_size_slider_changed)
+        self.batch_size_spin.setValue(self.config_manager.translation_settings.max_batch_size)
+        self.batch_size_spin.valueChanged.connect(self._on_batch_size_changed)
         self.translation_group.addSettingCard(self.batch_size_card)
         
         # Max concurrent requests
@@ -248,18 +245,15 @@ class SettingsInterface(ScrollArea):
             content=self.config_manager.get_ui_text("max_concurrent_desc", "Aynı anda yapılacak maksimum istek sayısı"),
             parent=self.translation_group
         )
-        self.concurrent_slider = Slider(Qt.Orientation.Horizontal, self.concurrent_card)
-        self.concurrent_slider.setRange(1, 64)
-        self.concurrent_slider.setFixedWidth(200)
-        self.concurrent_label = BodyLabel(str(self.config_manager.translation_settings.max_concurrent_threads), self.concurrent_card)
+        self.concurrent_spin = SpinBox(self.concurrent_card)
+        self.concurrent_spin.setRange(1, 256)
+        self.concurrent_spin.setFixedWidth(100)
         
-        self.concurrent_card.hBoxLayout.addWidget(self.concurrent_label, 0, Qt.AlignmentFlag.AlignRight)
-        self.concurrent_card.hBoxLayout.addSpacing(8)
-        self.concurrent_card.hBoxLayout.addWidget(self.concurrent_slider, 0, Qt.AlignmentFlag.AlignRight)
+        self.concurrent_card.hBoxLayout.addWidget(self.concurrent_spin, 0, Qt.AlignmentFlag.AlignRight)
         self.concurrent_card.hBoxLayout.addSpacing(16)
         
-        self.concurrent_slider.setValue(self.config_manager.translation_settings.max_concurrent_threads)
-        self.concurrent_slider.valueChanged.connect(self._on_concurrent_slider_changed)
+        self.concurrent_spin.setValue(self.config_manager.translation_settings.max_concurrent_threads)
+        self.concurrent_spin.valueChanged.connect(self._on_concurrent_changed)
         self.translation_group.addSettingCard(self.concurrent_card)
         
         # Retry count
@@ -269,19 +263,28 @@ class SettingsInterface(ScrollArea):
             content=self.config_manager.get_ui_text("retry_count_desc", "Hata durumunda yeniden deneme sayısı"),
             parent=self.translation_group
         )
-        self.retry_slider = Slider(Qt.Orientation.Horizontal, self.retry_card)
-        self.retry_slider.setRange(1, 10)
-        self.retry_slider.setFixedWidth(200)
-        self.retry_label = BodyLabel(str(self.config_manager.translation_settings.max_retries), self.retry_card)
+        self.retry_spin = SpinBox(self.retry_card)
+        self.retry_spin.setRange(1, 20)
+        self.retry_spin.setFixedWidth(100)
         
-        self.retry_card.hBoxLayout.addWidget(self.retry_label, 0, Qt.AlignmentFlag.AlignRight)
-        self.retry_card.hBoxLayout.addSpacing(8)
-        self.retry_card.hBoxLayout.addWidget(self.retry_slider, 0, Qt.AlignmentFlag.AlignRight)
+        self.retry_card.hBoxLayout.addWidget(self.retry_spin, 0, Qt.AlignmentFlag.AlignRight)
         self.retry_card.hBoxLayout.addSpacing(16)
         
-        self.retry_slider.setValue(self.config_manager.translation_settings.max_retries)
-        self.retry_slider.valueChanged.connect(self._on_retry_slider_changed)
+        self.retry_spin.setValue(self.config_manager.translation_settings.max_retries)
+        self.retry_spin.valueChanged.connect(self._on_retry_changed)
         self.translation_group.addSettingCard(self.retry_card)
+        
+        # Aggressive Translation Retry
+        self.aggressive_retry_card = SwitchSettingCard(
+            icon=FIF.CALORIES,
+            title=self.config_manager.get_ui_text("aggressive_retry", "Agresif Çeviri"),
+            content=self.config_manager.get_ui_text("aggressive_retry_desc", "Çevrilmemiş metinleri alternatif yöntemlerle tekrar dene (yavaş ama daha kapsamlı)"),
+            configItem=None,
+            parent=self.translation_group
+        )
+        self.aggressive_retry_card.setChecked(self.config_manager.translation_settings.aggressive_retry_translation)
+        self.aggressive_retry_card.checkedChanged.connect(self._on_aggressive_retry_changed)
+        self.translation_group.addSettingCard(self.aggressive_retry_card)
         
         # Glossary editor
         self.glossary_card = PushSettingCard(
@@ -837,23 +840,32 @@ class SettingsInterface(ScrollArea):
         self.config_manager.translation_settings.ai_request_delay = value
         self.config_manager.save_config()
 
-    def _on_batch_size_slider_changed(self, value: int):
-        """Handle batch size slider change."""
-        self.batch_size_label.setText(str(value))
+    def _on_batch_size_changed(self, value: int):
+        """Handle batch size changed."""
         self.config_manager.translation_settings.max_batch_size = value
         self.config_manager.save_config()
 
-    def _on_concurrent_slider_changed(self, value: int):
-        """Handle concurrent requests slider change."""
-        self.concurrent_label.setText(str(value))
+    def _on_concurrent_changed(self, value: int):
+        """Handle concurrent requests changed."""
         self.config_manager.translation_settings.max_concurrent_threads = value
         self.config_manager.save_config()
 
-    def _on_retry_slider_changed(self, value: int):
-        """Handle retry count slider change."""
-        self.retry_label.setText(str(value))
+    def _on_retry_changed(self, value: int):
+        """Handle retry count changed."""
         self.config_manager.translation_settings.max_retries = value
         self.config_manager.save_config()
+
+    def _on_batch_size_slider_released(self):
+        # Deprecated
+        pass
+
+    def _on_concurrent_slider_released(self):
+        # Deprecated
+        pass
+
+    def _on_retry_slider_released(self):
+        # Deprecated
+        pass
 
     def _open_glossary_editor(self):
         """Open glossary editor dialog."""
@@ -863,6 +875,11 @@ class SettingsInterface(ScrollArea):
             dialog.exec()
         except Exception as e:
             self.logger.error(f"Error opening glossary editor: {e}")
+    
+    def _on_aggressive_retry_changed(self, checked: bool):
+        """Handle aggressive retry toggle."""
+        self.config_manager.translation_settings.aggressive_retry_translation = checked
+        self.config_manager.save_config()
 
 
     def _on_proxy_enabled_changed(self, checked: bool):

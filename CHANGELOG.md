@@ -1,6 +1,49 @@
 # Changelog
 
 
+## [2.4.10] - 2026-01-11
+### 🛡️ Ren'Py Engine Protection & Stability
+- **Engine Isolation:** Explicitly excluded `renpy/common` and internal `renpy/` directories from scanning to prevent engine-level scripts from being corrupted by translation.
+- **Automatic Cleanup:** Added a post-extraction cleanup step to remove any accidental engine-level translation files from the `tl/` directory.
+- **Smart Technical Filtering:** Integrated advanced regex detection and symbol density heuristics to automatically skip internal Ren'Py code and technical regex patterns.
+
+### 🌐 Translation Pipeline & API Management
+- **Advanced API Quota Handling:**
+  - Implemented a dedicated `quota_exceeded` flag in `TranslationResult` for more robust error handling.
+  - Replaced brittle string matching for API limits with proper status code and boolean checks for DeepL, OpenAI, and Gemini.
+  - The system now gracefully stops translation and provides a localized warning when API limits are reached.
+- **Localized Stage Logging:**
+  - Completely localized the pipeline stage labels (e.g., `[🌐 Translating...]`, `[✅ Validating...]`).
+  - Improved `ConfigManager.get_log_text()` to support default values and cleaner error reporting.
+  - Refined error log formatting to handle cases where file or line information is missing.
+
+### 🍱 Localization & Global Support
+- **Full Sync across 8 Languages:** Fully synchronized and updated `tr`, `en`, `de`, `es`, `fr`, `ru`, `zh-CN`, and `fa` locale files.
+- **Pipeline Log Localization:** Added missing keys for all pipeline stages and API errors across all supported languages.
+- **Persian (FA) Locale Fix:** Restructured the `fa.json` file to fix duplicate keys and missing pipeline log sections.
+
+### 🔍 Parsing & Extraction Improvements
+- **Better Dialogue Support:**
+  - Added support for dot-separated character names (e.g., `persistent.player_name`).
+  - Enhanced narrator dialogue detection to support trailing transitions (e.g., `"Hello" with dissolve`).
+  - Relaxed strict length filters for non-Latin languages to capture short but meaningful dialogues (e.g., Russian "Я", "Да").
+- **Scanning Robustness:** Synchronized dot-separated character name support across both Regex and AST-based extraction pipelines.
+
+### 🌐 Translation Engine Improvements
+- **Smart Retry for Unchanged Translations (Optional):** Added "Agresif Çeviri" (Aggressive Translation) toggle in settings. When enabled, the system automatically retries unchanged translations with Lingva Translate and alternative Google endpoints. This significantly reduces the number of untranslated strings, especially for Cyrillic (Russian) to other language pairs. Disabled by default for optimal speed.
+- **Enhanced Placeholder Protection:** Fixed a critical bug where nested bracket patterns like `[page['episode']]` or `[comment['author']]` were being incorrectly translated. The new parser properly handles dictionary access patterns, method calls, and nested quotes inside variable interpolations.
+- **Technical String Filter:** Added filter for Ren'Py internal identifiers (e.g., `renpy.dissolve`, `renpy.mask renpy.texture`) to prevent them from appearing in translation output.
+
+### 🐛 Bug Fixes & Stability
+- **ConfigManager TypeError:** Fixed `TypeError` in `get_log_text()` call by adding proper default parameter support.
+- **Duplicate Key Clean-up:** Removed redundant `error_api_quota` keys from root level in all locale files to prevent conflicts.
+- **RPYC Reader AST Module Support:** Fixed `Disallowed global: _ast.Module` error when reading `.rpymc` (screen cache) files by whitelisting Python's `_ast` module in the safe unpickler.
+- **Pipeline UnboundLocalError Fix:** Resolved a crash where the variable `tl_dir` was accessed before definition during the engine cleanup phase.
+- **Duplicate Translation Entry Fix:** Resolved Ren'Py "already exists" errors by excluding the `tl/` directory from scanning and implementing deduplication against pre-existing translation files.
+- **Update Checker Fix:** Resolved a critical crash that occurred when the GitHub update check returned inconsistent or erroneous metadata.
+- **CLI RPA Robustness:** Fixed an issue where RPA extraction would fail in CLI mode when the game path points to a directory instead of an executable.
+- **Font Warning Mitigation:** Resolved multiple `QFont` console warnings by removing and standardizing legacy font settings.
+
 ## [2.4.9] - 2026-01-09
 ### 🚀 AI Performance & Batch Processing
 - **Batch Translation Support:** Added batch translation for OpenAI, Gemini, and Local LLM engines.

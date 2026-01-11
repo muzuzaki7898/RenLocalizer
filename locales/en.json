@@ -869,7 +869,20 @@
     "log_scanning_sdk_common": "Scanning SDK common: {path}",
     "log_sdk_scan_failed": "SDK engine RPYC scan failed: {error}",
     "log_engine_common_scan_failed": "Engine common RPYC scan failed: {error}",
-    "log_sdks_found": "Scanning installed Ren'Py SDK 'common' directories: {count} SDKs found"
+    "log_sdks_found": "Scanning installed Ren'Py SDK 'common' directories: {count} SDKs found",
+    "error_api_quota": "⚠️ API Quota Exceeded! Stopping translation...",
+    "stage_translating": "🌐 Translating...",
+    "stage_saving": "💾 Saving...",
+    "stage_parsing": "🔍 Parsing...",
+    "stage_unren": "🔓 Running UnRen...",
+    "stage_validating": "✅ Validating...",
+    "stage_completed": "🎉 Completed",
+    "stage_error": "❌ Error",
+    "rpymc_adding_entries": "[RPYMC] Adding {count} .rpymc entries",
+    "tl_directory_info": "TL directory: {tl_path} | Language folder: {lang_dir} (input={input})",
+    "translated_count": "Translated: {current}/{total}",
+    "unchanged_count_msg": "Unchanged translations: {unchanged} / {total}",
+    "translation_failed_count": "Number of translation failures: {count}; first 10:\n{sample}"
   },
   "nav_home": "Home",
   "nav_tools": "Tools",
@@ -1046,5 +1059,7 @@
   "nav_info_center": "Info Center",
   "info_formats_title": "Output File Formats",
   "info_unren_what": "What is UnRen?",
-  "info_unren_features": "Features"
+  "info_unren_features": "Features",
+  "aggressive_retry": "Aggressive Translation",
+  "aggressive_retry_desc": "Retry unchanged translations with alternative methods (slower but more thorough)"
 }

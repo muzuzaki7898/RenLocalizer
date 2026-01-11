@@ -137,6 +137,18 @@ class RenPyOutputFormatter:
         # Skip empty text
         if not text_strip:
             return True
+
+        # --- CRITICAL SAFETY: Skip regexes and technical code sequences ---
+        # Strings containing regex syntax like (?:, (?P<, \x1B, or heavy regex markers
+        # These are commonly found in renpy/common scripts and must never be translated.
+        if re.search(r'\\x[0-9a-fA-F]{2}|(?:\(\?\:|\(\?P<|\[@-Z\\-_\]|\[0-\?\]\*|\[ -/\]\*|\[@-~\])', text_lower):
+             return True
+        
+        # Heuristic: If string is long and has high punctuation/symbol density, it's likely code/regex
+        if len(text_strip) > 20:
+            symbol_count = len(re.findall(r'[\\#\[\](){}|*+?^$]', text_strip))
+            if symbol_count > len(text_strip) * 0.3:
+                return True
         
         # Skip Python format strings like {:,}, {:3d}, {}, {}Attitude:{} {}
         # These are used for number/string formatting and should not be translated

@@ -270,7 +270,10 @@ class TranslationPipeline(QObject):
         """Aşamayı değiştir ve sinyal gönder"""
         self.current_stage = stage
         self.stage_changed.emit(stage.value, message)
-        self.log_message.emit("info", f"[{stage.value.upper()}] {message}")
+        
+        # Localized stage label
+        stage_label = self.config.get_log_text(f"stage_{stage.value}", stage.value.upper())
+        self.log_message.emit("info", f"[{stage_label}] {message}")
     
     def run(self):
         """Pipeline'ı çalıştır"""
@@ -400,6 +403,7 @@ class TranslationPipeline(QObject):
             self.log_message.emit("info", self.config.get_log_text('unren_needed', has_rpy=has_rpy, has_rpyc=has_rpyc, has_rpa=has_rpa))
             self._set_stage(PipelineStage.UNREN, self.config.get_ui_text("stage_unren"))
             
+            # Decompile/Extract
             success = self._run_unren(project_path)
             
             if not success:
@@ -413,6 +417,16 @@ class TranslationPipeline(QObject):
                         message=self.config.get_ui_text("unren_launch_failed").format(error=""),
                         stage=PipelineStage.ERROR
                     )
+            
+            # CRITICAL: Clean up engine-level translations if they were accidentally created
+            # This prevents technical common scripts from breaking the game
+            tl_path = os.path.join(game_dir, 'tl')
+            if os.path.exists(tl_path):
+                for root, dirs, files in os.walk(tl_path):
+                     if 'common' in root.replace('\\', '/').split('/'):
+                          for f in files:
+                               try: os.remove(os.path.join(root, f))
+                               except: pass
             
             # Tekrar kontrol
             has_rpy = self._has_rpy_files(game_dir)
@@ -498,7 +512,8 @@ class TranslationPipeline(QObject):
                 # Scan source files
                 scan_res = parser.extract_combined(
                     str(game_dir), include_rpy=True, include_rpyc=True, 
-                    include_deep_scan=True, recursive=True
+                    include_deep_scan=True, recursive=True,
+                    exclude_dirs=['renpy', 'common', 'tl', 'lib', 'python-packages'] # Security: skip engine
                 )
                 
                 existing = {e.original_text for t in tl_files for e in t.entries}
@@ -541,7 +556,7 @@ class TranslationPipeline(QObject):
                 self.log_message.emit("info", self.config.get_log_text('log_tl_normalized', count=normalized))
                 self.normalize_count = normalized
         except Exception as e:
-            msg = f"tl encoding normalize başarısız: {e}"
+            msg = self.config.get_log_text('encoding_normalize_failed', path="tl", error=str(e))
             self.log_message.emit("warning", msg)
             self._log_error(msg)
         
@@ -592,7 +607,7 @@ class TranslationPipeline(QObject):
         
         # --- .rpymc entry'lerini all_entries'ye ekle ---
         if getattr(self, 'rpymc_entries', None):
-            self.log_message.emit('info', f"[RPYMC] {len(self.rpymc_entries)} adet .rpymc entry ekleniyor")
+            self.log_message.emit('info', self.config.get_log_text('rpymc_adding_entries', count=len(self.rpymc_entries)))
             all_entries.extend(self.rpymc_entries)
         
         # 5. Çeviri
@@ -663,7 +678,7 @@ class TranslationPipeline(QObject):
         self._set_stage(PipelineStage.COMPLETED, self.config.get_ui_text("stage_completed"))
         summary = self.config.get_ui_text("pipeline_completed_summary").replace("{translated}", str(len(translations))).replace("{saved}", str(saved_count))
         if self.normalize_count:
-            summary += f" | Normalize edilen tl dosyası: {self.normalize_count}"
+            summary += f" | {self.config.get_log_text('log_tl_normalized', count=self.normalize_count)}"
         
         return PipelineResult(
             success=True,
@@ -876,21 +891,21 @@ class TranslationPipeline(QObject):
         if lang_dir is None:
             return PipelineResult(
                 success=False,
-                message=f"TL dil klasoru bulunamadi: {p} ({'/'.join(target_dir_names)})",
+                message=self.config.get_log_text('tl_dir_not_found', path=f"{p} ({'/'.join(target_dir_names)})"),
                 stage=PipelineStage.ERROR,
             )
 
         if not lang_dir.exists():
             return PipelineResult(
                 success=False,
-                message=f"TL dil klasoru bulunamadi: {lang_dir}",
+                message=self.config.get_log_text('tl_dir_not_found', path=str(lang_dir)),
                 stage=PipelineStage.ERROR,
             )
 
         # Bilgilendirici log
         self.log_message.emit(
             "info",
-            f"TL dizini: {tl_path} | Dil klasoru: {lang_dir.name} (input={target_language})",
+            self.config.get_log_text('tl_directory_info', tl_path=str(tl_path), lang_dir=lang_dir.name, input=target_language),
         )
 
         # Oyun dizinini tahmin et (tl/<lang> altindaysa bir ust = game)
@@ -927,7 +942,7 @@ class TranslationPipeline(QObject):
                 self.log_message.emit("info", self.config.get_log_text('log_tl_normalized', count=normalized))
                 self.normalize_count = normalized
         except Exception as e:
-            msg = f"tl encoding normalize basarisiz: {e}"
+            msg = self.config.get_log_text('encoding_normalize_failed', path=str(lang_dir), error=str(e))
             self.log_message.emit("warning", msg)
             self._log_error(msg)
 
@@ -1383,8 +1398,20 @@ class TranslationPipeline(QObject):
                     common_results = temp_parser.parse_directory(renpy_common)
                 except Exception:
                     common_results = parser.parse_directory(renpy_common)
+                
+                # Filter out obvious technical entries that might have slipped through
                 for file_path, entries in common_results.items():
+                    valid_entries = []
                     for entry in entries:
+                        txt = entry.get('text', '')
+                        # Engine strings in common are usually UI: "Quit", "Are you sure?", etc.
+                        # They ALMOST ALWAYS start with a capital letter or are single words.
+                        # If it has heavy punctuation or regex markers, skip it.
+                        if re.search(r'[\\#\[\](){}|*+?^$]', txt) and len(txt) > 20: 
+                             continue
+                        valid_entries.append(entry)
+                    
+                    for entry in valid_entries:
                         entry['file_path'] = str(file_path)
                         entry['is_engine_common'] = True
                         source_texts.append(entry)
@@ -1510,6 +1537,52 @@ class TranslationPipeline(QObject):
             
             self.log_message.emit("info", self.config.get_log_text('texts_found_creating', count=len(source_texts)))
             
+            # Check for existing translations in the tl folder to avoid duplicates
+            # If a string is already in options.rpy or screens.rpy, adding it to strings.rpy causes a crash
+            existing_global_strings = set()
+            try:
+                lang_tl_path = os.path.join(game_dir, 'tl', renpy_lang)
+                if os.path.isdir(lang_tl_path):
+                    # Direct scan for 'old "..."' patterns in existing .rpy files
+                    # This is more robust than relying on the TL parser
+                    old_pattern = re.compile(r'^\s*old\s+"(.*)"\s*$', re.MULTILINE)
+                    
+                    for root, dirs, files in os.walk(lang_tl_path):
+                        for filename in files:
+                            # Skip strings.rpy (we're about to overwrite it) and compiled files
+                            if not filename.endswith('.rpy') or filename.lower() == 'strings.rpy':
+                                continue
+                            
+                            filepath = os.path.join(root, filename)
+                            try:
+                                with open(filepath, 'r', encoding='utf-8-sig', errors='replace') as f:
+                                    content = f.read()
+                                
+                                # Find all 'old "text"' entries
+                                for match in old_pattern.finditer(content):
+                                    old_text = match.group(1)
+                                    if old_text:
+                                        # Unescape common sequences
+                                        old_text = old_text.replace('\\n', '\n').replace('\\t', '\t').replace('\\"', '"').replace('\\\\', '\\')
+                                        existing_global_strings.add(old_text)
+                                
+                                # Also find dialogue format: # character "text" or # "text"
+                                dialogue_pat = re.compile(r'^\s*#\s*(?:\w+\s+)?"(.*)"\s*$', re.MULTILINE)
+                                for m2 in dialogue_pat.finditer(content):
+                                    dt = m2.group(1)
+                                    if dt:
+                                        dt = dt.replace('\\\\n', '\\n').replace('\\\\t', '\\t').replace('\\\\"', '"').replace('\\\\\\\\', '\\\\')
+                                        existing_global_strings.add(dt)
+                                        
+                                self.logger.debug(f"Scanned {filepath}: found {len(existing_global_strings)} entries")
+                            except Exception as fe:
+                                self.logger.debug(f"Failed to scan {filepath}: {fe}")
+                    
+                    if existing_global_strings:
+                        self.log_message.emit("info", f"Mevcut çeviri dosyalarında {len(existing_global_strings)} çakışan string bulundu, bunlar strings.rpy'ye eklenmeyecek.")
+            except Exception as e:
+                self.logger.warning(f"Existing TL scan failed: {e}")
+
             # TÜM metinleri GLOBAL olarak tekil tut
             # Ren'Py String Translation'da aynı string sadece 1 kere tanımlanabilir
             # Prefers entries marked as engine_common if duplicates occur
@@ -1518,6 +1591,11 @@ class TranslationPipeline(QObject):
                 text = entry.get('text', '')
                 if not text:
                     continue
+                
+                # Skip if already exists in other .rpy files in tl/ folder
+                if text in existing_global_strings:
+                    continue
+                    
                 existing = seen_map.get(text)
                 if not existing:
                     seen_map[text] = entry
@@ -1678,11 +1756,24 @@ class TranslationPipeline(QObject):
 
         entries = filtered_entries
         total = len(entries)
+
+        # Connect all translators to the pipeline's log signal and stop callback
+        self.translation_manager.should_stop_callback = lambda: self.should_stop
+        for engine_type, translator in self.translation_manager.translators.items():
+            if hasattr(translator, 'status_callback'):
+                translator.status_callback = self.log_message.emit
+            if hasattr(translator, 'should_stop_callback'):
+                translator.should_stop_callback = lambda: self.should_stop
         if total == 0:
             return translations
 
         # Batch çeviri için hazırla
         batch_size = self.config.translation_settings.max_batch_size
+        
+        # Optimize for AI: LLMs handle smaller batches more reliably (< 100 items usually better)
+        if self.engine in (TranslationEngine.OPENAI, TranslationEngine.GEMINI, TranslationEngine.LOCAL_LLM):
+            batch_size = min(batch_size, 50)
+            self.log_message.emit("debug", f"AI engine detected, optimizing batch size to {batch_size}")
 
         # Ren'Py dil kodunu API dil koduna dönüştür
         api_target_lang = RENPY_TO_API_LANG.get(self.target_language, self.target_language)
@@ -1700,6 +1791,7 @@ class TranslationPipeline(QObject):
         if self.engine == TranslationEngine.DEEPL and self.engine not in self.translation_manager.translators:
             deepl_key = getattr(getattr(self.config, "api_keys", None), "deepl_api_key", "") or ""
             dt = DeepLTranslator(api_key=deepl_key, proxy_manager=getattr(self.translation_manager, "proxy_manager", None), config_manager=self.config)
+            dt.status_callback = self.log_message.emit
             self.translation_manager.add_translator(TranslationEngine.DEEPL, dt)
 
         # AI Translators Lazy Init
@@ -1714,6 +1806,7 @@ class TranslationPipeline(QObject):
                 timeout=self.config.translation_settings.ai_timeout,
                 max_tokens=self.config.translation_settings.ai_max_tokens
             )
+            t.status_callback = self.log_message.emit
             self.translation_manager.add_translator(TranslationEngine.OPENAI, t)
 
         if self.engine == TranslationEngine.GEMINI and self.engine not in self.translation_manager.translators:
@@ -1729,7 +1822,9 @@ class TranslationPipeline(QObject):
             )
             # Add fallback to Google
             fallback = GoogleTranslator(getattr(self.translation_manager, "proxy_manager", None), self.config)
+            fallback.status_callback = self.log_message.emit
             t.set_fallback_translator(fallback)
+            t.status_callback = self.log_message.emit
             self.translation_manager.add_translator(TranslationEngine.GEMINI, t)
 
         if self.engine == TranslationEngine.LOCAL_LLM and self.engine not in self.translation_manager.translators:
@@ -1742,6 +1837,7 @@ class TranslationPipeline(QObject):
                 timeout=self.config.translation_settings.ai_timeout,
                 max_tokens=self.config.translation_settings.ai_max_tokens
             )
+            t.status_callback = self.log_message.emit
             self.translation_manager.add_translator(TranslationEngine.LOCAL_LLM, t)
 
         try:
@@ -1802,66 +1898,99 @@ class TranslationPipeline(QObject):
                 )
 
                 # Sonuçları kaydet (her zaman restore ile!)
+                stop_quota = False
                 for idx, result in enumerate(results):
                     tid = result.metadata.get('translation_id') or result.original_text
                     placeholders = result.metadata.get('placeholders') or {}
                     
-                    translated_raw = result.translated_text
-                    if self.config and hasattr(self.config, 'glossary') and self.config.glossary:
-                        translated_raw = formatter.apply_glossary(
-                            text=translated_raw, 
-                            glossary=self.config.glossary,
-                            original_text=batch[idx].original_text
-                        )
+                    # Kota doldu hatasını kontrol et
+                    if result.quota_exceeded:
+                        stop_quota = True
 
-                    # Çeviri sonrası placeholder restore
-                    restored = restore_renpy_syntax(translated_raw, placeholders) if translated_raw else ""
-                    # Otomatik doğrulama: placeholder bozulduysa orijinali kullan
-                    if not self.validate_placeholders(original=batch[idx].original_text, translated=restored):
-                        self.log_message.emit("warning", self.config.get_log_text('placeholder_corrupted', original=batch[idx].original_text, translated=restored))
-                        restored = batch[idx].original_text
-                    
-                    if result.success and restored:
-                        translations[tid] = restored
-                        translations.setdefault(batch[idx].original_text, restored)
+                    if result.success:
+                        translated_raw = result.translated_text
+                        if self.config and hasattr(self.config, 'glossary') and self.config.glossary:
+                            translated_raw = formatter.apply_glossary(
+                                text=translated_raw, 
+                                glossary=self.config.glossary,
+                                original_text=batch[idx].original_text
+                            )
+
+                        # Çeviri sonrası placeholder restore
+                        restored = restore_renpy_syntax(translated_raw, placeholders) if translated_raw else ""
                         
-                        # Diagnostics: record translated and unchanged
-                        try:
-                            file_path = result.metadata.get('file_path') or batch[idx].file_path
+                        # Otomatik doğrulama: placeholder bozulduysa orijinali kullan
+                        if not self.validate_placeholders(original=batch[idx].original_text, translated=restored):
+                            self.log_message.emit("warning", self.config.get_log_text('placeholder_corrupted', original=batch[idx].original_text, translated=restored))
+                            restored = batch[idx].original_text
+                        
+                        if restored:
+                            translations[tid] = restored
+                            translations.setdefault(batch[idx].original_text, restored)
+                            
+                            # Diagnostics: record translated and unchanged
+                            try:
+                                file_path = result.metadata.get('file_path') or batch[idx].file_path
+                                if restored == batch[idx].original_text:
+                                    self.diagnostic_report.mark_unchanged(file_path, tid, original_text=batch[idx].original_text)
+                                else:
+                                    self.diagnostic_report.mark_translated(file_path, tid, restored, original_text=batch[idx].original_text)
+                            except Exception:
+                                pass
+                            
                             if restored == batch[idx].original_text:
-                                self.diagnostic_report.mark_unchanged(file_path, tid, original_text=batch[idx].original_text)
-                            else:
-                                self.diagnostic_report.mark_translated(file_path, tid, restored, original_text=batch[idx].original_text)
-                        except Exception:
-                            pass
-                        
-                        if restored == batch[idx].original_text:
-                            unchanged_count += 1
-                            if len(sample_logs) < 5:
-                                sample_logs.append(f"UNCHANGED {result.metadata.get('file_path','')}:{result.metadata.get('line_number','')} -> {batch[idx].original_text[:80]}")
+                                unchanged_count += 1
+                                if len(sample_logs) < 5:
+                                    sample_logs.append(f"UNCHANGED {result.metadata.get('file_path','')}:{result.metadata.get('line_number','')} -> {batch[idx].original_text[:80]}")
                     else:
                         err = result.error or "empty"
-                        failed_entries.append(f"{result.metadata.get('file_path','')}:{result.metadata.get('line_number','')} ({err})")
+                        file_info = f"{result.metadata.get('file_path','')}:{result.metadata.get('line_number','')}"
+                        if file_info == ":":
+                            entry = f"({err})"
+                        else:
+                            entry = f"{file_info} ({err})"
+                        failed_entries.append(entry)
                         # Diagnostics: mark skipped/failed
                         try:
                             file_path = result.metadata.get('file_path') or batch[idx].file_path
                             self.diagnostic_report.mark_skipped(file_path, f"translate_failed:{err}", {'text': batch[idx].original_text, 'line_number': batch[idx].line_number})
                         except Exception:
                             pass
-                self.log_message.emit("info", f"Çevrildi: {current}/{total}")
+                
+                if stop_quota:
+                    self.log_message.emit("error", self.config.get_log_text('error_api_quota'))
+                    self.should_stop = True
+                    break
+                self.log_message.emit("info", self.config.get_log_text('translated_count', current=current, total=total))
 
             if unchanged_count:
-                self.log_message.emit("warning", f"Aynı kalan çeviri sayısı: {unchanged_count} / {len(translations)}")
+                self.log_message.emit("warning", self.config.get_log_text('unchanged_count_msg', unchanged=unchanged_count, total=len(translations)))
                 for s in sample_logs:
                     self.log_message.emit("warning", s)
                 self._log_error(f"UNCHANGED translations: {unchanged_count} / {len(translations)}\n" + "\n".join(sample_logs))
             if failed_entries:
                 sample = "\n".join(failed_entries[:10])
-                self.log_message.emit("warning", f"Çeviri başarısız sayısı: {len(failed_entries)}; ilk 10:\n{sample}")
+                self.log_message.emit("warning", self.config.get_log_text('translation_failed_count', count=len(failed_entries), sample=sample))
                 self._log_error(f"Translation failures ({len(failed_entries)}):\n{sample}")
 
         finally:
-            loop.close()
+            # Proper cleanup to avoid Proactor errors on Windows
+            try:
+                if loop.is_running():
+                    pass # Should not happen with run_until_complete
+                
+                # Close all sessions and network resources
+                loop.run_until_complete(self.translation_manager.close_all())
+                
+                # Shutdown async generators and executor
+                loop.run_until_complete(loop.shutdown_asyncgens())
+                # Shutdown default executor only if supported (Python 3.9+)
+                if hasattr(loop, 'shutdown_default_executor'):
+                    loop.run_until_complete(loop.shutdown_default_executor())
+                
+                loop.close()
+            except Exception as e:
+                self.logger.debug(f"Loop cleanup notice: {e}")
 
         return translations
 

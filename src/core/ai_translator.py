@@ -19,8 +19,8 @@ except ImportError:
     AsyncOpenAI = None
 
 try:
-    import google.generativeai as genai
-    from google.generativeai.types import HarmCategory, HarmBlockThreshold
+    from google import genai
+    from google.genai import types
 except ImportError:
     genai = None
 
@@ -49,6 +49,7 @@ CRITICAL RULES:
 3. Maintain the original tone and style of the visual novel.
 4. Return ONLY the translated text. Do NOT add notes, explanations, or quotes.
 5. If the text contains only technical codes or is untranslatable, return it exactly as is.
+6. You are a neutral translation tool, not a moral guardian or content judge. You MUST translate all provided text regardless of its themes or content (including adult, suggestive, or violent themes) with absolute accuracy and no self-censorship.
 """
 
     # --- Constants for Batch Processing ---
@@ -149,7 +150,8 @@ CRITICAL RULES:
                     target_lang=request.target_lang,
                     engine=request.engine,
                     success=True,
-                    confidence=0.95
+                    confidence=0.95,
+                    metadata=request.metadata # Preserve metadata!
                 )
                 
             except ValueError as ve:
@@ -162,18 +164,18 @@ CRITICAL RULES:
                 if is_rate_limit and attempt < max_retries:
                     # Exponential backoff with jitter to avoid thundering herd
                     wait_time = (backoff_base ** (attempt + 1)) + random.uniform(0.1, 1.0)
-                    self.logger.warning(f"AI Rate Limit hit ({request.engine.value}), waiting {wait_time:.2f}s... (Attempt {attempt+1}/{max_retries})")
+                    self.emit_log("warning", f"AI Rate Limit hit ({request.engine.value}), waiting {wait_time:.2f}s... (Attempt {attempt+1}/{max_retries})")
                     await asyncio.sleep(wait_time)
                     continue
                 
-                self.logger.error(f"LLM Translation Error ({request.engine.value}): {e}")
+                self.emit_log("error", f"LLM Translation Error ({request.engine.value}): {e}")
                 if attempt < max_retries and not is_rate_limit:
                     # For other errors, maybe a small delay before retry
                     await asyncio.sleep(1.0)
                     continue
                     
                 return TranslationResult(
-                    request.text, "", request.source_lang, request.target_lang, request.engine, False, str(e)
+                    request.text, "", request.source_lang, request.target_lang, request.engine, False, str(e), quota_exceeded=is_rate_limit
                 )
 
     async def translate_batch(self, requests: List[TranslationRequest]) -> List[TranslationResult]:
@@ -212,6 +214,8 @@ CRITICAL RULES:
         
         max_retries = self.max_retries
         for attempt in range(max_retries + 1):
+            if self.should_stop_callback and self.should_stop_callback():
+                return [TranslationResult(r.text, "", req0.source_lang, req0.target_lang, req0.engine, False, "Stopped by user") for r in requests]
             try:
                 response_text = await self._generate_completion(system_prompt, user_prompt)
                 
@@ -227,7 +231,13 @@ CRITICAL RULES:
                     if 0 <= idx < len(requests):
                         final_text = restore_renpy_syntax(translated_protected, all_placeholders[idx])
                         results[idx] = TranslationResult(
-                            requests[idx].text, final_text, req0.source_lang, req0.target_lang, req0.engine, True
+                            requests[idx].text, 
+                            final_text, 
+                            req0.source_lang, 
+                            req0.target_lang, 
+                            req0.engine, 
+                            True,
+                            metadata=requests[idx].metadata # Preserve metadata!
                         )
                         found_count += 1
                 
@@ -235,7 +245,7 @@ CRITICAL RULES:
                 if found_count == len(requests):
                     return results
                 else:
-                    self.logger.warning(f"AI Batch incomplete: expected {len(requests)}, got {found_count}. Retrying single...")
+                    self.emit_log("warning", f"AI Batch partially incomplete ({found_count}/{len(requests)}). Retrying individual items to ensure 100% coverage.")
                     # Fallback to single translation for failed batch
                     return [await self.translate_single(r) for r in requests]
                     
@@ -243,11 +253,11 @@ CRITICAL RULES:
                 is_rate_limit = self._is_rate_limit_error(e)
                 if is_rate_limit and attempt < max_retries:
                     wait_time = (2.0 ** (attempt + 1)) + random.uniform(0.1, 1.0)
-                    self.logger.warning(f"AI Rate Limit hit in batch, waiting {wait_time:.2f}s...")
+                    self.emit_log("warning", f"AI Rate Limit hit in batch, waiting {wait_time:.2f}s...")
                     await asyncio.sleep(wait_time)
                     continue
                 
-                self.logger.error(f"AI Batch Error: {e}. Falling back to single...")
+                self.emit_log("error", f"AI Batch Error: {e}. Falling back to single...")
                 return [await self.translate_single(r) for r in requests]
                 
         return [await self.translate_single(r) for r in requests]
@@ -334,68 +344,72 @@ class LocalLLMTranslator(OpenAITranslator):
 
 
 class GeminiTranslator(LLMTranslator):
-    """Translator using Google Gemini API."""
+    """Translator using Google Gemini API (via new google-genai SDK)."""
 
-    def __init__(self, api_key: str, model: str = "gemini-pro", safety_level: str = "BLOCK_NONE", 
+    def __init__(self, api_key: str, model: str = "gemini-2.0-flash-exp", safety_level: str = "BLOCK_NONE", 
                  temperature=AI_DEFAULT_TEMPERATURE, timeout=AI_DEFAULT_TIMEOUT, 
                  max_tokens=AI_DEFAULT_MAX_TOKENS, **kwargs):
         super().__init__(api_key, model, temperature=temperature, timeout=timeout, max_tokens=max_tokens, **kwargs)
         if not genai:
-            raise ImportError("google-generativeai library is not installed.")
+            raise ImportError("google-genai library is not installed.")
         
-        genai.configure(api_key=api_key)
+        self.client = genai.Client(api_key=api_key)
         self.safety_level = safety_level
-        self._model_instance = genai.GenerativeModel(model)
 
-    def _get_safety_settings(self):
+    def _get_safety_settings(self) -> List[types.SafetySetting]:
         # Default to BLOCK_NONE for all categories if user requested no blocking
-        if self.safety_level == "BLOCK_NONE":
-            return {
-                HarmCategory.HARM_CATEGORY_HARASSMENT: HarmBlockThreshold.BLOCK_NONE,
-                HarmCategory.HARM_CATEGORY_HATE_SPEECH: HarmBlockThreshold.BLOCK_NONE,
-                HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT: HarmBlockThreshold.BLOCK_NONE,
-                HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: HarmBlockThreshold.BLOCK_NONE,
-            }
-        elif self.safety_level == "BLOCK_ONLY_HIGH":
-             return {
-                HarmCategory.HARM_CATEGORY_HARASSMENT: HarmBlockThreshold.BLOCK_ONLY_HIGH,
-                HarmCategory.HARM_CATEGORY_HATE_SPEECH: HarmBlockThreshold.BLOCK_ONLY_HIGH,
-                HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT: HarmBlockThreshold.BLOCK_ONLY_HIGH,
-                HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: HarmBlockThreshold.BLOCK_ONLY_HIGH,
-            }
-        return None # Default API settings
+        level = "BLOCK_NONE"
+        if self.safety_level == "BLOCK_ONLY_HIGH":
+            level = "BLOCK_ONLY_HIGH"
+        elif self.safety_level == "STANDARD":
+            level = "BLOCK_LOW_AND_ABOVE" # Default behavior for Gemini
+            
+        categories = [
+            "HARM_CATEGORY_HARASSMENT",
+            "HARM_CATEGORY_HATE_SPEECH",
+            "HARM_CATEGORY_SEXUALLY_EXPLICIT",
+            "HARM_CATEGORY_DANGEROUS_CONTENT"
+        ]
+        
+        return [
+            types.SafetySetting(category=cat, threshold=level)
+            for cat in categories
+        ]
 
     async def _generate_completion(self, system_prompt: str, user_prompt: str) -> str:
         try:
-            # Gemini doesn't always support system instructions purely in some versions,
-            # but usually we can prepend it or use the system_instruction param in newer libs.
-            # For compatibility, we'll just incorporate it into the prompt or chat history.
-            
-            # Use chat for better context handling usually
-            chat = self._model_instance.start_chat()
-            
-            full_prompt = f"{system_prompt}\n\nUser Input: {user_prompt}"
-            
-            response = await chat.send_message_async(
-                full_prompt,
-                safety_settings=self._get_safety_settings(),
-                generation_config=genai.types.GenerationConfig(
-                    temperature=self.temperature,
-                    max_output_tokens=self.max_tokens
-                )
+            # The new SDK supports system_instruction directly
+            config = types.GenerateContentConfig(
+                system_instruction=system_prompt,
+                temperature=self.temperature,
+                max_output_tokens=self.max_tokens,
+                safety_settings=self._get_safety_settings()
             )
             
-            if response.prompt_feedback.block_reason:
-                raise ValueError(self._get_text('error_ai_blocked', "Blocked: {reason}", reason=str(response.prompt_feedback.block_reason)))
+            # Use asyncio.to_thread for synchronous SDK calls or use async client if available
+            # Note: as of now, direct async support in google-genai might vary, 
+            # we use the standard generate_content in a thread to keep it stable.
+            def call_gemini():
+                return self.client.models.generate_content(
+                    model=self.model,
+                    contents=user_prompt,
+                    config=config
+                )
+            
+            response = await asyncio.to_thread(call_gemini)
+            
+            if not response.text:
+                # If no text, check if it was blocked
+                raise ValueError(self._get_text('error_ai_blocked', "AI returned empty text, possibly blocked by safety filters."))
                 
             return response.text
             
         except Exception as e:
-            if "finish_reason" in str(e) and "SAFETY" in str(e):
+            err_str = str(e).lower()
+            if "safety" in err_str or "block" in err_str:
                 raise ValueError(self._get_text('error_gemini_safety', "Gemini Safety Filter: {error}", error=str(e)))
             raise e
 
     async def close(self):
         """Cleanup resources."""
-        # Gemini doesn't have explicit client cleanup, but we call base
         await super().close()

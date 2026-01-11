@@ -845,6 +845,14 @@
     "file_made_translatable": "Übersetzbar gemacht: {filename}",
     "source_files_error": "Fehler bei der Verarbeitung der Quelldateien: {error}",
     "unren_starting": "Starte UnRen...",
+    "error_api_quota": "⚠️ API-Kontingent überschritten! Übersetzung wird gestoppt...",
+    "stage_translating": "🌐 Übersetzen...",
+    "stage_saving": "💾 Speichern...",
+    "stage_parsing": "🔍 Analysieren...",
+    "stage_unren": "🔓 UnRen wird ausgeführt...",
+    "stage_validating": "✅ Validieren...",
+    "stage_completed": "🎉 Fertig",
+    "stage_error": "❌ Fehler",
     "unren_downloading": "Lade UnRen herunter...",
     "unren_download_error": "Fehler beim Herunterladen von UnRen: {error}",
     "unren_scripts_not_found": "UnRen-Skripte nicht gefunden: {path}",
@@ -1173,5 +1181,7 @@
   "verbose_logging_label": "Ausführliches Logging",
   "verbose_logging_tooltip": " Alle Operationen detailliert protokollieren - nützlich zur Fehlerbehebung",
   "view_menu": "Ansicht",
-  "warning": "Warnung"
+  "warning": "Warnung",
+  "aggressive_retry": "Aggressive Übersetzung",
+  "aggressive_retry_desc": "Unveränderte Übersetzungen mit alternativen Methoden erneut versuchen (langsamer, aber gründlicher)"
 }

@@ -41,7 +41,7 @@ def extract_with_pyparsing(content: str, file_path: str = "") -> List[Dict]:
     )
 
     dialog_re = re.compile(
-        r'^(?P<char>[A-Za-z_]\w*)\s+(?P<quote>"(?:[^"\\]|\\.)*"|\'(?:[^\\\']|\\.)*\')'
+        r'^(?P<char>[A-Za-z_][\w\.]*)\s+(?P<quote>"(?:[^"\\]|\\.)*"|\'(?:[^\\\']|\\.)*\')'
     )
     narrator_re = re.compile(r'^(?P<quote>"(?:[^"\\]|\\.)*"|\'(?:[^\\\']|\\.)*\')')
     menu_choice_re = re.compile(
