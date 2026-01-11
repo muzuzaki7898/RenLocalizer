@@ -1,6 +1,6 @@
 # RenLocalizer 2.0
 
-![RenLocalizer Banner](https://raw.githubusercontent.com/Lord0fTurk/RenLocalizer/main/docs/banner.png)
+![RenLocalizer Banner](https://github.com/Lord0fTurk/RenLocalizer/blob/main/src/gui/fluent/resources/renlocalizer-banner-min.png)
 
 **Advanced Ren'Py Translator & Localizer**  
 *Professional-grade localization tool for Ren'Py visual novels, powered by AI and robust parsing.*
