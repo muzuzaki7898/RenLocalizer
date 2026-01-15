@@ -75,6 +75,7 @@ Download the latest release for your platform from the [Releases Page](https://g
    python run.py       # GUI Mode
    python run_cli.py   # CLI Mode
    ```
+Warning: If the source language, i.e., the original language of the game, is not English, select the original language of the game from the interface, not the automatic option. Otherwise, some texts may not be automatically detected by Google and may remain untranslated.
 
 ---
 
