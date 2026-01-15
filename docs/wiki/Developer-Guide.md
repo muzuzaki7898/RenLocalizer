@@ -1,38 +1,58 @@
-# Developer & Contributor Guide
+# 🛠️ Developer & Contributor Guide
 
-This guide is for developers who want to modify RenLocalizer or build their own extensions.
+This guide is for developers looking to modify RenLocalizer, add new features, or contribute to the core engine.
 
-## 🏗️ Project Structure
-- `src/core/`: The heart of the application.
-  - `translation_pipeline.py`: Coordinates the entire process.
-  - `parser.py`: The Regex-based extractor.
-  - `rpyc_reader.py`: The AST-based binary unpickler.
-- `src/gui/`: PyQt6-based interface components.
-- `src/utils/`: Common helpers, constants, and configuration logic.
-- `tools/`: Independent scripts for testing and debugging specific modules.
+---
 
-## 🧪 Testing with Tools
-Before submitting a PR, use the scripts in the `tools/` folder to verify changes:
-- `python tools/parser_smoke.py`: Tests the regex parser against common patterns.
-- `python tools/performance_test.py`: Benchmark translation speed.
-- `python tools/system_check.py`: Verifies current environment compatibility.
+## 🏗️ Project Architecture
+The project is split into logical components:
+
+*   📂 **`src/core/`**: The heart of the application.
+    *   `translation_pipeline.py`: Orchestrates the entire flow (Extract -> Parse -> Translate -> Save).
+    *   `parser.py`: The high-performance Regex extractor.
+    *   `rpyc_reader.py`: The binary unpickler for compiled scripts.
+*   📂 **`src/gui/`**: PyQt6-based interface and Fluent widgets.
+*   📂 **`src/utils/`**: Shared helpers, configuration manager, and constants.
+*   📂 **`tools/`**: Standalone scripts for testing and debugging.
+
+---
+
+## 🧪 Testing Your Changes
+Before submitting a PR, please run the following sanity checks:
+
+1.  **Parser Smoke Test:** `python tools/parser_smoke.py` (Tests common Ren'Py patterns).
+2.  **Performance Check:** `python tools/performance_test.py` (Benchmarking).
+3.  **Environment Check:** `python tools/system_check.py` (Verify library compatibility).
+
+---
 
 ## ➕ Adding a New Translation Engine
 1.  Inherit from `BaseTranslator` in `src/core/translator.py`.
 2.  Implement `translate_single` and `translate_batch`.
-3.  Add your engine to the factory in `src/core/translator.py`.
-4.  Update `src/gui/tl_translate_dialog.py` to include the new option.
+3.  Register your engine in the factory within `src/core/translator.py`.
+4.  Update the UI in `src/gui/tl_translate_dialog.py`.
 
-## 📦 Building Executables
-We use PyInstaller to create the Windows standalone versions.
+---
+
+## 📦 Building Standalone Executables
+We use **PyInstaller** for Windows distributions.
+
 ```bash
+# Install PyInstaller
 pip install pyinstaller
+
+# Build using the spec file (recommended)
 pyinstaller RenLocalizer.spec
 ```
-The `.spec` file is pre-configured to include all assets, locales, and necessary hidden imports.
+> 💡 **Note:** The `.spec` file handles all assets, locales, and hidden imports automatically.
 
-## 🗺️ Localization for RenLocalizer
-To add a new UI language:
-1.  Copy `locales/en.json` to `locales/YOUR_LANG.json`.
-2.  Translate all strings.
-3.  The app will automatically detect the new file on startup!
+---
+
+## 🗺️ UI Localization
+To add a new language to the RenLocalizer interface:
+1.  Copy `locales/en.json` to `locales/YOUR_CODE.json`.
+2.  Translate the strings.
+3.  Restart the app—it will be detected automatically!
+
+---
+> 🚩 **Issues:** Found a bug? [Report it here](https://github.com/Lord0fTurk/RenLocalizer/issues).

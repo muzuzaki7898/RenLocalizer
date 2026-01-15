@@ -43,8 +43,8 @@ pyinstaller RenLocalizer.spec --clean --noconfirm
 ### 3. Check Artifacts
 The build output will be in the `dist/` directory.
 - `dist/RenLocalizer/`: Contains the main executable and all dependencies (Folder/Onedir mode).
-  - `RenLocalizer.exe` (GUI)
-  - `RenLocalizerCLI.exe` (CLI)
+  - `RenLocalizer` (GUI)
+  - `RenLocalizerCLI` (CLI)
 
 > **Note:** We use "Onedir" mode (folder based) instead of "Onefile" to ensure faster startup times and better compatibility with external assets like `locales/` and `tools/`.
 

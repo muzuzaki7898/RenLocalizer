@@ -205,3 +205,12 @@ cython_debug/
 marimo/_static/
 marimo/_lsp/
 __marimo__/
+
+# RenLocalizer specific
+config.json
+config.json.bak
+pip_list.txt
+error_output.txt
+*.bak
+logs/
+*.log

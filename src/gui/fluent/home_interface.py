@@ -10,6 +10,7 @@ import os
 import logging
 import threading
 import asyncio
+import sys
 from pathlib import Path
 from typing import Optional
 
@@ -52,6 +53,13 @@ class HomeInterface(ScrollArea):
         self.translation_manager = TranslationManager(self.proxy_manager, self.config_manager)
         self._setup_translation_engines()
         
+        # Logging optimization
+        self.log_buffer = []
+        self.flush_timer = QTimer(self)
+        self.flush_timer.setInterval(500)  # Flush every 500ms (balanced)
+        self.flush_timer.timeout.connect(self._flush_logs)
+        self.flush_timer.start()
+        
         # Setup UI
         self.setObjectName("homeInterface")
         self.setWidgetResizable(True)
@@ -64,6 +72,9 @@ class HomeInterface(ScrollArea):
         
         self._init_ui()
         self.setWidget(self.scroll_widget)
+
+        # Limit log history size for performance (now safe as log_text is initialized)
+        self.log_text.document().setMaximumBlockCount(500)
 
     def _setup_translation_engines(self):
         """Setup available translation engines."""
@@ -128,16 +139,26 @@ class HomeInterface(ScrollArea):
         path_layout.setSpacing(10)
         
         self.exe_path_input = LineEdit()
-        self.exe_path_input.setPlaceholderText(
-            self.config_manager.get_ui_text("game_exe_placeholder", "Oyun EXE dosyasını seçin...")
-        )
+        if sys.platform == "win32":
+            placeholder = self.config_manager.get_ui_text("game_exe_placeholder", "Oyun EXE dosyasını seçin...")
+        elif sys.platform == "darwin":
+            placeholder = self.config_manager.get_ui_text("game_mac_placeholder", "Oyun paketini (.app) veya klasörü seçin...")
+        else:
+            placeholder = self.config_manager.get_ui_text("game_linux_placeholder", "Oyun dosyasını veya klasörü seçin...")
+            
+        self.exe_path_input.setPlaceholderText(placeholder)
         self.exe_path_input.setClearButtonEnabled(True)
         path_layout.addWidget(self.exe_path_input, 1)
         
         self.browse_button = PushButton(self.config_manager.get_ui_text("browse", "Gözat"))
-        self.browse_button.setIcon(FIF.FOLDER)
+        self.browse_button.setIcon(FIF.APPLICATION)
         self.browse_button.clicked.connect(self._browse_game_exe)
         path_layout.addWidget(self.browse_button)
+        
+        self.browse_folder_button = PushButton(self.config_manager.get_ui_text("browse_folder", "Klasör"))
+        self.browse_folder_button.setIcon(FIF.FOLDER)
+        self.browse_folder_button.clicked.connect(self._browse_game_folder)
+        path_layout.addWidget(self.browse_folder_button)
         
         card_layout.addLayout(path_layout)
         
@@ -167,9 +188,7 @@ class HomeInterface(ScrollArea):
         source_layout = QVBoxLayout()
         source_label = BodyLabel(self.config_manager.get_ui_text("source_lang_label", "Kaynak Dil"))
         self.source_lang_combo = ComboBox()
-        self.source_lang_combo.addItem(self.config_manager.get_ui_text("auto_detect", "Otomatik"), "auto")
-        self.source_lang_combo.addItem("English", "en")
-        self.source_lang_combo.addItem("Japanese", "ja")
+        self._populate_source_languages()
         source_layout.addWidget(source_label)
         source_layout.addWidget(self.source_lang_combo)
         settings_layout.addLayout(source_layout)
@@ -260,6 +279,15 @@ class HomeInterface(ScrollArea):
         
         self.scroll_layout.addWidget(card)
 
+    def _populate_source_languages(self):
+        """Populate source language combo box."""
+        self.source_lang_combo.clear()
+        self.source_lang_combo.addItem(self.config_manager.get_ui_text("auto_detect", "Auto Detect"), userData="auto")
+        
+        languages = self.config_manager.get_target_languages_for_ui()
+        for code, name in languages:
+            self.source_lang_combo.addItem(f"{name} ({code})", userData=code)
+
     def _populate_target_languages(self):
         """Populate target language combo box."""
         languages = self.config_manager.get_target_languages_for_ui()
@@ -296,25 +324,47 @@ class HomeInterface(ScrollArea):
             if self.parent_window:
                 self.parent_window.show_info_bar(
                     "warning",
-                    self.config_manager.get_ui_text("warning", "Uyarı"),
+                    self.config_manager.get_ui_text("warning", "Warning"),
                     self.config_manager.get_ui_text("ai_censorship_warning", 
-                        "⚠️ DİKKAT: Cinsel içerikler standart AI modellerinin filtrelerine takılabilir."),
+                        "⚠️ ATTENTION: Sexual content might be filtered by standard AI models."),
                     duration=9000,
                     position=InfoBarPosition.TOP_RIGHT
                 )
 
     def _browse_game_exe(self):
-        """Browse for game EXE file."""
+        """Browse for game EXE or binary file."""
+        if sys.platform == "win32":
+            file_filter = "Executable (*.exe);;All Files (*.*)"
+            title = self.config_manager.get_ui_text("select_game_exe_title", "Oyun EXE Dosyası Seç")
+        elif sys.platform == "darwin":
+            file_filter = "Mac Application (*.app);;Shell Script (*.sh);;All Files (*.*)"
+            title = self.config_manager.get_ui_text("select_game_mac_title", "Oyun Paketi Seç")
+        else:
+            file_filter = "Shell Script (*.sh);;Binary (*);;All Files (*.*)"
+            title = self.config_manager.get_ui_text("select_game_linux_title", "Oyun Dosyası Seç")
+
         file_path, _ = QFileDialog.getOpenFileName(
             self,
-            self.config_manager.get_ui_text("select_game_exe_title", "Oyun EXE Dosyası Seç"),
+            title,
             "",
-            "Executable (*.exe);;All Files (*.*)"
+            file_filter
         )
         
         if file_path:
             self.exe_path_input.setText(file_path)
             self._validate_game_path(file_path)
+
+    def _browse_game_folder(self):
+        """Browse for game project folder directly."""
+        dir_path = QFileDialog.getExistingDirectory(
+            self,
+            self.config_manager.get_ui_text("select_game_folder_title", "Oyun Klasörünü Seç"),
+            ""
+        )
+        
+        if dir_path:
+            self.exe_path_input.setText(dir_path)
+            self._validate_game_path(dir_path)
 
     def _validate_game_path(self, file_path: str):
         """Validate selected game path."""
@@ -333,12 +383,12 @@ class HomeInterface(ScrollArea):
             has_rpyc = self._has_files_in_dir(game_dir, '.rpyc')
             
             if has_rpy:
-                self._add_log("info", self.config_manager.get_ui_text("rpy_files_found", ".rpy dosyaları bulundu"))
+                self._add_log("info", self.config_manager.get_ui_text("rpy_files_found"))
             elif has_rpyc:
-                self._add_log("warning", self.config_manager.get_ui_text("only_rpyc_files", "Sadece .rpyc dosyaları var (UnRen gerekli)"))
+                self._add_log("warning", self.config_manager.get_ui_text("only_rpyc_files"))
         else:
-            self._add_log("error", self.config_manager.get_ui_text("game_folder_not_found", "❌ 'game' klasörü bulunamadı"))
-            self.game_status_label.setText("❌ " + self.config_manager.get_ui_text("game_folder_not_found", "game klasörü bulunamadı"))
+            self._add_log("error", self.config_manager.get_ui_text("game_folder_not_found"))
+            self.game_status_label.setText("❌ " + self.config_manager.get_ui_text("game_folder_not_found"))
         
         self.current_directory = Path(project_dir)
         
@@ -356,7 +406,11 @@ class HomeInterface(ScrollArea):
         return False
 
     def _add_log(self, level: str, message: str):
-        """Add log message to log area."""
+        """Add log message to log buffer. Drops debug logs to save UI performance."""
+        # Optimization: Drop debug logs in UI unless specifically needed for dev
+        if level == "debug":
+            return
+            
         color_map = {
             "info": "#17a2b8",
             "warning": "#ffc107",
@@ -364,7 +418,23 @@ class HomeInterface(ScrollArea):
             "success": "#28a745"
         }
         color = color_map.get(level, "#6c757d")
-        self.log_text.append(f'<span style="color:{color}">{message}</span>')
+        log_entry = f'<span style="color:{color}">{message}</span>'
+        self.log_buffer.append(log_entry)
+
+    def _flush_logs(self):
+        """Flush log buffer to the text edit widget."""
+        if not self.log_buffer:
+            return
+            
+        # Join all pending logs and append in one go
+        all_logs = '<br>'.join(self.log_buffer)
+        self.log_text.append(all_logs)
+        self.log_buffer.clear()
+        
+        # Ensure the cursor is at the end
+        cursor = self.log_text.textCursor()
+        cursor.movePosition(cursor.MoveOperation.End)
+        self.log_text.setTextCursor(cursor)
 
     def _start_translation(self):
         """Start the translation pipeline."""
@@ -521,7 +591,7 @@ class HomeInterface(ScrollArea):
     def _stop_translation(self):
         """Stop the translation pipeline."""
         if self.pipeline:
-            self._add_log("warning", self.config_manager.get_ui_text("stop_requested", "Durdurma istendi..."))
+            self._add_log("warning", self.config_manager.get_ui_text("stop_requested"))
             self.pipeline.stop()
             
             if self.pipeline_worker:
@@ -582,6 +652,9 @@ class HomeInterface(ScrollArea):
 
     def _on_pipeline_finished(self, result):
         """Handle pipeline completion."""
+        # Ensure final logs are shown
+        self._flush_logs()
+        
         self.start_button.setEnabled(True)
         self.stop_button.setEnabled(False)
         self.browse_button.setEnabled(True)
@@ -592,9 +665,9 @@ class HomeInterface(ScrollArea):
             
             if result.stats:
                 stats = result.stats
-                self._add_log("info", self.config_manager.get_ui_text("stats_total_info", "📊 Toplam: {count}").format(count=stats['total']))
-                self._add_log("info", self.config_manager.get_ui_text("stats_translated_info", "✅ Çevrilen: {count}").format(count=stats['translated']))
-                self._add_log("info", self.config_manager.get_ui_text("stats_untranslated_info", "⏳ Çevrilmeyen: {count}").format(count=stats['untranslated']))
+                self._add_log("info", self.config_manager.get_ui_text("stats_total_info").format(count=stats['total']))
+                self._add_log("info", self.config_manager.get_ui_text("stats_translated_info").format(count=stats['translated']))
+                self._add_log("info", self.config_manager.get_ui_text("stats_untranslated_info").format(count=stats['untranslated']))
             
             if result.output_path:
                 self._add_log("info", self.config_manager.get_ui_text("output_path_info", "📁 Çıktı: {path}").format(path=result.output_path))
@@ -610,7 +683,7 @@ class HomeInterface(ScrollArea):
             self._add_log("error", f"❌ {result.message}")
             
             if result.error:
-                self._add_log("error", self.config_manager.get_ui_text("detail_info", "Detay: {error}").format(error=result.error))
+                self._add_log("error", self.config_manager.get_ui_text("detail_info").format(error=result.error))
             
             # Show error InfoBar
             if self.parent_window:

@@ -1,28 +1,40 @@
-# Technical String Filtering
+# 🛡️ Technical String Filtering
 
-Ren'Py games contain a mix of dialogue, UI, and technical code. RenLocalizer uses a sophisticated filtering system to ensure only "human" text is translated.
+Ren'Py files are a mix of dialogue and technical code. To prevent breaking the game, RenLocalizer uses a multi-layered filtering system.
 
-## 🛡️ Placeholder Protection
-Ren'Py uses special syntax for variable interpolation and styling.
-- **Variables:** `[player_name]`, `[score]`, `[persistent.day]`
-- **Styling:** `{i}Text{/i}`, `{color=#f00}Alert{/color}`
-- **Ruby:** `{rb}kanji{/rb}{rt}kana{/rt}`
+---
 
-**How it works:**
-Before sending text to a translation engine (especially AI), RenLocalizer "protects" these segments by replacing them with unique technical tokens (e.g., `?V001?`). After translation, it precisely restores the original code.
+## 🔹 Placeholder Protection
+Ren'Py uses `[variables]` and `{tags}` for logic and styling.
+*   **Target:** `[player_name]`, `[persistent.day]`, `{b}Text{/b}`.
+*   **Mechanism:** Before translation, RenLocalizer replaces these with unique tokens (e.g., `?V001?`). After translation, it restores the exact original code.
 
-## 🎛️ Technical Keyword Filter
-The system automatically detects and skips internal Ren'Py keywords that look like strings but are actually code:
-- `renpy.dissolve`
-- `gui.text_font`
-- `config.name`
-- `persistent.unlocked`
+## 🔹 Technical Keyword Filter
+The system automatically skips internal Ren'Py keywords that might look like strings:
+*   `renpy.dissolve`
+*   `gui.text_font`
+*   `config.version`
+*   `persistent.save_slot`
 
-These are matched using a comprehensive heuristic engine that checks for common programming patterns, file paths, and known engine identifiers.
+## 🔹 Heuristic "Symbol Density"
+RenLocalizer analyzes the ratio of special symbols (dots, underscores, brackets) in a string.
+*   **Technical High Density:** `path.to.my_file[0]` (Skipped).
+*   **Human Low Density:** `Hello, how are you?` (Translated).
 
-## ⚙️ Custom Filters (Advanced)
-Starting in v2.4.10, the filter engine uses "Symbol Density" heuristics. If a string has an unusually high density of dots, underscores, or brackets, it is flagged as "Technical" and skipped to prevent corrupting the game's logic.
+---
 
-## ⚠️ Common Issues
-- **Unwanted Translation:** If a technical string *is* translated, add it to the [[Glossary-Management]] with the same Source and Target to protect it.
-- **Missing Translation:** If a menu item or button is missed, check if the corresponding "Filter" is enabled in the **Translation Settings** tab (e.g., "Translate Buttons", "Translate Notify").
+## ⚠️ Common Scenarios
+
+### **Unwanted Translation (False Positive)**
+If a piece of code *is* being translated when it shouldn't:
+1.  Open the **Glossary Editor**.
+2.  Add the code as both Source and Target (e.g., `sys_path` -> `sys_path`).
+3.  This protects it from the translation engine.
+
+### **Missing Translation (False Negative)**
+If a button or menu item is being ignored:
+1.  Check **Settings > Text Types**.
+2.  Ensure "Translate Buttons" or "Translate UI" is enabled.
+
+---
+> 💡 **Tip:** Use the **Deep Scan** feature for a much more thorough (but slower) AST-based scan of technical strings.

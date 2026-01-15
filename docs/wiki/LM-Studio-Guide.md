@@ -1,36 +1,53 @@
-# LM Studio Integration Guide
+# 🏥 LM Studio Integration Guide
 
-LM Studio is an excellent tool for running local LLMs with a user-friendly interface. This guide explains how to connect it to RenLocalizer safely.
+LM Studio allows you to run powerful Large Language Models **locally** on your computer. This guide explains how to connect it to RenLocalizer for 100% private and free translation.
 
-## 1. LM Studio Configuration
-1.  **Download & Install:** Get LM Studio from [lmstudio.ai](https://lmstudio.ai/).
-2.  **Download a Model:** We recommend **Qwen 2.5 7B Instruct** or **Llama 3.1 8B Instruct**.
+---
+
+## 🔹 1. Setup LM Studio
+1.  **Download:** Get LM Studio from [lmstudio.ai](https://lmstudio.ai/).
+2.  **Download a Model:** Look for **"Instruct"** versions of:
+    *   `Qwen 2.5 7B Instruct` (Highly recommended for speed/quality).
+    *   `Llama 3.1 8B Instruct`.
 3.  **Start the Server:**
-    - Click the **Local Server** icon (the double-headed arrow) on the left sidebar.
-    - Select your model and click **Start Server**.
-    - Take note of the port. By default, LM Studio uses **1234**.
+    *   Click the **Local Server** icon (↔️) on the left sidebar.
+    *   Load your model.
+    *   Click **Start Server**.
+    *   Verify the port (default is usually **1234**).
 
-## 2. RenLocalizer Setup
-Open RenLocalizer Settings and apply these values:
+---
 
-- **Translation Engine:** Local LLM
-- **API Key:** `local` (LM Studio doesn't require a real key)
-- **Base URL:** `http://localhost:1234/v1` (Make sure to include `/v1`!)
-- **Model Name:** Enter the exact ID shown in LM Studio (e.g., `qwen2.5-7b-instruct`)
+## 🔹 2. Connect RenLocalizer
+In the RenLocalizer **Settings** tab:
 
-## 3. Optimization for Qwen Models
-Qwen is highly effective at following syntax instructions. To get the best results:
+*   **Provider:** `Local LLM`
+*   **API Key:** `local` (any text works).
+*   **Base URL:** `http://localhost:1234/v1` (**Crucial:** Must end with `/v1`).
+*   **Model Name:** Copy the exact ID from LM Studio (e.g., `qwen2.5-7b-instruct`).
 
-- **Temperature:** Set to **0.2** or **0.3**.
-- **Max Batch Size:** Start with **5**. If your GPU has more than 12GB VRAM, you can try **10**.
-- **System Prompt:** Ensure the default localized system prompt is used. It contains critical instructions about preserving `[variables]` and `{tags}`.
+---
 
-## 4. Common Troubleshooting
-- **Connection Refused:** Ensure the server is actually "Started" in LM Studio. Check if a firewall is blocking port 1234.
-- **Garbage Output:** Make sure you are using an "Instruct" or "Chat" version of the model, not a "Base" model.
-- **Speed Issues:** Ensure "GPU Offload" is enabled in LM Studio settings to use your graphics card instead of your CPU.
+## 🔹 3. Optimization Tips
 
-## Why use LM Studio?
-- **100% Offline:** No data leaves your computer.
-- **No Limits:** No API quotas or monthly fees.
-- **Censorship Free:** Unlike Gemini or OpenAI, you can translate any content as long as the model allows it.
+| Tip | Reasoning |
+| :--- | :--- |
+| **GPU Offload** | Enable this in LM Studio to use your Graphics Card (much faster than CPU). |
+| **Temperature 0.3** | Keeps translations consistent and less "random". |
+| **Batch Size 5** | Prevents the local model from losing context. |
+
+---
+
+## ❓ Troubleshooting
+*   **Connection Refused:** Check if LM Studio's server is "Started". Ensure no other app is using port 1234.
+*   **Gibberish Output:** Ensure you downloaded an **"Instruct"** model, not a "Base" model.
+*   **Slow Speed:** Increase "GPU Offload" layers in LM Studio if you have enough VRAM.
+
+---
+
+## 🌟 Why use LM Studio?
+*   ✅ **Privacy:** No data is sent to the internet.
+*   ✅ **Uncensored:** Local models won't refuse to translate "spicy" game content.
+*   ✅ **Cost:** Forever free.
+
+---
+> 🔗 **Learn More:** Check out the [[AI-Engines]] guide for other providers.

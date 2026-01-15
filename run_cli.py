@@ -20,6 +20,10 @@ except Exception:
 
 def setup_environment() -> None:
     """Setup environment variables and paths."""
+    # Suppress noisy Qt font and debug warnings (Script 20/OpenType issues)
+    if "QT_LOGGING_RULES" not in os.environ:
+        os.environ["QT_LOGGING_RULES"] = "qt.qpa.fonts=false;qt.text.font.db=false;*.debug=false"
+
     # Add project root to Python path
     project_root = Path(__file__).parent
     if str(project_root) not in sys.path:

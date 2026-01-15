@@ -99,6 +99,29 @@ class RenPyOutputFormatter:
         # Common technical single words
         'idle', 'hover', 'focus', 'insensitive', 'selected_idle',
         'selected_hover', 'selected_focus', 'selected_insensitive',
+        # Transitions & Motion
+        'dissolve', 'fade', 'pixellate', 'move', 'moveinright', 'moveoutright',
+        'moveinleft', 'moveoutleft', 'moveintop', 'moveouttop', 'moveinbottom', 'moveoutbottom',
+        'inright', 'inleft', 'intop', 'inbottom', 'outright', 'outleft', 'outtop', 'outbottom',
+        'wiperight', 'wipeleft', 'wipeup', 'wipedown',
+        'slideright', 'slideleft', 'slideup', 'slidedown',
+        'slideawayright', 'slideawayleft', 'slideawayup', 'slideawaydown',
+        'irisout', 'irisin', 'pushright', 'pushleft', 'pushup', 'pushdown',
+        'zoom', 'alpha', 'xalign', 'yalign', 'xpos', 'ypos', 'xanchor', 'yanchor',
+        'xzoom', 'yzoom', 'rotate', 'around', 'align', 'pos', 'anchor',
+        'rgba', 'rgb', 'hex', 'matrix', 'linear', 'ease', 'easein', 'easeout',
+        # Engine Keywords
+        'ascii', 'eval', 'exec', 'latin', 'western', 'greedy', 'freetype',
+        'narrator', 'fixed', 'grid', 'viewport', 'vpgrid', 'canvas',
+        # Added from Research
+        'layeredimage', 'transform', 'camera', 'expression', 'assert',
+        'hotspot', 'hotbar', 'areapicker', 'drag', 'draggroup', 'showif',
+        'after_load', 'after_warp', 'before_main_menu', 'splashscreen',
+        'config', 'preferences', 'gui', 'style', 'persistent',
+        'kerning', 'line_leading', 'outlines', 'antialias', 'hinting',
+        'vscroller', 'hscroller', 'viewport', 'button', 'input',
+        'zsync', 'zsyncmake', 'rpu', 'ecdsa', 'rsa', 'bbcode', 'markdown',
+        'utf8', 'latin1', 'ascii'
     }
     
     # Pre-compiled regex patterns for performance (class-level caching)
@@ -143,6 +166,153 @@ class RenPyOutputFormatter:
         # These are commonly found in renpy/common scripts and must never be translated.
         if re.search(r'\\x[0-9a-fA-F]{2}|(?:\(\?\:|\(\?P<|\[@-Z\\-_\]|\[0-\?\]\*|\[ -/\]\*|\[@-~\])', text_lower):
              return True
+        
+        # Skip underscore prefixes (internal variables)
+        if text_strip.startswith('_') and ' ' not in text_strip:
+            return True
+        
+        # Skip internal file indices (starting with 00)
+        if text_strip.startswith('00') and not any(ch.isalpha() for ch in text_strip[:5]):
+            return True
+        
+        # Shader/GLSL check
+        if re.search(r'\b(?:uniform|attribute|varying|vec[234]|mat[234]|gl_FragColor|sampler2D|gl_Position|texture2D|v_tex_coord|a_tex_coord|a_position|u_transform|u_lod_bias)\b', text):
+            return True
+        
+        # --- PYTHON CODE / DOCSTRING DETECTION ---
+        # Skip strings containing Python code patterns (commonly from docstrings)
+        # These cause critical game-breaking issues when translated
+        python_code_patterns = [
+            r'\bdef\s+\w+\s*\(',           # Function definitions: def foo(
+            r'\bclass\s+\w+\s*[:\(]',      # Class definitions: class Foo:
+            r'\bfor\s+\w+\s+in\s+',        # For loops: for x in
+            r'\bif\s+\w+\s+in\s+\w+:',     # If in checks: if key in km:
+            r'\bimport\s+\w+',              # Import statements
+            r'\bfrom\s+\w+\s+import',       # From imports
+            r'\breturn\s+\w+',              # Return statements
+            r'\braise\s+\w+',               # Raise exceptions
+            r'\btry\s*:',                   # Try blocks
+            r'\bexcept\s+\w*:',             # Except blocks
+            r'\bwhile\s+\w+',               # While loops
+            r'\blambda\s+\w*:',             # Lambda functions
+            r'\bwith\s+\w+\s+as\s+',        # With statements
+            r'renpy\.\w+\.\w+',             # Ren'Py module calls: renpy.store.x
+            r'renpy\.\w+\(',                # Ren'Py function calls: renpy.block_rollback()
+            r'_\w+\[',                      # Internal dict access: _saved_keymap[key]
+            r'\w+\s*=\s*\[',                # List assignment: x = [
+            r'\w+\s*=\s*\{',                # Dict assignment: x = {
+            r'\w+\s*=\s*True\b',            # Boolean assignment with True
+            r'\w+\s*=\s*False\b',           # Boolean assignment with False
+            r'\w+\s*=\s*None\b',            # None assignment
+        ]
+        for pattern in python_code_patterns:
+            if re.search(pattern, text_strip):
+                return True
+        
+        # --- STRING CONCATENATION / CODE EXPRESSIONS ---
+        # Skip strings that are Python string concatenation or code expressions
+        # e.g., "inventory/"+i.img+".png", "ui/" + l + "_quest_select.png"
+        if re.search(r'"\s*\+\s*\w+\s*\+\s*"', text_strip):  # "xxx" + var + "xxx"
+            return True
+        if re.search(r'\w+\.\w+\s*\+', text_strip):  # object.attr +
+            return True
+        
+        # --- PYTHON BUILT-IN FUNCTION CALLS ---
+        # Skip strings containing Python function calls like str(), int(), len()
+        # v2.5.0: Now smarter - if the string is long and has spaces, it's likely a quest text
+        # we only skip short technical strings like "image_"+str(i)+".png"
+        python_builtin_calls = [
+            r'\bstr\s*\(', r'\bint\s*\(', r'\bfloat\s*\(', r'\blen\s*\(',
+            r'\blist\s*\(', r'\bdict\s*\(', r'\btuple\s*\(', r'\bset\s*\(',
+            r'\babs\s*\(', r'\bmin\s*\(', r'\bmax\s*\(', r'\bround\s*\(',
+            r'\brange\s*\(', r'\bformat\s*\(', r'\brepr\s*\(', r'\bord\s*\(', r'\bchr\s*\('
+        ]
+        if len(text_strip) < 80 or ' ' not in text_strip.strip():
+            for pattern in python_builtin_calls:
+                if re.search(pattern, text_strip):
+                    return True
+        
+        # --- FILE PATH PATTERNS WITH VARIABLES ---
+        # Skip strings that look like path templates with string concatenation
+        # e.g., "minigame/dice_"+str(one)+".png", "images/"+name+".jpg"
+        if re.search(r'["\']?[\w/]+["\']?\s*\+\s*\w+', text_strip):
+            return True
+        
+        # --- RENPY-ONLY MARKUP STRINGS (no translatable content) ---
+        # Skip strings that are ONLY Ren'Py tags/variables with no actual text
+        # e.g., "[quest[char][event_char]]", "{b}Morning{/b} : [schedule[char][0]]"
+        stripped_of_tags = self._TAG_RE.sub('', text_strip)
+        stripped_of_vars = self._VARIABLE_RE.sub('', stripped_of_tags)
+        stripped_of_markup = stripped_of_vars.strip()
+        # If after removing all tags/vars, only punctuation/numbers/spaces remain, skip
+        if stripped_of_markup and not re.search(r'[a-zA-Z\u00C0-\u024F\u0400-\u04FF\u4E00-\u9FFF\u3040-\u30FF\uAC00-\uD7AF]{2,}', stripped_of_markup):
+            return True
+        
+        # --- SINGLE TECHNICAL WORDS ---
+        # Skip very short strings that are likely technical identifiers
+        # e.g., "img", "id", "name" (without context)
+        if len(text_strip) <= 4 and text_strip.isalpha() and text_strip.islower():
+            if text_strip in {'img', 'id', 'name', 'type', 'key', 'val', 'var', 'str', 'int', 'len', 'max', 'min', 'sum', 'map', 'set', 'get', 'put', 'add', 'del', 'pop', 'all', 'any', 'obj', 'src', 'dst', 'pos', 'neg', 'abs', 'ord', 'chr', 'hex', 'oct', 'bin', 'dir', 'cls', 'fmt', 'arg', 'opt', 'cfg', 'env', 'tmp', 'msg', 'err', 'log', 'dbg', 'idx', 'ptr', 'buf', 'ctx', 'ref'}:
+                return True
+            
+        # Command line arguments
+        if re.match(r'^--?[a-z0-9_\-]+$', text_strip):
+            return True
+            
+        # Gibberish / Binary / Encrypted String Detection (Safety Net)
+        # CRITICAL: Detect corrupted strings from .rpyc files
+        
+        # CHECK 1: Replacement character and common corruption indicators
+        if '\ufffd' in text_strip:  # Unicode replacement character
+            return True
+        
+        # CHECK 2: Private Use Area characters (typically from binary corruption)
+        # These are characters in ranges that should never appear in normal text
+        if re.search(r'[\uE000-\uF8FF\uFFF0-\uFFFF]', text_strip):
+            return True
+        
+        # CHECK 3: Control characters (except common whitespace)
+        # Characters 0x00-0x1F (except tab, newline, carriage return) and 0x7F-0x9F
+        if re.search(r'[\x00-\x08\x0B\x0C\x0E-\x1F\x7F-\x9F]', text_strip):
+            return True
+        
+        # CHECK 4: High ratio of non-printable or unusual characters
+        # This catches strings like "���/Tė", "|d�T", "�iYME�."
+        # Allowed character ranges:
+        # - Basic ASCII printable: \x20-\x7E
+        # - Extended Latin: \u00A0-\u00FF
+        # - Cyrillic: \u0400-\u04FF
+        # - CJK: \u4E00-\u9FFF
+        # - Japanese: \u3040-\u30FF
+        # - Korean: \uAC00-\uD7AF
+        # - Common punctuation and symbols
+        strange_chars = len(re.findall(r'[^\x20-\x7E\s\u00A0-\u00FF\u0100-\u024F\u0400-\u04FF\u4E00-\u9FFF\u3040-\u30FF\uAC00-\uD7AF]', text_strip))
+        
+        # If more than 30% strange characters, it's likely corrupted
+        if len(text_strip) > 0 and strange_chars > len(text_strip) * 0.3:
+            return True
+        
+        # CHECK 5: Strings with very few alphabetic characters
+        if len(text_strip) > 3:
+            alpha_count = sum(1 for ch in text_strip if ch.isalpha())
+            # If less than 20% alphabetic and string is longer than 5 chars, likely binary
+            if alpha_count < len(text_strip) * 0.2 and len(text_strip) > 5:
+                return True
+            # Low alpha ratio + high character variety = likely random/binary data
+            if alpha_count < len(text_strip) * 0.4:
+                unique_chars = len(set(text_strip))
+                if unique_chars > len(text_strip) * 0.7:
+                    return True
+            
+        # CHECK 6: Detect specific patterns of rpyc corruption
+        # Strings like "z�X�", "qu�p��", "@Bq#8W" - random looking with special chars
+        if len(text_strip) >= 3 and len(text_strip) <= 15:
+            # Count unusual character sequences
+            unusual_sequences = len(re.findall(r'[^\x20-\x7E]', text_strip))
+            ascii_letters = len(re.findall(r'[a-zA-Z]', text_strip))
+            # If we have unusual chars and very few letters, skip
+            if unusual_sequences >= 1 and ascii_letters <= 3:
+                return True
         
         # Heuristic: If string is long and has high punctuation/symbol density, it's likely code/regex
         if len(text_strip) > 20:
@@ -213,6 +383,18 @@ class RenPyOutputFormatter:
 
         # Skip angled placeholder markers like ⟦V000⟧
         if self._ANGLE_PLACEHOLDER_RE.search(text_strip):
+            return True
+
+        # Skip strings that are likely file system patterns or technical globs
+        if '*' in text_strip and ('/' in text_strip or '\\' in text_strip):
+            return True
+        if re.search(r'\*\*?/\*\*?', text_strip):
+            return True
+            
+        # Skip module.attribute references (stricter: multiple dots or technical prefixes)
+        if re.match(r'^[A-Za-z_]\w*(?:\.[A-Za-z_]\w*)+$', text_strip):
+            return True
+        if text_lower.startswith(('renpy.', 'config.', 'gui.', '_.')):
             return True
 
         # Skip question-mark placeholders like ?V000? ?T000?

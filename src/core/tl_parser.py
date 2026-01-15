@@ -14,6 +14,7 @@ import os
 import re
 import logging
 import hashlib
+import time
 from typing import List, Dict, Tuple, Optional
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -152,6 +153,8 @@ class TLParser:
             # handles common C/Python-style escapes. If it fails, fall back
             # to simpler replacements below.
             try:
+                # v2.5.1: More robust normalization for ID stability
+                source_text = source_text.replace('\\\\', '\\').replace('\\"', '"').replace("\\'", "'")
                 source_text = bytes(source_text, 'utf-8').decode('unicode_escape')
             except Exception:
                 pass
@@ -456,13 +459,17 @@ class TLParser:
         
         files = []
         
-        for root, dirs, filenames in os.walk(lang_dir):
+        for i, (root, dirs, filenames) in enumerate(os.walk(lang_dir)):
             for filename in filenames:
                 if filename.endswith('.rpy'):
                     file_path = os.path.join(root, filename)
                     tl_file = self.parse_file(file_path)
                     if tl_file:
                         files.append(tl_file)
+            
+            # Yield every few directories/files
+            if i % 10 == 0:
+                time.sleep(0.001)
         
         self.logger.info(f"Toplam {len(files)} dosya parse edildi: {lang_dir}")
         

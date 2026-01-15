@@ -209,13 +209,11 @@ class FluentMainWindow(FluentWindow):
         from .tools_interface import ToolsInterface
         from .settings_interface import SettingsInterface
         from .about_interface import AboutInterface
-        from .info_interface import InfoInterface
         
         # Create interface instances
         self.home_interface = HomeInterface(self.config_manager, self)
         self.tools_interface = ToolsInterface(self.config_manager, self)
         self.settings_interface = SettingsInterface(self.config_manager, self)
-        self.info_interface = InfoInterface(self.config_manager, self)
         self.about_interface = AboutInterface(self.config_manager, self)
         
         # Connect signals between interfaces
@@ -244,13 +242,6 @@ class FluentMainWindow(FluentWindow):
             self.config_manager.get_ui_text("nav_settings", "Ayarlar")
         )
 
-        # Add Info Center (between Settings and bottom items)
-        self.addSubInterface(
-            self.info_interface,
-            FIF.BOOK_SHELF,
-            self.config_manager.get_ui_text("nav_info_center", "Bilgi Merkezi")
-        )
-        
         # Add separator before bottom items
         self.navigationInterface.addSeparator()
         
@@ -264,12 +255,33 @@ class FluentMainWindow(FluentWindow):
             position=NavigationItemPosition.BOTTOM
         )
         
+        # Add Wiki button
+        self.navigationInterface.addItem(
+            routeKey='wiki',
+            icon=FIF.LIBRARY,
+            text=self.config_manager.get_ui_text("nav_wiki", "Wiki"),
+            onClick=self._open_wiki,
+            selectable=False,
+            position=NavigationItemPosition.BOTTOM
+        )
+        
         # Add about at bottom
         self.addSubInterface(
             self.about_interface,
             FIF.INFO,
             self.config_manager.get_ui_text("nav_about", "Hakkında"),
             position=NavigationItemPosition.BOTTOM
+        )
+
+    def _open_wiki(self):
+        """Open the Wiki URL."""
+        wiki_url = "https://github.com/Lord0fTurk/RenLocalizer/wiki"
+        QDesktopServices.openUrl(QUrl(wiki_url))
+        self.show_info_bar(
+            "info",
+            self.config_manager.get_ui_text("opening_link", "Bağlantı Açılıyor"),
+            f"Wiki: {wiki_url}",
+            duration=2000
         )
 
     def _open_patreon(self):
@@ -312,8 +324,8 @@ class FluentMainWindow(FluentWindow):
                 if is_manual:
                     self.show_info_bar(
                         "error",
-                        self.config_manager.get_ui_text("error", "Hata"),
-                        self.config_manager.get_ui_text("update_check_unavailable", "Güncelleme kontrolü şu anda kullanılamıyor.")
+                        self.config_manager.get_ui_text("error"),
+                        self.config_manager.get_ui_text("update_check_unavailable")
                     )
                 return
 
@@ -322,8 +334,8 @@ class FluentMainWindow(FluentWindow):
                 if is_manual:
                     self.show_info_bar(
                         "error",
-                        self.config_manager.get_ui_text("error", "Hata"),
-                        self.config_manager.get_ui_text("update_check_failed", "Güncelleme kontrolü başarısız: {error}").format(error=result.error)
+                        self.config_manager.get_ui_text("error"),
+                        self.config_manager.get_ui_text("update_check_failed").format(error=result.error)
                     )
                 return
 
@@ -333,8 +345,8 @@ class FluentMainWindow(FluentWindow):
                 # Show only QMessageBox (no overlapping InfoBar)
                 reply = QMessageBox.information(
                     self,
-                    self.config_manager.get_ui_text("update_available_title", "Update Available"),
-                    self.config_manager.get_ui_text("update_available_message", "A new version {latest} is available (current: {current}). Download now?").format(latest=result.latest_version, current=VERSION),
+                    self.config_manager.get_ui_text("update_available_title"),
+                    self.config_manager.get_ui_text("update_available_message").format(latest=result.latest_version, current=VERSION),
                     QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
                 )
                 
@@ -346,8 +358,8 @@ class FluentMainWindow(FluentWindow):
                 if is_manual:
                     self.show_info_bar(
                         "success",
-                        self.config_manager.get_ui_text("success", "Başarılı"),
-                        self.config_manager.get_ui_text("update_up_to_date", "Güncelsiniz (v{current})").format(current=VERSION)
+                        self.config_manager.get_ui_text("success"),
+                        self.config_manager.get_ui_text("update_up_to_date").format(current=VERSION)
                     )
         except Exception as e:
             self.logger.error(f"Error handling update check result: {e}")

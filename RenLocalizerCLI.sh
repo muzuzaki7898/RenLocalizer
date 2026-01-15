@@ -1,6 +1,6 @@
 #!/bin/bash
 # RenLocalizer CLI Launcher for Linux/Mac
-# Version: 2.4.3
+# Version: 2.5.0
 
 set -e  # Exit on error
 

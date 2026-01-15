@@ -929,7 +929,7 @@ def main() -> int:
     if mode == "auto":
         # Heuristic detection
         if is_exe_file:
-            mode = "full" if is_windows else "translate"
+            mode = "full"
         elif is_renpy_project:
             # Directory with game/ subfolder - use full mode for RPA extraction
             mode = "full"
@@ -950,13 +950,14 @@ def main() -> int:
             print("Note: EXE file provided with 'translate' mode. Switching to 'full' mode.")
             mode = "full"
         else:
-            print("Error: EXE files require 'full' mode which is only available on Windows.")
-            print("Please extract the game files first and provide the game folder path.")
-            return 1
+            if not is_windows and is_exe_file:
+                print("Note: EXE file detected. Attempting extraction via Unrpa (cross-platform).")
+                mode = "full"
             
     if mode == "full" and not is_windows:
-        print("Warning: 'full' mode (UnRen) is only supported on Windows. Switching to 'translate' mode.")
-        mode = "translate"
+        # We now support Unrpa on Linux/Mac too
+        pass
+        # mode = "translate" (deleted)
         
     print(f"RenLocalizer CLI v{VERSION}")
     print(f"Input: {input_path}")

@@ -27,10 +27,13 @@ def extract_with_pyparsing(content: str, file_path: str = "") -> List[Dict]:
 
     entries: List[Dict] = []
 
+    # v2.5.0: "default " removed from TECHNICAL_PREFIXES
+    # because default dict/list literals may contain translatable strings
+    # e.g., default quest = {"anna": ["Start by helping her..."]}
     TECHNICAL_PREFIXES = (
         "image ",
         "define ",
-        "default ",
+        # "default ",  # Removed - needs special handling for dict/list content
         "transform ",
         "style ",
         "config.",
@@ -99,17 +102,48 @@ def extract_with_pyparsing(content: str, file_path: str = "") -> List[Dict]:
             text = text.replace(k, v)
         return text
 
-    # Satır devamı (\) birleştirme
+    # Satır devamı (\) ve parantez içi birleştirme
     logical_lines = []
     buffer = ""
+    paren_depth = 0
+    
     for line in content.splitlines():
+        # Strip comments for depth counting purposes only
+        clean_line = re.sub(r'#.*$', '', line).strip()
+        
+        # Count opener/closer balance
+        openers = clean_line.count('(') + clean_line.count('[') + clean_line.count('{') 
+        closers = clean_line.count(')') + clean_line.count(']') + clean_line.count('}')
+        
+        # Don't count quoted chars (simple approximation)
+        # Detailed quoted string suppression is complex without full lexer, 
+        # but basic depth check handles 95% of cases correctly.
+        
         if line.rstrip().endswith("\\"):
             buffer += line.rstrip()[:-1] + " "
             continue
-        if buffer:
-            line = buffer + line
-            buffer = ""
+            
+        # Check if we are inside a data structure
+        new_depth = paren_depth + openers - closers
+        
+        # If we have unbalanced parens or existing buffer, accumulate
+        if paren_depth > 0 or buffer:
+            buffer += line + "\n" # Keep newline for multi-line strings
+            paren_depth = new_depth
+            if paren_depth <= 0:
+                # End of structure
+                logical_lines.append(buffer)
+                buffer = ""
+                paren_depth = 0
+            continue
+            
+        if new_depth > 0:
+            buffer = line + "\n"
+            paren_depth = new_depth
+            continue
+
         logical_lines.append(line)
+        
     if buffer:
         logical_lines.append(buffer)
 
@@ -158,6 +192,67 @@ def extract_with_pyparsing(content: str, file_path: str = "") -> List[Dict]:
             stripped.startswith(p) for p in TECHNICAL_PREFIXES
         ):
             continue
+
+        # --- v2.5.0: Extract strings from default dict/list literals and loose strings ---
+        # Handles: default quest = {"anna": ["Start by helping...", ...]}
+        # Also handles lines inside brackets: "Start by helping her..."
+        
+        # v2.5.1: More robust string literal regex to avoid escaping issues
+        default_strings_re = re.compile(r'(?<!\\)(?:"(?:[^"\\]|\\.)*"|\'(?:[^\'\\]|\\.)*\')')
+        
+        if stripped.startswith("default ") or not re.match(r'^[a-zA-Z_]', stripped):
+            found_any = False
+            # Check Character definitions - skip these as they are usually handled by dialogue/character regex
+            if 'Character(' in stripped or 'Character (' in stripped:
+                pass
+            elif re.match(r'^default\s+\w+\s*=\s*(?:True|False|None|\d+|[\d.]+)\s*$', stripped):
+                pass
+            else:
+                for sm in default_strings_re.finditer(stripped):
+                    q = sm.group(0)
+                    # Safe stripping of quotes
+                    if len(q) < 2: continue
+                    text_content = q[1:-1]
+                    
+                    # Basic filters
+                    if not text_content or len(text_content.strip()) < 2:
+                        continue
+                        
+                    if re.match(r'^[a-zA-Z0-9_/\\.-]+\.(png|jpg|mp3|ogg|rpy|rpyc|webp|gif)$', text_content, re.I):
+                        continue
+                        
+                    # Skip internal Ren'Py paths or technical IDs
+                    if text_content.islower() and len(text_content) < 15 and ' ' not in text_content and not text_content.startswith('{'):
+                        continue
+                    
+                    # Meaningful alphabetic content check
+                    cleaned = re.sub(r'(\[[^\]]+\]|\{[^}]+\}|\\n)', '', text_content).strip()
+                    if len(cleaned) < 2 and '{' not in text_content:
+                        continue
+                        
+                    if not any(ch.isalpha() for ch in cleaned) and '{' not in text_content:
+                        continue
+                    
+                    # protect_placeholders handles internal [var] and {tag}
+                    protected, ph = protect_placeholders(text_content)
+                    entries.append(
+                        {
+                            "text": restore_placeholders(protected, ph),
+                            "raw_text": q,
+                            "line_number": idx + 1,
+                            "context_line": line,
+                            "text_type": "data_string",
+                            "file_path": file_path,
+                            "context_path": current_context_path(),
+                        }
+                    )
+                    found_any = True
+                
+                # If it was a 'default' line, we must stop here to avoid falling into dialogue/narrator logic
+                # which often misinterprets technical assignments.
+                if stripped.startswith("default ") or (found_any and not re.match(r'^[a-zA-Z_]', stripped)):
+                    continue
+        # --- End data string handling ---
 
         # Skip translate blocks (already translated content) - v2.4.1
         if stripped.startswith("translate "):

@@ -1,35 +1,55 @@
-# Troubleshooting & FAQ
+# 🆘 Troubleshooting & FAQ
 
-Most issues in RenLocalizer can be resolved by checking the logs or the diagnostic tool.
+Most issues in RenLocalizer can be resolved by checking the logs or the diagnostic tools. Here are the most common solutions.
 
-## 🆘 Common Errors
+---
+
+## 🚩 Common Errors
 
 ### 1. "No translatable texts found"
-- **Cause:** The game might be using obfuscated RPYC files without source RPY files.
-- **Solution:** Enable **RPYC Reader** in Settings. This will read the binary bytecode directly.
+*   **Cause:** The game uses compiled RPYC files only.
+*   **Solution:** Enable **RPYC Reader** in Settings to extract text directly from binary bytecode.
 
 ### 2. "Already exists" errors in Ren'Py
-- **Cause:** RenLocalizer might have accidentally scanned the `tl/` directory and created "Translation of a Translation."
-- **Solution:** Version 2.4.10+ automatically excludes the `tl/` folder. Ensure you are on the latest version and delete any duplicate `.rpy` files in your `game/tl/` directory.
+*   **Cause:** Duplicate translation definitions (scanning the `tl/` folder twice).
+*   **Solution:** Delete the `game/tl/` folder and re-run the translation. Ensure you are on v2.4.10+, which has an automatic exclusion filter.
 
-### 3. "AI Safety Filter" (Gemini/OpenAI)
-- **Cause:** The game contains adult, violent, or "unsafe" content that the default AI filter blocks.
-- **Solution:** 
-  - For Gemini: Set Safety Level to `BLOCK_NONE`.
-  - For OpenAI: Use an "Uncensored" model via OpenRouter.
-  - Or use a **Local LLM** which has no built-in filters.
+### 3. AI Safety Filter Blocks (Gemini/GPT)
+*   **Cause:** Content safety policies of the provider.
+*   **Solution:** 
+    *   Set Gemini Safety to `BLOCK_NONE`.
+    *   Use a **Local LLM** (No filters).
+    *   Use **OpenRouter** with an "Uncensored" model.
 
-### 4. Broken characters (Mojibake)
-- **Cause:** Source files use a legacy or non-UTF8 encoding (like Shift-JIS or Windows-1254).
-- **Solution:** RenLocalizer automatically attempts to normalize encodings. If it fails, open the file in Notepad++ and manually convert it to **UTF-8 with BOM**.
+### 4. Broken characters / Mojibake
+*   **Cause:** Original files aren't UTF-8 (Common in Japanese/Russian games).
+*   **Solution:** RenLocalizer tries to fix this automatically. If it fails, open the file in **Notepad++** and "Convert to UTF-8 with BOM" manually.
 
-## 🔍 How to Debug
-If you experience a crash:
-1.  Check the **Console** (if running from source) or the **Log Panel** in the GUI.
-2.  Open **`error_output.txt`** in the project root. It contains the full traceback of the error.
-3.  Run **Tools > Project Health Check**. It will scan your game folder for missing files or invalid paths.
+### 5. Some strings (Quests/Menus) are still in English
+*   **Cause:** The game code uses dynamic variables without translation flags (`!t`).
+*   **Solution:** Enable **Force Runtime Translation** in Settings. This will dynamically translate these strings while the game is running.
+
+---
+
+## 🔍 How to Debug a Crash
+If the app closes or throws a fatal error:
+
+1.  **Check the Console:** (If running from source) View real-time error messages.
+2.  **View `error_output.txt`:** This file in the root folder contains the full technical "Traceback".
+3.  **Run Health Check:** Go to **Tools > Project Health Check** to scan for missing dependencies or invalid paths.
+
+---
 
 ## ❔ FAQ
-- **Q: Does it work with Ren'Py 6?** Yes, but RPYC/RPYMC support is optimized for Ren'Py 7.x and 8.x.
-- **Q: Can I translate APKs?** Not directly. You must first extract the APK (as it's just a ZIP file) and point RenLocalizer to the extracted folder.
-- **Q: How do I update?** Just download the new version and replace the old files. Your `config.json` is safe to keep.
+
+*   **Q: Does it work with Ren'Py 6?** 
+    *   A: Yes, but some advanced features like the RPYC Reader are optimized for Ren'Py 7/8.
+*   **Q: Can I translate APKs?** 
+    *   A: Not directly. Extract the APK using 7-Zip/WinRAR first, translate the folder, and re-pack.
+*   **Q: How do I update?** 
+    *   A: Replace the old files with the new ones. Your **`config.json`** is safe to keep.
+*   **Q: Is it free?**
+    *   A: Yes! RenLocalizer is open-source (GPL-3.0).
+
+---
+> 🚩 **Still Stuck?** [Open an issue on GitHub](https://github.com/Lord0fTurk/RenLocalizer/issues) with your `error_output.txt` attached.

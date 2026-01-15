@@ -1,16 +1,21 @@
-# Command Line Interface (CLI) Usage
+# 🖥️ Command Line Interface (CLI) Usage
 
-The RenLocalizer CLI (`run_cli.py`) is a powerful way to automate translations, run on remote servers, or integrate into a build pipeline.
+The RenLocalizer CLI (`run_cli.py`) is designed for automation, remote server usage, or advanced batch processing.
+
+---
 
 ## 🚀 Basic Usage
-You can run the CLI interactively by launching it without arguments:
+Launch the CLI without arguments to enter the **Interactive Mode**:
 ```bash
 python run_cli.py
 ```
 
-## 🛠️ Direct Commands
-For automation, use arguments. Here is a common command to translate a game folder into Spanish using a Local LLM:
+---
 
+## 🛠️ Direct Commands (Automation)
+For automation, pass arguments directly. 
+
+### **Example: Translate Project to Spanish**
 ```bash
 python run_cli.py "/path/to/game" --target-lang es --engine local_llm --mode full
 ```
@@ -18,25 +23,36 @@ python run_cli.py "/path/to/game" --target-lang es --engine local_llm --mode ful
 ### 📋 Argument Reference
 
 | Argument | Description |
-|-----------|-------------|
-| `--target-lang` | Target language code (e.g., `tr`, `en`, `es`, `ru`). |
+| :--- | :--- |
+| `--target-lang` | Code of the target language (e.g., `tr`, `es`, `ru`). |
 | `--engine` | `google`, `deepl`, `openai`, `gemini`, `local_llm`. |
-| `--mode` | `full` (Extract + Translate), `translate` (Translate existing files), `auto` (Detect). |
-| `--deep-scan` | Enable AST-based deep scanning for hidden strings. |
-| `--rpyc-reader` | Read directly from RPYC files (useful for obfuscated games). |
-| `--force-ui` | Force translation of UI elements (buttons, labels). |
+| `--mode` | `full` (Extract + Translate) or `translate` (Translate existing files). |
+| `--deep-scan` | Enable AST-based deep scanning. |
+| `--rpyc-reader` | Read directly from binary RPYC files. |
+| `--force-ui` | Force translation of all UI elements. |
+
+---
 
 ## 🌟 Modes Explained
-- **Full Mode:** Expects a game directory or EXE. It extracts RPA archives, normalizes encodings, and then translates.
-- **Translate Mode:** Expects a directory already containing `.rpy` or `.rpymc` files. It only performs text translation of the existing files.
 
-## 🤖 Server Automation
-The CLI version is lightweight and doesn't require a GUI (Headless). You can run it on a Linux VPS or in a GitHub Action:
+*   **Full Mode (`--mode full`):** The comprehensive workflow. It expects a game directory or EXE. It extracts RPA archives, normalizes encodings, and translates everything.
+*   **Translate Mode (`--mode translate`):** For projects that are already unpacked. It scans for `.rpy` / `.rpymc` files and performs the text translation.
+
+---
+
+## 🤖 Server & Headless Usage
+The CLI version is lightweight and doesn't require a GUI. You can run it on a Linux VPS or in a **GitHub Action**:
 
 ```bash
-# Headless translation in a script
-python run_cli.py "./ProjectX" --target-lang tr --engine gemini --deepl-key YOUR_KEY --mode full
+# Example script for a cloud server
+python run_cli.py "./GameProject" \
+  --target-lang tr \
+  --engine gemini \
+  --mode full \
+  --deep-scan
 ```
 
-## 🛠️ Error Logging in CLI
-In case of failure, the CLI writes a detailed diagnostic report to `error_output.txt` in the root folder. Check this file to see which file or line caused the issue.
+---
+
+## 📋 Logs & Troubleshooting
+In case of failure, the CLI writes a detailed diagnostic report to **`error_output.txt`** in the project root. Check this file to see which file or line caused the issue.

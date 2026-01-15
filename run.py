@@ -227,7 +227,7 @@ def setup_qt_environment() -> None:
         existing_plugin_paths = [str(p) for p in plugin_paths if p.exists()]
 
         if existing_plugin_paths:
-            os.environ["QT_PLUGIN_PATH"] = ";".join(existing_plugin_paths)
+            os.environ["QT_PLUGIN_PATH"] = os.pathsep.join(existing_plugin_paths)
             print(f"\nSet QT_PLUGIN_PATH: {os.environ['QT_PLUGIN_PATH']}")
         else:
             # Fallback: search for platforms directory
@@ -252,12 +252,12 @@ def setup_qt_environment() -> None:
         # Build PATH with existing directories
         existing_lib_paths = [str(p) for p in lib_paths if p.exists()]
         current_path = os.environ.get("PATH", "")
-        os.environ["PATH"] = ";".join(existing_lib_paths) + ";" + current_path
+        os.environ["PATH"] = os.pathsep.join(existing_lib_paths) + os.pathsep + current_path
 
         print(f"\nAdded to PATH: {';'.join(existing_lib_paths[:3])}...")
 
-        # Disable Qt debug output
-        os.environ["QT_LOGGING_RULES"] = "*.debug=false"
+        # Disable noisy Qt font warnings and debug output
+        os.environ["QT_LOGGING_RULES"] = "qt.qpa.fonts=false;qt.text.font.db=false;*.debug=false"
 
         # ============================================================
         # Try to pre-load critical DLLs manually
@@ -299,6 +299,17 @@ project_root = Path(__file__).parent
 sys.path.insert(0, str(project_root))
 
 
+def check_unix_system() -> bool:
+    """Show Unix system info."""
+    if sys.platform == "win32":
+        return True
+    
+    import platform
+    print(f"OS: {platform.system()} {platform.release()}")
+    print(f"Machine: {platform.machine()}")
+    return True
+
+
 def main() -> int:
     print("=" * 60)
     print("RenLocalizer V2 Starting...")
@@ -306,14 +317,20 @@ def main() -> int:
 
     # Setup Qt environment FIRST (before any imports)
     setup_qt_environment()
+    
+    # Suppress noisy Qt font and debug warnings (Script 20/OpenType issues)
+    if "QT_LOGGING_RULES" not in os.environ:
+        os.environ["QT_LOGGING_RULES"] = "qt.qpa.fonts=false;qt.text.font.db=false;*.debug=false"
 
-    # Check Windows version and architecture
-    if not check_windows_version():
-        return 1
-
-    # Check Visual C++ Runtime (before any Qt imports)
-    if not check_vcruntime():
-        return 1
+    # Check system version and architecture
+    if sys.platform == "win32":
+        if not check_windows_version():
+            return 1
+        # Check Visual C++ Runtime (before any Qt imports)
+        if not check_vcruntime():
+            return 1
+    else:
+        check_unix_system()
 
 
     print("\nLoading Qt framework...")

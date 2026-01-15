@@ -1,28 +1,56 @@
-# Advanced Parsing & Text Extraction
+# 🔍 Advanced Parsing & Text Extraction
 
-RenLocalizer uses a sophisticated multi-stage pipeline to find and extract text from Ren'Py games without breaking the underlying code.
+RenLocalizer uses a sophisticated multi-stage pipeline to extract text without breaking the underlying game logic or engine syntax.
 
-## 1. Traditional Regex Parsing
+---
+
+## 🔹 1. Traditional Regex Parsing
 The first layer of scanning uses highly optimized Regular Expressions to find standard Ren'Py dialogue and UI strings:
-- Dialogue: `character_name "Dialogue text"`
-- Direct strings: `_("Text")` or `"Text"`
-- Menu items: `menu:` blocks
+*   **Dialogue:** `character_name "Dialogue text"`
+*   **Direct strings:** `_("Text")` or `"Text"`
+*   **Menu items:** `menu:` choice blocks.
 
-## 2. AST (Abstract Syntax Tree) Scanning
-When simple regex isn't enough, RenLocalizer uses Python's `ast` module to analyze scripts. This allows us to:
-- Find strings inside complex nested functions.
-- Identify translatable text in `init python` blocks.
-- Smartly distinguish between technical code and game content.
+## 🔹 2. AST (Abstract Syntax Tree) Scanning
+When simple patterns aren't enough, RenLocalizer analyzes the script's structure using Python's `ast` module.
+*   **Capabilities:**
+    *   Finds strings inside nested functions.
+    *   Extracts text from `init python` blocks.
+    *   Distinguishes between technical code and translatable content.
 
-## 3. RPYC & RPYMC Readers
-Ren'Py compiles human-readable `.rpy` files into binary `.rpyc` files. Many "obfuscated" games hide their source code.
-- **RPYC Reader:** RenLocalizer can "unpickle" binary RPYC files to extract the original Abstract Syntax Tree. This allows translation even when the source `.rpy` file is missing.
-- **RPYMC Reader:** Specifically handles screen cache files, ensuring even complex UI elements are localized.
+## 🔹 3. RPYC & RPYMC Readers
+Many "obfuscated" games hide their source code by deleting `.rpy` files.
+*   **RPYC Reader:** "Unpickles" binary RPYC files to extract the original logic. You can translate a game even if the source code is missing!
+*   **RPYMC Reader:** Handles screen cache files, ensuring complex UI elements are localized.
 
-## 4. Deep Scan Technology
-Enable **Deep Scan** in settings to trigger a recursive AST analysis of the entire project.
-- **What it finds:** Variable assignments, dictionary keys, and list items that are used as game text but don't follow standard `_()` localization markers.
-- **Safety:** Deep Scan uses a heuristic "Technical String Filter" to ensure it doesn't accidentally translate internal Ren'Py paths or variable names (e.g., it will translate `"Health"` but skip `"renpy.dissolve"`).
+## 🔹 4. Deep Scan Technology
+Enable **Deep Scan** in settings to trigger a recursive analysis of the entire project.
+*   **What it finds:** Variable assignments and list items used as game text that don't follow standard `_()` markers.
+*   **Safety:** Uses a "Technical String Filter" to skip engine internals like `renpy.dissolve`.
 
-## 5. Normalization & Encoding
-RenLocalizer automatically detects and normalizes file encodings to **UTF-8 with BOM**. This prevents "Mojibake" (broken characters) in languages like Russian, Chinese, or Japanese.
+---
+
+## 🔹 5. Text Types Filter
+Categorize and select exactly what you want to translate in **Settings > Text Types**:
+
+*   📌 **Core:** Dialogue, Menus, Buttons.
+*   📌 **Interface:** UI text, Input fields, Alt text.
+*   📌 **System:** Notifications, Confirmation dialogs.
+*   📌 **Config:** Game title, Version strings.
+
+---
+
+## 🔹 6. Normalization & Encoding
+RenLocalizer automatically detects file encodings and normalizes them to **UTF-8 with BOM**. 
+> 🛡️ **Benefit:** Prevents "Mojibake" (broken characters) in languages like Russian, Chinese, or Japanese.
+
+---
+
+## 🔹 7. Force Runtime Translation (Hook)
+Sometime Ren'Py source code contains dynamic strings that are not wrapped in `_()` or `!t` flags. These strings often appear untranslated in games even after processing.
+
+*   **How it Works:** 
+    *   RenLocalizer injects a small script (`01_renlocalizer_runtime.rpy`) into the game folder.
+    *   This script hooks into the engine's text processing pipeline (`config.replace_text`).
+    *   Every time a string is displayed, it checks if a translation exists in the current language files.
+*   **When to Use:** Use this if you see quest descriptions, item names, or dynamic UI elements that remain untranslated.
+*   **Status:** **Disabled by default** to ensure maximum compatibility with other mods (like Zenpy). Enable it in **Settings > Translation Settings**.

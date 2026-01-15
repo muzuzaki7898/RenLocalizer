@@ -118,8 +118,24 @@ CRITICAL RULES:
         """Abstract method to call the specific LLM API."""
         pass
 
+    # Enhanced prompt template for aggressive retry - forces AI to translate
+    AGGRESSIVE_RETRY_PROMPT = """You are a professional translator. The previous translation attempt returned the SAME text as the original.
+This is WRONG. You MUST translate from {source_lang} to {target_lang}.
+
+IMPORTANT:
+- The text "{original_text}" IS NOT A VARIABLE or CODE. It is CONTENT.
+- Unless it is a proper name like "John" or "Tokyo", it MUST be translated.
+- If it contains [brackets], translate AROUND them.
+- Return ONLY the translation, nothing else.
+- Preserve placeholders like [name], {{tag}}, ?V000? exactly as they are."""
+
     async def translate_single(self, request: TranslationRequest) -> TranslationResult:
         protected_text, placeholders = protect_renpy_syntax(request.text)
+        
+        # Check if aggressive retry is enabled
+        aggressive_retry = False
+        if self.config_manager:
+            aggressive_retry = getattr(self.config_manager.translation_settings, 'aggressive_retry_translation', False)
         
         # Check if user has defined a custom system prompt
         custom_prompt = ""
@@ -137,11 +153,47 @@ CRITICAL RULES:
         
         max_retries = self.max_retries
         backoff_base = 2.0
+        max_unchanged_retries = 2  # Number of retries with enhanced prompt for unchanged translations
         
         for attempt in range(max_retries + 1):
             try:
                 translated_content = await self._generate_completion(system_prompt, protected_text)
                 final_text = restore_renpy_syntax(translated_content, placeholders)
+                
+                # Aggressive Retry: If translation equals original, retry with enhanced prompt
+                if aggressive_retry and final_text.strip() == request.text.strip() and len(request.text.strip()) > 3:
+                    self.emit_log("debug", f"AI translation unchanged, trying aggressive retry: {request.text[:50]}...")
+                    
+                    for retry_attempt in range(max_unchanged_retries):
+                        # Use aggressive prompt that forces translation
+                        aggressive_prompt = self.AGGRESSIVE_RETRY_PROMPT.format(
+                            source_lang=request.source_lang,
+                            target_lang=request.target_lang,
+                            original_text=request.text[:100]  # Include snippet of original
+                        )
+                        
+                        try:
+                            retry_content = await self._generate_completion(aggressive_prompt, protected_text)
+                            retry_final = restore_renpy_syntax(retry_content, placeholders)
+                            
+                            if retry_final.strip() != request.text.strip():
+                                self.emit_log("info", f"Aggressive retry successful after {retry_attempt + 1} attempts")
+                                return TranslationResult(
+                                    original_text=request.text,
+                                    translated_text=retry_final.strip(),
+                                    source_lang=request.source_lang,
+                                    target_lang=request.target_lang,
+                                    engine=request.engine,
+                                    success=True,
+                                    confidence=0.85,  # Lower confidence for aggressive retry
+                                    metadata=request.metadata
+                                )
+                        except Exception as retry_e:
+                            self.emit_log("warning", f"Aggressive retry attempt {retry_attempt + 1} failed: {retry_e}")
+                        
+                        await asyncio.sleep(0.5)  # Brief delay between retries
+                    
+                    self.emit_log("warning", f"AI translation unchanged after aggressive retry: {request.text[:50]}...")
                 
                 return TranslationResult(
                     original_text=request.text,
@@ -173,7 +225,8 @@ CRITICAL RULES:
                     # For other errors, maybe a small delay before retry
                     await asyncio.sleep(1.0)
                     continue
-                    
+                
+                # Report definitive failure
                 return TranslationResult(
                     request.text, "", request.source_lang, request.target_lang, request.engine, False, str(e), quota_exceeded=is_rate_limit
                 )
@@ -185,11 +238,27 @@ CRITICAL RULES:
         # If there's only one request, use translate_single
         if len(requests) == 1:
             return [await self.translate_single(requests[0])]
+        
+        # Internal Deduplication for AI Batch (Token saving)
+        # Even though Manager has dedup, doing it here is safer if translate_batch is called directly
+        indexed = list(enumerate(requests))
+        unique_map = {} # text -> [original_indices]
+        for idx, req in indexed:
+            unique_map.setdefault(req.text, []).append(idx)
+        
+        unique_requests = []
+        unique_indices_map = {} # unique_idx -> [original_indices]
+        for i, (text, indices) in enumerate(unique_map.items()):
+            # Use the first request as representative
+            first_req_idx = indices[0]
+            unique_requests.append(requests[first_req_idx])
+            unique_indices_map[i] = indices
             
         # Protect all texts and prepare prompt
         batch_items = []
-        all_placeholders = []
-        for i, req in enumerate(requests):
+        all_placeholders = [] # Corresponds to unique_requests
+        
+        for i, req in enumerate(unique_requests):
             protected, placeholders = protect_renpy_syntax(req.text)
             batch_items.append(self.BATCH_ITEM_WRAPPER.format(index=i, text=protected))
             all_placeholders.append(placeholders)
@@ -209,7 +278,7 @@ CRITICAL RULES:
                                          source_lang=req0.source_lang,
                                          target_lang=req0.target_lang)
                                          
-        batch_instruction = self.BATCH_INSTRUCTION_TEMPLATE.format(count=len(requests))
+        batch_instruction = self.BATCH_INSTRUCTION_TEMPLATE.format(count=len(unique_requests))
         system_prompt = base_system + batch_instruction
         
         max_retries = self.max_retries
@@ -221,31 +290,68 @@ CRITICAL RULES:
                 
                 # Parse the response (simple regex or tag lookup)
                 import re
-                results = [None] * len(requests)
+                unique_results_map: Dict[int, TranslationResult] = {}
                 matches = re.finditer(self.BATCH_PARSE_PATTERN, response_text, re.DOTALL)
                 
                 found_count = 0
                 for m in matches:
-                    idx = int(m.group(1))
+                    u_idx = int(m.group(1)) # This is unique index
                     translated_protected = m.group(2).strip()
-                    if 0 <= idx < len(requests):
-                        final_text = restore_renpy_syntax(translated_protected, all_placeholders[idx])
-                        results[idx] = TranslationResult(
-                            requests[idx].text, 
-                            final_text, 
-                            req0.source_lang, 
-                            req0.target_lang, 
-                            req0.engine, 
-                            True,
-                            metadata=requests[idx].metadata # Preserve metadata!
+                    if 0 <= u_idx < len(unique_requests):
+                        final_text = restore_renpy_syntax(translated_protected, all_placeholders[u_idx])
+                        req = unique_requests[u_idx]
+                        
+                        unique_results_map[u_idx] = TranslationResult(
+                            original_text=req.text,
+                            translated_text=final_text,
+                            source_lang=req0.source_lang,
+                            target_lang=req0.target_lang,
+                            engine=req0.engine,
+                            success=True,
+                            metadata=req.metadata
                         )
                         found_count += 1
                 
-                # Check if we got all items back
-                if found_count == len(requests):
-                    return results
+                # Check if we got all unique items back
+                if found_count >= len(unique_requests) * 0.9: # 90% success is good enough for batch, retry logic handles rest
+                    # Distribute results to all requests
+                    final_results: List[TranslationResult] = [None] * len(requests)
+                    
+                    # First fill from batch results
+                    for u_idx, res in unique_results_map.items():
+                        # Distribute to all original indices mapped to this unique index
+                        if u_idx in unique_indices_map:
+                            for orig_idx in unique_indices_map[u_idx]:
+                                # Copy result with correct metadata if needed
+                                final_results[orig_idx] = TranslationResult(
+                                    requests[orig_idx].text,
+                                    res.translated_text,
+                                    res.source_lang,
+                                    res.target_lang,
+                                    res.engine,
+                                    True,
+                                    metadata=requests[orig_idx].metadata
+                                )
+                                
+                    # Handle missing items by falling back to single translation
+                    tasks = []
+                    missing_indices = []
+                    
+                    for i, res in enumerate(final_results):
+                        if res is None:
+                            missing_indices.append(i)
+                            # Only create task for unique missing items to save tokens
+                            pass 
+
+                    # If missing items, fallback individually (simple approach for now)
+                    if missing_indices:
+                        self.emit_log("warning", f"AI Batch incomplete. {len(missing_indices)} items missing. Retrying missing items individually...")
+                        for i in missing_indices:
+                             final_results[i] = await self.translate_single(requests[i])
+                             
+                    return final_results
                 else:
-                    self.emit_log("warning", f"AI Batch partially incomplete ({found_count}/{len(requests)}). Retrying individual items to ensure 100% coverage.")
+                    self.emit_log("warning", f"AI Batch partially incomplete ({found_count}/{len(unique_requests)}). Retrying individual items to ensure 100% coverage.")
                     # Fallback to single translation for failed batch
                     return [await self.translate_single(r) for r in requests]
                     
@@ -314,6 +420,13 @@ class OpenAITranslator(LLMTranslator):
             content = response.choices[0].message.content
             if not content:
                 raise ValueError(self._get_text('error_ai_empty_response', "Empty response from AI"))
+                
+            # Token usage tracking
+            if hasattr(response, 'usage') and response.usage:
+                prompt_tokens = getattr(response.usage, 'prompt_tokens', 0)
+                completion_tokens = getattr(response.usage, 'completion_tokens', 0)
+                total_tokens = getattr(response.usage, 'total_tokens', 0)
+                self.emit_log("debug", f"OpenAI Token Usage: {prompt_tokens} prompt + {completion_tokens} completion = {total_tokens} total")
                 
             # Basic refusal check
             if hasattr(response.choices[0], 'finish_reason') and response.choices[0].finish_reason == 'content_filter':
@@ -401,6 +514,13 @@ class GeminiTranslator(LLMTranslator):
             if not response.text:
                 # If no text, check if it was blocked
                 raise ValueError(self._get_text('error_ai_blocked', "AI returned empty text, possibly blocked by safety filters."))
+            
+            # Token usage tracking for Gemini
+            if hasattr(response, 'usage_metadata') and response.usage_metadata:
+                prompt_tokens = getattr(response.usage_metadata, 'prompt_token_count', 0)
+                completion_tokens = getattr(response.usage_metadata, 'candidates_token_count', 0)
+                total_tokens = getattr(response.usage_metadata, 'total_token_count', 0)
+                self.emit_log("debug", f"Gemini Token Usage: {prompt_tokens} prompt + {completion_tokens} completion = {total_tokens} total")
                 
             return response.text
             

@@ -12,7 +12,7 @@ import os
 import sys
 from pathlib import Path
 from typing import Dict, Any, Optional
-from dataclasses import dataclass, asdict
+from dataclasses import dataclass, asdict, fields
 from enum import Enum
 from src.utils.constants import (
     AI_DEFAULT_TEMPERATURE, AI_DEFAULT_TIMEOUT, AI_DEFAULT_MAX_TOKENS,
@@ -156,6 +156,10 @@ class TranslationSettings:
     ai_custom_system_prompt: str = ""  # User-defined system prompt (empty = use built-in)
     # Aggressive Translation Retry: Retry unchanged translations with Lingva/alt endpoints (slower but more thorough)
     aggressive_retry_translation: bool = False  # Default off for speed
+    # DeepL Settings
+    deepl_formality: str = "default"  # default, formal, informal - Hitap şekli (Sen/Siz)
+    # Runtime Translation Hook (Zorla Çeviri)
+    force_runtime_translation: bool = False  # Oyun içi metinleri zorla çevir (eksik !t flagleri için)
     # Debug/Development settings
     show_debug_engines: bool = False  # Pseudo-Localization gibi debug motorlarını ana listede göster
 
@@ -241,6 +245,13 @@ class ConfigManager:
         # Load existing configuration
         self.load_config()
     
+    def _filter_config_data(self, dataclass_type, data):
+        """Filter dictionary keys to match dataclass fields to avoid __init__ errors."""
+        if not isinstance(data, dict):
+            return {}
+        valid_fields = {f.name for f in fields(dataclass_type)}
+        return {k: v for k, v in data.items() if k in valid_fields}
+
     def _load_language_files(self):
         """Load language JSON files from locales directory dynamically."""
         # Mapping from filename stem to language code (for old-style names)
@@ -371,17 +382,17 @@ class ConfigManager:
                 
                 # Load translation settings
                 if 'translation_settings' in config_data:
-                    trans_data = config_data['translation_settings']
+                    trans_data = self._filter_config_data(TranslationSettings, config_data['translation_settings'])
                     self.translation_settings = TranslationSettings(**trans_data)
                 
                 # Load API keys
                 if 'api_keys' in config_data:
-                    api_data = config_data['api_keys']
+                    api_data = self._filter_config_data(ApiKeys, config_data['api_keys'])
                     self.api_keys = ApiKeys(**api_data)
                 
                 # Load app settings
                 if 'app_settings' in config_data:
-                    app_data = config_data['app_settings']
+                    app_data = self._filter_config_data(AppSettings, config_data['app_settings'])
                     self.app_settings = AppSettings(**app_data)
                 
                 # Load proxy settings
@@ -392,7 +403,8 @@ class ConfigManager:
                         proxy_data['manual_proxies'] = proxy_data.pop('custom_proxies')
                     elif 'custom_proxies' in proxy_data:
                         proxy_data.pop('custom_proxies')
-                        
+                    
+                    proxy_data = self._filter_config_data(ProxySettings, proxy_data)
                     self.proxy_settings = ProxySettings(**proxy_data)
                 
                 config_loaded = True
@@ -534,7 +546,7 @@ class ConfigManager:
             {"renpy": "indonesian", "api": "id", "english": "Indonesian", "native": "Bahasa Indonesia"},
             {"renpy": "malay", "api": "ms", "english": "Malay", "native": "Bahasa Melayu"},
             {"renpy": "hindi", "api": "hi", "english": "Hindi", "native": "हिन्दी"},
-            {"renpy": "persian", "api": "fa", "english": "Persian (Farsi)", "native": "فارسی"},
+            {"renpy": "persian", "api": "fa", "english": "Persian (Farsi)", "native": "فارsi"},
             {"renpy": "czech", "api": "cs", "english": "Czech", "native": "Čeština"},
             {"renpy": "danish", "api": "da", "english": "Danish", "native": "Dansk"},
             {"renpy": "finnish", "api": "fi", "english": "Finnish", "native": "Suomi"},
@@ -551,6 +563,64 @@ class ConfigManager:
             {"renpy": "slovak", "api": "sk", "english": "Slovak", "native": "Slovenčina"},
             {"renpy": "slovenian", "api": "sl", "english": "Slovenian", "native": "Slovenščina"},
             {"renpy": "serbian", "api": "sr", "english": "Serbian", "native": "Српски"},
+            {"renpy": "afrikaans", "api": "af", "english": "Afrikaans", "native": "Afrikaans"},
+            {"renpy": "albanian", "api": "sq", "english": "Albanian", "native": "Shqip"},
+            {"renpy": "amharic", "api": "am", "english": "Amharic", "native": "አማርኛ"},
+            {"renpy": "armenian", "api": "hy", "english": "Armenian", "native": "Հայերեն"},
+            {"renpy": "azerbaijani", "api": "az", "english": "Azerbaijani", "native": "Azərbaycanca"},
+            {"renpy": "basque", "api": "eu", "english": "Basque", "native": "Euskara"},
+            {"renpy": "belarusian", "api": "be", "english": "Belarusian", "native": "Беларуская"},
+            {"renpy": "bengali", "api": "bn", "english": "Bengali", "native": "বাংলা"},
+            {"renpy": "bosnian", "api": "bs", "english": "Bosnian", "native": "Bosanski"},
+            {"renpy": "esperanto", "api": "eo", "english": "Esperanto", "native": "Esperanto"},
+            {"renpy": "estonian", "api": "et", "english": "Estonian", "native": "Eesti"},
+            {"renpy": "filipino", "api": "tl", "english": "Filipino", "native": "Filipino"},
+            {"renpy": "galician", "api": "gl", "english": "Galician", "native": "Galego"},
+            {"renpy": "georgian", "api": "ka", "english": "Georgian", "native": "ქართული"},
+            {"renpy": "gujarati", "api": "gu", "english": "Gujarati", "native": "ગુજરાતી"},
+            {"renpy": "haitian_creole", "api": "ht", "english": "Haitian Creole", "native": "Kreyòl Ayisyen"},
+            {"renpy": "hausa", "api": "ha", "english": "Hausa", "native": "Hausa"},
+            {"renpy": "icelandic", "api": "is", "english": "Icelandic", "native": "Íslenska"},
+            {"renpy": "igbo", "api": "ig", "english": "Igbo", "native": "Asụsụ Igbo"},
+            {"renpy": "irish", "api": "ga", "english": "Irish", "native": "Gaeilge"},
+            {"renpy": "javanese", "api": "jv", "english": "Javanese", "native": "Basa Jawa"},
+            {"renpy": "kannada", "api": "kn", "english": "Kannada", "native": "ಕನ್ನಡ"},
+            {"renpy": "kazakh", "api": "kk", "english": "Kazakh", "native": "Қазақ тілі"},
+            {"renpy": "khmer", "api": "km", "english": "Khmer", "native": "ភាសាខ្មែរ"},
+            {"renpy": "kurdish", "api": "ku", "english": "Kurdish", "native": "Kurdî"},
+            {"renpy": "kyrgyz", "api": "ky", "english": "Kyrgyz", "native": "Кыргызча"},
+            {"renpy": "lao", "api": "lo", "english": "Lao", "native": "ພາສາລາວ"},
+            {"renpy": "latvian", "api": "lv", "english": "Latvian", "native": "Latviešu"},
+            {"renpy": "lithuanian", "api": "lt", "english": "Lithuanian", "native": "Lietuvių"},
+            {"renpy": "luxembourgish", "api": "lb", "english": "Luxembourgish", "native": "Lëtzebuergesch"},
+            {"renpy": "macedonian", "api": "mk", "english": "Macedonian", "native": "Македонски"},
+            {"renpy": "malagasy", "api": "mg", "english": "Malagasy", "native": "Malagasy"},
+            {"renpy": "malayalam", "api": "ml", "english": "Malayalam", "native": "മലയാളം"},
+            {"renpy": "maltese", "api": "mt", "english": "Maltese", "native": "Malti"},
+            {"renpy": "maori", "api": "mi", "english": "Maori", "native": "Māori"},
+            {"renpy": "marathi", "api": "mr", "english": "Marathi", "native": "मराठी"},
+            {"renpy": "mongolian", "api": "mn", "english": "Mongolian", "native": "Монгол"},
+            {"renpy": "myanmar", "api": "my", "english": "Myanmar (Burmese)", "native": "ဗမာ"},
+            {"renpy": "nepali", "api": "ne", "english": "Nepali", "native": "नेपाली"},
+            {"renpy": "pashto", "api": "ps", "english": "Pashto", "native": "پښتو"},
+            {"renpy": "punjabi", "api": "pa", "english": "Punjabi", "native": "ਪੰਜਾਬੀ"},
+            {"renpy": "samoan", "api": "sm", "english": "Samoan", "native": "Gagana Sāmoa"},
+            {"renpy": "scots_gaelic", "api": "gd", "english": "Scots Gaelic", "native": "Gàidhlig"},
+            {"renpy": "shona", "api": "sn", "english": "Shona", "native": "chiShona"},
+            {"renpy": "sindhi", "api": "sd", "english": "Sindhi", "native": "سنڌي"},
+            {"renpy": "sinhala", "api": "si", "english": "Sinhala", "native": "සිංහල"},
+            {"renpy": "somali", "api": "so", "english": "Somali", "native": "Soomaali"},
+            {"renpy": "swahili", "api": "sw", "english": "Swahili", "native": "Kiswahili"},
+            {"renpy": "tajik", "api": "tg", "english": "Tajik", "native": "Тоҷикӣ"},
+            {"renpy": "tamil", "api": "ta", "english": "Tamil", "native": "தமிழ்"},
+            {"renpy": "telugu", "api": "te", "english": "Telugu", "native": "తెలుగు"},
+            {"renpy": "urdu", "api": "ur", "english": "Urdu", "native": "اردو"},
+            {"renpy": "uzbek", "api": "uz", "english": "Uzbek", "native": "Oʻzbekcha"},
+            {"renpy": "welsh", "api": "cy", "english": "Welsh", "native": "Cymraeg"},
+            {"renpy": "xhosa", "api": "xh", "english": "Xhosa", "native": "isiXhosa"},
+            {"renpy": "yiddish", "api": "yi", "english": "Yiddish", "native": "ייִדיש"},
+            {"renpy": "yoruba", "api": "yo", "english": "Yoruba", "native": "Yorùbá"},
+            {"renpy": "zulu", "api": "zu", "english": "Zulu", "native": "isiZulu"},
         ]
     
     def get_renpy_to_api_map(self) -> Dict[str, str]:

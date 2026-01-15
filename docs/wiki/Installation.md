@@ -1,33 +1,38 @@
-# Installation Guide
+# 📥 Installation Guide
 
-RenLocalizer is designed to be flexible. You can run it as a standalone executable (Windows) or from the source code (All platforms).
+RenLocalizer is designed to be flexible. You can run it as a standalone executable on Windows or from the source code on any platform (macOS, Linux, Windows).
+
+---
 
 ## 🪟 Windows (Standalone)
-The easiest way to use RenLocalizer on Windows is to download the latest release:
+The easiest way to use RenLocalizer on Windows:
 
-1.  Go to the [Releases](https://github.com/Lord0fTurk/RenLocalizer/releases) page.
-2.  Download the `RenLocalizer_vX.X.X_Windows.zip` file.
-3.  Extract the ZIP and run `RenLocalizer.exe`.
+1.  Navigate to the [Releases](https://github.com/Lord0fTurk/RenLocalizer/releases) page.
+2.  Download the latest `RenLocalizer_vX.X.X_Windows.zip`.
+3.  **Extract** the ZIP file to a folder of your choice.
+4.  Run `RenLocalizer.exe` to start the GUI.
+
+---
 
 ## 🍎 macOS & 🐧 Linux (from Source)
-Since Ren'Py games run on Python, RenLocalizer works natively on Linux and macOS using Python 3.10+.
+Since RenLocalizer is built with Python 3, it works natively on Unix-based systems.
 
-### Prerequisites
-- Python 3.10 or higher.
-- `pip` (Python package manager).
+### 📋 Prerequisites
+*   **Python 3.10** or higher.
+*   **pip** (Python package manager).
 
-### Steps
+### 🛠️ Step-by-Step Setup
 1.  **Clone the Repository:**
     ```bash
     git clone https://github.com/Lord0fTurk/RenLocalizer.git
     cd RenLocalizer
     ```
 
-2.  **Create a Virtual Environment:**
+2.  **Create a Virtual Environment (Recommended):**
     ```bash
     python -m venv venv
-    source venv/bin/activate  # On Linux/macOS
-    # venv\Scripts\activate   # On Windows (if running source)
+    source venv/bin/activate  # macOS/Linux
+    # venv\Scripts\activate   # Windows
     ```
 
 3.  **Install Dependencies:**
@@ -35,26 +40,26 @@ Since Ren'Py games run on Python, RenLocalizer works natively on Linux and macOS
     pip install -r requirements.txt
     ```
 
-4.  **Run the App:**
-    ```bash
-    python run.py       # Starts the GUI
-    python run_cli.py   # Starts the CLI
-    ```
+4.  **Launch the Application:**
+    *   **GUI:** `python run.py`
+    *   **CLI:** `python run_cli.py`
 
-## 🛠️ Build Scripts
-We provide convenience scripts for Unix-based systems:
-- `RenLocalizer.sh`: Automatically sets up the environment and launches the GUI.
-- `RenLocalizerCLI.sh`: Automatically sets up the environment and launches the CLI.
+---
 
-Run them with:
-```bash
-chmod +x RenLocalizer.sh
-./RenLocalizer.sh
-```
+## 🚀 Convenience Scripts
+We provide pre-made scripts to handle the environment setup automatically:
 
-## 📦 Requirements Trace
-The tool depends on:
-- `PySide6` / `PyQt6-Fluent-Widgets` for the UI.
-- `openai`, `google-genai` for AI engines.
-- `unrpa` for archive extraction.
-- `requests`, `beautifulsoup4` for traditional translation engines.
+*   **`RenLocalizer.sh`**: Sets up the VENV and launches the GUI.
+*   **`RenLocalizerCLI.sh`**: Sets up the VENV and launches the CLI.
+
+> 💡 **Note:** Make sure to grant execution permissions on Linux/macOS:
+> `chmod +x RenLocalizer.sh`
+
+---
+
+## 📦 Core Dependencies
+The tool relies on these main libraries:
+*   **UI:** `PyQt6` & `PyQt6-Fluent-Widgets`
+*   **AI:** `openai`, `google-genai`
+*   **Extraction:** `unrpa`
+*   **Engines:** `requests`, `beautifulsoup4`

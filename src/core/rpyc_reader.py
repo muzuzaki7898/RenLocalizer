@@ -1219,6 +1219,38 @@ class ASTTextExtractor:
         if len(text_strip) < (1 if re.search(r'[а-яА-ЯёЁ]', text_strip) else 2):
             return True
 
+        # --- BINARY/CORRUPTED STRING DETECTION (from .rpyc files) ---
+        # CHECK 1: Replacement character
+        if '\ufffd' in text_strip:
+            return True
+        
+        # CHECK 2: Private Use Area characters (binary corruption)
+        if re.search(r'[\uE000-\uF8FF\uFFF0-\uFFFF]', text_strip):
+            return True
+        
+        # CHECK 3: Control characters (except common whitespace)
+        if re.search(r'[\x00-\x08\x0B\x0C\x0E-\x1F\x7F-\x9F]', text_strip):
+            return True
+        
+        # CHECK 4: High ratio of non-printable characters
+        strange_chars = len(re.findall(r'[^\x20-\x7E\s\u00A0-\u00FF\u0100-\u024F\u0400-\u04FF\u4E00-\u9FFF\u3040-\u30FF\uAC00-\uD7AF]', text_strip))
+        if len(text_strip) > 0 and strange_chars > len(text_strip) * 0.3:
+            return True
+        
+        # CHECK 5: Very low alphabetic content (likely random binary data)
+        if len(text_strip) > 5:
+            alpha_count = sum(1 for ch in text_strip if ch.isalpha())
+            if alpha_count < len(text_strip) * 0.2:
+                return True
+        
+        # CHECK 6: Short strings with unusual characters (rpyc corruption pattern)
+        if len(text_strip) >= 3 and len(text_strip) <= 15:
+            unusual_sequences = len(re.findall(r'[^\x20-\x7E]', text_strip))
+            ascii_letters = len(re.findall(r'[a-zA-Z]', text_strip))
+            if unusual_sequences >= 1 and ascii_letters <= 3:
+                return True
+        # --- END BINARY/CORRUPTED STRING DETECTION ---
+
         # Skip file paths
         extensions = ('.png', '.jpg', '.jpeg', '.gif', '.webp', '.mp3', '.ogg', 
                       '.wav', '.ttf', '.otf', '.rpy', '.rpyc', '.json')
@@ -1253,6 +1285,49 @@ class ASTTextExtractor:
         # e.g., "renpy.dissolve renpy.dissolve", "renpy.mask renpy.mask", "renpy.matrixcolor renpy.texture"
         if text_strip.startswith('renpy.') or ' renpy.' in text_strip:
             return True
+
+        # --- PYTHON CODE / DOCSTRING DETECTION ---
+        # Skip strings containing Python code patterns (commonly from docstrings)
+        python_code_patterns = [
+            r'\bdef\s+\w+\s*\(',           # Function definitions
+            r'\bclass\s+\w+\s*[:\(]',      # Class definitions
+            r'\bfor\s+\w+\s+in\s+',        # For loops
+            r'\bif\s+\w+\s+in\s+\w+:',     # If in checks
+            r'\bimport\s+\w+',              # Import statements
+            r'\bfrom\s+\w+\s+import',       # From imports
+            r'\breturn\s+\w+',              # Return statements
+            r'\braise\s+\w+',               # Raise exceptions
+            r'renpy\.\w+\.\w+',             # Ren'Py module calls
+            r'renpy\.\w+\(',                # Ren'Py function calls
+            r'_\w+\[',                      # Internal dict access
+            r'\w+\s*=\s*True\b',            # Boolean assignment
+            r'\w+\s*=\s*False\b',           # Boolean assignment
+            r'\w+\s*=\s*None\b',            # None assignment
+        ]
+        for pattern in python_code_patterns:
+            if re.search(pattern, text_strip):
+                return True
+        
+        # --- STRING CONCATENATION / CODE EXPRESSIONS ---
+        if re.search(r'"\s*\+\s*\w+\s*\+\s*"', text_strip) and len(text_strip) < 60:
+            return True
+        if re.search(r'\w+\.\w+\s*\+', text_strip) and len(text_strip) < 40:
+            return True
+        
+        # --- PYTHON BUILT-IN FUNCTION CALLS ---
+        python_builtin_calls = [
+            r'\bstr\s*\(', r'\bint\s*\(', r'\bfloat\s*\(', r'\blen\s*\(',
+            r'\blist\s*\(', r'\bdict\s*\(', r'\btuple\s*\(', r'\bset\s*\('
+        ]
+        if len(text_strip) < 80 or ' ' not in text_strip.strip():
+            for pattern in python_builtin_calls:
+                if re.search(pattern, text_strip):
+                    return True
+        
+        # --- FILE PATH PATTERNS WITH VARIABLES ---
+        if re.search(r'["\']?[\w/]+["\']?\s*\+\s*\w+', text_strip) and (len(text_strip) < 50 or '/' in text_strip):
+            if ' ' not in text_strip.strip():
+                return True
 
         return False
 

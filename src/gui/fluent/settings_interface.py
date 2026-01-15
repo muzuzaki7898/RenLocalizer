@@ -286,6 +286,18 @@ class SettingsInterface(ScrollArea):
         self.aggressive_retry_card.checkedChanged.connect(self._on_aggressive_retry_changed)
         self.translation_group.addSettingCard(self.aggressive_retry_card)
         
+        # Force Runtime Translation
+        self.force_runtime_card = SwitchSettingCard(
+            icon=FIF.TAG,
+            title=self.config_manager.get_ui_text("force_runtime", "Zorla Çeviri (Force Translate)"),
+            content=self.config_manager.get_ui_text("force_runtime_desc", "Oyun içi metinleri çalışma anında zorla çevir (eksik !t bayrakları için)"),
+            configItem=None,
+            parent=self.translation_group
+        )
+        self.force_runtime_card.setChecked(getattr(self.config_manager.translation_settings, 'force_runtime_translation', False))
+        self.force_runtime_card.checkedChanged.connect(self._on_force_runtime_translation_changed)
+        self.translation_group.addSettingCard(self.force_runtime_card)
+        
         # Glossary editor
         self.glossary_card = PushSettingCard(
             text=self.config_manager.get_ui_text("edit", "Düzenle"),
@@ -335,6 +347,38 @@ class SettingsInterface(ScrollArea):
         self.deepl_api_card.hBoxLayout.addWidget(self.deepl_key_input, 0, Qt.AlignmentFlag.AlignRight)
         self.deepl_api_card.hBoxLayout.addSpacing(16)
         self.api_group.addSettingCard(self.deepl_api_card)
+        
+        # DeepL Formality (Sen/Siz seçimi)
+        self.deepl_formality_card = SettingCard(
+            icon=FIF.PEOPLE,
+            title=self.config_manager.get_ui_text("deepl_formality_title", "DeepL Hitap Şekli"),
+            content=self.config_manager.get_ui_text("deepl_formality_desc", "Resmi (Siz) veya samimi (Sen) hitap şekli"),
+            parent=self.api_group
+        )
+        self.deepl_formality_combo = ComboBox(self.deepl_formality_card)
+        # Formality options: default, formal, informal
+        formality_options = [
+            ("default", self.config_manager.get_ui_text("formality_default", "Varsayılan (Otomatik)")),
+            ("formal", self.config_manager.get_ui_text("formality_formal", "Resmi (Siz/Sie/Vous...)")),
+            ("informal", self.config_manager.get_ui_text("formality_informal", "Samimi (Sen/Du/Tu...)"))
+        ]
+        self.FORMALITY_OPTIONS = [opt[0] for opt in formality_options]
+        for key, label in formality_options:
+            self.deepl_formality_combo.addItem(label)
+        
+        # Set current formality
+        current_formality = getattr(self.config_manager.translation_settings, 'deepl_formality', 'default')
+        try:
+            idx = self.FORMALITY_OPTIONS.index(current_formality)
+            self.deepl_formality_combo.setCurrentIndex(idx)
+        except ValueError:
+            self.deepl_formality_combo.setCurrentIndex(0)
+        
+        self.deepl_formality_combo.setFixedWidth(200)
+        self.deepl_formality_combo.currentIndexChanged.connect(self._on_deepl_formality_changed)
+        self.deepl_formality_card.hBoxLayout.addWidget(self.deepl_formality_combo, 0, Qt.AlignmentFlag.AlignRight)
+        self.deepl_formality_card.hBoxLayout.addSpacing(16)
+        self.api_group.addSettingCard(self.deepl_formality_card)
         
         self.expand_layout.addWidget(self.api_group)
 
@@ -435,24 +479,74 @@ class SettingsInterface(ScrollArea):
             parent=self.ai_group
         )
 
-        # Model Name
+        # Model Name - LineEdit for custom model input
         self.local_llm_model = LineEdit(self.local_llm_subset)
         self.local_llm_model.setPlaceholderText(self.config_manager.get_ui_text("placeholder_local_llm_model", "Model (örn: llama3.2)"))
         self.local_llm_model.setText(self.config_manager.translation_settings.local_llm_model)
-        self.local_llm_model.setFixedWidth(200)
+        self.local_llm_model.setFixedWidth(150)
         self.local_llm_model.textChanged.connect(self._on_local_llm_model_changed)
+        
+        # Model presets dropdown - Uncensored models for VN translation
+        self.local_llm_presets = ComboBox(self.local_llm_subset)
+        
+        # Category headers from locales
+        cat_uncensored = self.config_manager.get_ui_text("llm_cat_uncensored", "── 🔓 Uncensored (Ollama) ──")
+        cat_lmstudio = self.config_manager.get_ui_text("llm_cat_lmstudio", "── 📦 LM Studio (GGUF) ──")
+        cat_standard = self.config_manager.get_ui_text("llm_cat_standard", "── 🦙 Standard (Ollama) ──")
+        cat_desktop = self.config_manager.get_ui_text("llm_cat_desktop", "── 🖥️ Desktop Apps ──")
+        preset_janai = self.config_manager.get_ui_text("llm_janai_preset", "Jan.ai (Local)")
+        preset_lmstudio = self.config_manager.get_ui_text("llm_lmstudio_preset", "LM Studio (Local)")
+        preset_gpt4all = self.config_manager.get_ui_text("llm_gpt4all_preset", "GPT4All (Local)")
+        preset_koboldcpp = self.config_manager.get_ui_text("llm_koboldcpp_preset", "KoboldCPP (Local)")
+        preset_ollama = self.config_manager.get_ui_text("llm_ollama_preset", "Ollama (Local)")
+        
+        local_presets = [
+            cat_desktop,
+            preset_ollama,
+            preset_janai,
+            preset_lmstudio,
+            preset_gpt4all,
+            preset_koboldcpp,
+            cat_uncensored,
+            "dolphin-mistral",
+            "dolphin-llama3",
+            "dolphin-mixtral",
+            "wizard-vicuna-uncensored",
+            "llama2-uncensored",
+            "nous-hermes2",
+            "openhermes",
+            "neural-chat",
+            cat_lmstudio,
+            "dolphin-2.6-mistral-7b",
+            "mistral-7b-instruct-v0.2",
+            "llama-2-13b-chat",
+            "neural-chat-7b-v3-1",
+            cat_standard,
+            "llama3.2",
+            "llama3.1", 
+            "mistral",
+            "gemma2",
+            "qwen2.5",
+            "phi3",
+        ]
+        for model in local_presets:
+            self.local_llm_presets.addItem(model)
+        self.local_llm_presets.setFixedWidth(200)
+        self.local_llm_presets.setToolTip(self.config_manager.get_ui_text("tooltip_uncensored_models", "NSFW VN çevirisi için sansürsüz modeller önerilir"))
+        self.local_llm_presets.currentTextChanged.connect(self._on_local_llm_preset_selected)
 
         # Base URL
         self.local_llm_url = LineEdit(self.local_llm_subset)
         self.local_llm_url.setPlaceholderText(self.config_manager.get_ui_text("placeholder_local_llm_url", "URL (örn: http://localhost:11434/v1)"))
         self.local_llm_url.setText(self.config_manager.translation_settings.local_llm_url)
-        self.local_llm_url.setFixedWidth(250)
+        self.local_llm_url.setFixedWidth(220)
         self.local_llm_url.textChanged.connect(self._on_local_llm_url_changed)
 
         # Layout for Local LLM
         llayout = self.local_llm_subset.hBoxLayout
         llayout.addWidget(self.local_llm_model, 0, Qt.AlignmentFlag.AlignRight)
-        llayout.addSpacing(10)
+        llayout.addWidget(self.local_llm_presets, 0, Qt.AlignmentFlag.AlignRight)
+        llayout.addSpacing(5)
         llayout.addWidget(self.local_llm_url, 0, Qt.AlignmentFlag.AlignRight)
         llayout.addSpacing(10)
         
@@ -633,28 +727,17 @@ class SettingsInterface(ScrollArea):
             self.scroll_widget
         )
         
-        # Auto UnRen
+        # Auto Archive Extraction (Legacy name unren, now unrpa/rpa_parser)
         self.auto_unren_card = SwitchSettingCard(
-            icon=FIF.COMMAND_PROMPT,
-            title=self.config_manager.get_ui_text("auto_unren", "Otomatik UnRen"),
-            content=self.config_manager.get_ui_text("auto_unren_desc", "Gerektiğinde otomatik olarak UnRen çalıştır"),
+            icon=FIF.ZIP_FOLDER, # More appropriate for archives
+            title=self.config_manager.get_ui_text("auto_unren", "Otomatik Arşiv Açma"),
+            content=self.config_manager.get_ui_text("auto_unren_desc", "RPA dosyalarını otomatik olarak ayıkla"),
             configItem=None,
             parent=self.advanced_group
         )
         self.auto_unren_card.switchButton.setChecked(self.config_manager.app_settings.unren_auto_download)
         self.auto_unren_card.switchButton.checkedChanged.connect(self._on_auto_unren_changed)
         self.advanced_group.addSettingCard(self.auto_unren_card)
-        
-        # UnRen path
-        self.unren_path_card = PushSettingCard(
-            text=self.config_manager.get_ui_text("browse", "Gözat"),
-            icon=FIF.FOLDER,
-            title=self.config_manager.get_ui_text("unren_path", "UnRen Yolu"),
-            content=self.config_manager.app_settings.unren_custom_path or self.config_manager.get_ui_text("unren_path_default", "Varsayılan konum"),
-            parent=self.advanced_group
-        )
-        self.unren_path_card.clicked.connect(self._browse_unren_path)
-        self.advanced_group.addSettingCard(self.unren_path_card)
         
         # Deep scan
         self.deep_scan_card = SwitchSettingCard(
@@ -800,6 +883,36 @@ class SettingsInterface(ScrollArea):
         self.config_manager.translation_settings.local_llm_model = text
         self.config_manager.save_config()
 
+    def _on_local_llm_preset_selected(self, text: str):
+        """Handle Local LLM preset model selection."""
+        if not text or text.startswith("──") or text.startswith("--"):
+            return
+            
+        # Preset check
+        ollama_text = self.config_manager.get_ui_text("llm_ollama_preset", "Ollama (Local)")
+        janai_text = self.config_manager.get_ui_text("llm_janai_preset", "Jan.ai (Local)")
+        lmstudio_text = self.config_manager.get_ui_text("llm_lmstudio_preset", "LM Studio (Local)")
+        gpt4all_text = self.config_manager.get_ui_text("llm_gpt4all_preset", "GPT4All (Local)")
+        koboldcpp_text = self.config_manager.get_ui_text("llm_koboldcpp_preset", "KoboldCPP (Local)")
+
+        if text == ollama_text:
+            self.local_llm_model.setText("llama3")  # Popüler varsayılan
+            self.local_llm_url.setText("http://localhost:11434/v1")
+        elif text == janai_text:
+            self.local_llm_model.setText("local-model")
+            self.local_llm_url.setText("http://localhost:1337/v1")
+        elif text == lmstudio_text:
+            self.local_llm_model.setText("local-model")
+            self.local_llm_url.setText("http://localhost:1234/v1")
+        elif text == gpt4all_text:
+            self.local_llm_model.setText("local-model")
+            self.local_llm_url.setText("http://localhost:4891/v1")
+        elif text == koboldcpp_text:
+            self.local_llm_model.setText("local-model")
+            self.local_llm_url.setText("http://localhost:5001/v1")
+        else:
+            self.local_llm_model.setText(text)
+
     def _on_local_llm_url_changed(self, text: str):
         """Handle Local LLM base URL changes."""
         self.config_manager.translation_settings.local_llm_url = text
@@ -855,6 +968,11 @@ class SettingsInterface(ScrollArea):
         self.config_manager.translation_settings.max_retries = value
         self.config_manager.save_config()
 
+    def _on_force_runtime_translation_changed(self, checked: bool):
+        """Handle force runtime translation toggle."""
+        self.config_manager.translation_settings.force_runtime_translation = checked
+        self.config_manager.save_config()
+
     def _on_batch_size_slider_released(self):
         # Deprecated
         pass
@@ -880,6 +998,14 @@ class SettingsInterface(ScrollArea):
         """Handle aggressive retry toggle."""
         self.config_manager.translation_settings.aggressive_retry_translation = checked
         self.config_manager.save_config()
+
+    def _on_deepl_formality_changed(self, index: int):
+        """Handle DeepL formality change."""
+        if hasattr(self, 'FORMALITY_OPTIONS') and 0 <= index < len(self.FORMALITY_OPTIONS):
+            formality = self.FORMALITY_OPTIONS[index]
+            self.config_manager.translation_settings.deepl_formality = formality
+            self.config_manager.save_config()
+            self.logger.info(f"DeepL formality set to: {formality}")
 
 
     def _on_proxy_enabled_changed(self, checked: bool):
@@ -967,17 +1093,6 @@ class SettingsInterface(ScrollArea):
         self.config_manager.app_settings.unren_auto_download = checked
         self.config_manager.save_config()
 
-    def _browse_unren_path(self):
-        """Browse for UnRen path."""
-        folder = QFileDialog.getExistingDirectory(
-            self,
-            self.config_manager.get_ui_text("select_unren_folder", "UnRen Klasörü Seç"),
-            ""
-        )
-        if folder:
-            self.config_manager.app_settings.unren_custom_path = folder
-            self.config_manager.save_config()
-            self.unren_path_card.setContent(folder)
 
     def _on_deep_scan_changed(self, checked: bool):
         """Handle deep scan toggle."""
@@ -999,6 +1114,9 @@ class SettingsInterface(ScrollArea):
                 self.config_manager.get_ui_text("success", "Başarılı"),
                 self.config_manager.get_ui_text("debug_engines_changed", "Ayar kaydedildi. Ana sayfadaki liste güncellendi.")
             )
+
+        """Handle advanced filtering toggle."""
+        pass
 
     def _restore_defaults(self):
         """Restore default settings."""

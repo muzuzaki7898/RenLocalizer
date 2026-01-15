@@ -1,6 +1,103 @@
 # Changelog
 
 
+
+## [2.5.0] - 2026-01-14
+### 🚀 New Features (Major)
+- **Force Runtime Translation:** Added "Force Runtime Translation" (Zorla Çeviri) feature. This dynamically injects a `01_renlocalizer_runtime.rpy` script into the game folder. It hooks into Ren'Py's `config.replace_text` to translate strings lacking the `!t` flag at runtime, ensuring 100% translation coverage for dynamic strings without manual code edits.
+- **Improved Placeholder Protection:** Fixed a critical issue where Python variables inside Ren'Py bracket expressions (e.g., `[page['episode']]`) were being corrupted by translation. Expanded technical string filtering to protect internal property access and complex dictionary patterns.
+
+### 🛠️ Core Fixes (Quest System & Parsing)
+- **Quest Text Extraction Fix:** Resolved a critical issue where multi-line quest descriptions embedded in Python data structures (lists/dictionaries) were being skipped or incorrectly parsed.
+- **Improved Trailing Text Cleanup:** Fixed a bug in the parser that caused trailing commas or brackets to leak into extracted strings, preventing valid translations.
+- **Untranslated Text Detection:** Fixed a logic error where empty translations (`new ""`) in existing files were sometimes treated as "translated," preventing them from being processed.
+- **Global Deduplication:** Implemented aggressive deduplication for `strings.rpy` generation to prevent file bloating (reduced file size by ~70% in large projects) and eliminate duplicate translation requests.
+- **ID Generation Stability:** Enhanced the Translation ID generation algorithm to be more robust against escape sequences and newline variations.
+
+### 🗺️ Cross-Platform & UI
+- **Cross-Platform Game Selection:** Enhanced game path selection to be fully compatible with Windows, macOS, and Linux.
+- **Platform-Aware Filtering:** Added specific file filters and dialog titles for different operating systems (.exe for Windows, .app/.sh for macOS, .sh/binary for Linux).
+- **Browse Folder Support:** Added a "Browse Folder" option for direct directory selection, improving flexibility for game project identification.
+- **Intelligent Root Detection:** Improved pipeline logic to automatically locate the `game/` subdirectory regardless of the initial selection (executable or folder).
+- **Localization Expansion:** Updated all 8 supported languages (`tr`, `en`, `de`, `es`, `fr`, `ru`, `zh-CN`, `fa`) with new localization keys for cross-platform selection, platform-specific placeholders, and titles.
+
+### ⚡ Core & Performance (Major Update)
+- **Smart Skip (Incremental Translation):** Added the ability to automatically detect and skip already translated lines (where the `new` string is not empty). This allows for lightning-fast incremental updates when a game version changes, saving API costs and time.
+- **Resume System:** Implemented a persistent progress tracking system. If the translation is interrupted (power outage, manual stop), you can now resume exactly where you left off.
+- **Aggressive Translation Retry:** Specialized retry mechanism for LLM engines. If the initial translation returns the original text, the engine now automatically retries with a "Force Translation" prompt.
+- **Maintenance:** Permanently removed legacy "Output Format" selection. The system now defaults to the most stable `old_new` format to ensure 100% compatibility with Ren'Py script updates.
+- **Robust Config Loading:** Implemented a filtering mechanism that ignores unknown configuration keys in the JSON file. This prevents "unexpected keyword argument" crashes when downgrading versions or moving between builds with different settings.
+
+### � Performance & UI Responsiveness
+- **UI Throttling (Anti-Freeze):** Implemented a log buffering system with a `QTimer` (200ms) to prevent UI freezing during high-frequency logging. The application now remains fully responsive (draggable/clickable) even while processing thousands of files per second.
+- **Multithreading GIL Yields:** Added microscopic `time.sleep` yields in tight parsing and file generation loops. This allows the Python Global Interpreter Lock (GIL) to release more frequently, ensuring the UI thread stays alive and smooth during heavy CPU-bound tasks like scanning tens of thousands of script lines.
+- **Regex Optimization:** Optimized core translation logic by pre-compiling overhead-heavy regular expression patterns. This significantly reduces CPU usage during the "protection" and "restoration" phases of translation.
+- **Efficiency:** Optimized translation file generation by caching relative path calculations, reducing redundant OS calls during massive project writes.
+- **Signal Multi-threading Efficiency:** Reduced main-thread overhead by eliminating redundant "debug" level signal emissions in tight processing loops.
+
+### 🔍 Parser Optimization & Accuracy
+- **Smart Directory Targeting:** The parser now automatically prioritizes the `game/` folder when a project root is selected, ensuring only relevant assets are scanned.
+- **Strict File Type Enforcement:** Restricted scanning to core Ren'Py files (`.rpy`, `.rpyc`, `.rpym`, `.rpymc`). Other common but non-essential files (JSON, CSV, TXT, etc.) are now skipped to prevent "translation noise".
+- **Advanced System Filter:** Added comprehensive exclusion rules for internal folders like `cache/`, `renpy/`, `saves/`, `tmp/`, and `python-packages/`.
+- **Binary/Corrupted String Filter (RPYC Safety):** Added robust detection and filtering for corrupted strings from `.rpyc` files:
+    - Unicode Replacement Character (`\ufffd`) detection.
+    - Private Use Area character filtering (`\uE000-\uF8FF`).
+    - Control character detection (`\x00-\x1F`, `\x7F-\x9F`).
+    - High ratio of non-printable character analysis (>30% threshold).
+    - Low alphabetic content detection (<20% ratio).
+    - Short string corruption pattern matching for strings like `"z�X�"`, `"|d�T"`, `"qu�p��"`.
+- **Python Code / Docstring Detection (Critical Fix):** New filter to prevent game-breaking translations of embedded code:
+    - Detects Python keywords: `def`, `class`, `for`, `if`, `import`, `return`, `raise`, `try`, `except`, `while`, `lambda`, `with`.
+    - Filters Ren'Py module calls like `renpy.store.x`, `renpy.block_rollback()`.
+    - Skips string concatenation expressions: `"inventory/"+i.img+".png"`.
+    - Protects internal dict access patterns: `_saved_keymap[key]`.
+    - Filters boolean/None assignments: `x = True`, `y = False`, `z = None`.
+- **Python Built-in Function Calls Filter:** Added detection for Python built-in function calls (`str()`, `int()`, `len()`, etc.) that should never be translated.
+- **Default Dict/List String Extraction (Quest System Fix):** New extraction capability for strings inside `default` statement dict/list literals:
+    - Handles `default quest = {"anna": ["Start by helping her..."]}` patterns.
+    - Extracts translatable quest descriptions, schedule entries, and objectives.
+    - Intelligent filtering to skip dict keys, short technical strings, and file paths.
+- **Short Technical Words:** Added filter for common programming identifiers (`img`, `id`, `val`, `cfg`, etc.) that should never be translated.
+- **Enhanced Technical String Filtering (Official Documentation Update):**
+    - **Documentation-Driven Expansion:** Significantly expanded the `renpy_technical_terms` list based on a deep dive into official Ren'Py documentation, including transitions, motion commands, and engine keywords.
+    - **Advanced Screen Language Filtering:** Added support for advanced UI elements like `hotspot`, `hotbar`, `areapicker`, `draggroup`, `showif`, and `vpgrid`.
+    - **Deep Python Integration Safety:** Added comprehensive filtering for Python technical types (`Callable`, `Literal`, `Self`) and a full set of internal exception classes (`AssertionError`, `TypeError`, etc.) to prevent code-leaks in translation.
+    - **Smart Heuristics:**
+        - **Internal Identifier Protection:** Now automatically skips all underscore-prefixed strings (e.g., `_history`, `_confirm`) which are reserved for Ren'Py's internal use.
+        - **System File Filtering:** Automatically skips strings derived from internal indexing files (starting with `00`).
+        - **Namespace Awareness:** Strengthened detection for `config.`, `gui.`, `preferences.`, and `style.` namespaces.
+    - **CamelCase & Dot-notation Detection:** Improved detection to automatically skip technical identifiers, module attributes, and code-like strings.
+
+
+### 🌐 Expanded Language Support
+- **Massive Source Language Expansion:** Increased the number of supported source languages from 37 to over 90, covering nearly every major language for a truly global translation experience.
+- **Improved Native Names:** Standardized native language names in the UI for better accessibility.
+
+### ⚙️ Translation Engine Improvements
+- **DeepL Improvements:**
+  - Added 3-attempt exponential backoff retry for transient network errors.
+  - New "Formality" setting (Formal/Informal) for supported languages.
+  - Fixed critical undefined variable bug in exception handler.
+- **DeepL Tag Protection:** Automatically fixes spacing errors inside Ren'Py tags (e.g., `{ i }` → `{i}`).
+- **AI Token Tracking:** OpenAI and Gemini now log token usage for better cost monitoring.
+- **Optimization:** Implemented centralized request deduplication to prevent redundant API calls across all engines.
+- **Resilience:** Added "Mirror Health Check" system for Google Translate to automatically detecting and bypassing failing endpoints.
+- **Google Batch Fix:** Fixed a critical `AttributeError: _endpoint_failures` that occurred during multi-endpoint batch translation.
+- **Mirror Ban Logic:** Implemented a temporary ban system (5 minutes) for Google Translate mirrors that consistently return 429 (Too Many Requests) or other errors, ensuring the pipeline quickly shifts to healthy mirrors.
+- **Smart Concurrency:** Introduced adaptive rate-limit handling for OpenAI/Gemini that dynamically adjusts concurrency upon encountering 429 errors.
+
+### 🖥️ Local LLM & Jan.ai
+- **Jan.ai Support:** Added Jan.ai as a built-in preset in Local LLM settings (URL: `http://localhost:1337/v1`).
+- **Uncensored Model Presets:** Categorized model dropdown for NSFW VN translation (Sansürsüz, LM Studio, Standart).
+- **Separated Model Input:** Free-text model name input with a separate preset dropdown.
+
+### 🍱 Localization & UI
+- **Engine Transparency:** Added "(Experimental)" labels to non-Google engines.
+- **Localized LLM Categories:** "Uncensored", "LM Studio", and "Standard" categories are now fully localized in all 8 supported languages.
+- **DeepL Formality UI:** New setting card in API Keys section.
+- **Global Label Sync:** Comprehensive update for `tr`, `en`, `de`, `es`, `ru`, `fr`, `zh-CN`, and `fa` locales.
+- **Settings UI Localization Fix:** Fixed hardcoded Turkish fallback strings in Settings Interface (AI Settings, Proxy Settings, Advanced sections) that were appearing in English mode.
+
 ## [2.4.10] - 2026-01-11
 ### 🛡️ Ren'Py Engine Protection & Stability
 - **Engine Isolation:** Explicitly excluded `renpy/common` and internal `renpy/` directories from scanning to prevent engine-level scripts from being corrupted by translation.

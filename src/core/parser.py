@@ -11,6 +11,7 @@ import asyncio
 import json
 import logging
 import re
+import time
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass
 from pathlib import Path
@@ -62,14 +63,48 @@ class RenPyParser:
         # Technical terms for filtering
         self.renpy_technical_terms = {
             'left', 'right', 'center', 'top', 'bottom', 'gui', 'config',
-            'true', 'false', 'none', 'auto', 'png', 'jpg', 'mp3', 'ogg'
+            'true', 'false', 'none', 'auto', 'png', 'jpg', 'mp3', 'ogg', 'rpy', 'rpyc', 'rpym', 'rpymc',
+            'dissolve', 'fade', 'pixellate', 'move', 'moveinright', 'moveoutright',
+            'moveinleft', 'moveoutleft', 'moveintop', 'moveouttop', 'moveinbottom', 'moveoutbottom',
+            'inright', 'inleft', 'intop', 'inbottom', 'outright', 'outleft', 'outtop', 'outbottom',
+            'wiperight', 'wipeleft', 'wipeup', 'wipedown',
+            'slideright', 'slideleft', 'slideup', 'slidedown',
+            'slideawayright', 'slideawayleft', 'slideawayup', 'slideawaydown',
+            'irisout', 'irisin', 'pushright', 'pushleft', 'pushup', 'pushdown',
+            'zoom', 'alpha', 'xalign', 'yalign', 'xpos', 'ypos', 'xanchor', 'yanchor',
+            'xzoom', 'yzoom', 'rotate', 'around', 'align', 'pos', 'anchor',
+            'rgba', 'rgb', 'hex', 'matrix', 'linear', 'ease', 'easein', 'easeout',
+            'ascii', 'eval', 'exec', 'latin', 'western', 'greedy', 'freetype',
+            'narrator', 'window', 'frame', 'vbox', 'hbox', 'side', 'grid', 'viewport',
+            'fixed', 'button', 'bar', 'vbar', 'slider', 'scrollbar', 'input',
+            # Added from Research: Statements & Keywords
+            'layeredimage', 'transform', 'camera', 'expression', 'assert',
+            'hotspot', 'hotbar', 'areapicker', 'drag', 'draggroup', 'showif', 'vpgrid',
+            # Special Labels & Internal Variables
+            'after_load', 'after_warp', 'before_main_menu', 'splashscreen',
+            'config', 'preferences', 'gui', 'style', 'persistent',
+            # Python Technical & Error Classes
+            'Callable', 'Literal', 'Self', 'overload', 'override',
+            'AssertionError', 'TypeError', 'ValueError', 'ZeroDivisionError',
+            'ArithmeticError', 'AttributeError', 'ImportError', 'IndexError',
+            'KeyError', 'NameError', 'RuntimeError', 'StopIteration',
+            # Style properties & Engine UI
+            'kerning', 'line_leading', 'outlines', 'antialias', 'hinting',
+            'vscroller', 'hscroller', 'viewport', 'button', 'input',
+            # Additional engine terms
+            'zsync', 'zsyncmake', 'rpu', 'ecdsa', 'rsa', 'bbcode', 'markdown',
+            'utf8', 'latin1', 'ascii'
         }
+
+        # New: CamelCase or dot notation strings that are likely technical
+        self.technical_id_re = re.compile(r'^[a-z]+(?:[A-Z][a-z0-9]+)+$|^[a-z0-9_]+\.[a-z0-9_.]+$')
 
         # Edge-case: Ren'Py screen language - ignore technical screen elements
         self.technical_screen_elements = {
             'vbox', 'hbox', 'frame', 'window', 'viewport', 'scrollbar', 'bar', 'slider',
             'imagebutton', 'hotspot', 'hotbar', 'side', 'input', 'button', 'confirm', 'notify',
-            'layout', 'store', 'style', 'action', 'caption', 'title', 'textbutton', 'label', 'tooltip'
+            'layout', 'store', 'style', 'action', 'caption', 'title', 'textbutton', 'label', 'tooltip',
+            'null', 'mousearea', 'key', 'timer', 'transform', 'parallel', 'contains', 'block'
         }
 
         # Edge-case: Ignore lines with only technical terms or variable assignments
@@ -278,7 +313,11 @@ class RenPyParser:
 
         self.renpy_technical_terms = {
             'left', 'right', 'center', 'top', 'bottom', 'gui', 'config',
-            'true', 'false', 'none', 'auto', 'png', 'jpg', 'mp3', 'ogg'
+            'true', 'false', 'none', 'auto', 'png', 'jpg', 'mp3', 'ogg',
+            'dissolve', 'fade', 'pixellate', 'move', 'moveinright', 'moveoutright',
+            'zoom', 'alpha', 'xalign', 'yalign', 'xpos', 'ypos', 'xanchor', 'yanchor',
+            'xzoom', 'yzoom', 'rotate', 'around', 'align', 'pos', 'anchor',
+            'rgba', 'rgb', 'hex', 'matrix'
         }
 
         # Blacklist for technical keys in data files
@@ -403,7 +442,11 @@ class RenPyParser:
                     canonical = bytes(canonical, 'utf-8').decode('unicode_escape')
                 except Exception:
                     pass
-                key = (canonical, entry.get('line_number', 0), tuple(ctx))
+                # Use canonical for deduplication to collapse "Text" and "Text\n" and "Text"
+                # But keep original context for reconstruction if needed
+                key = (canonical, tuple(ctx))
+                
+                # Check if we already have this text in this context (ignore line number differences)
                 if key not in seen_texts:
                     # context_path ve text_type zorunlu olsun
                     entry.setdefault('context_path', ctx)
@@ -652,7 +695,7 @@ class RenPyParser:
 
     def parse_directory(self, directory: Union[str, Path], include_deep_scan: bool = True, recursive: bool = True) -> Dict[Path, List[Dict[str, Any]]]:
         """
-        Parse a directory for translatable strings, including .rpy, .json, .yaml, .xml, and .ini files.
+        Parse a directory for translatable strings, restricted to Ren'Py files only.
         """
         directory = Path(directory)
         search_root = self._resolve_search_root(directory)
@@ -665,44 +708,19 @@ class RenPyParser:
             except Exception:
                 return False
 
-        # Existing logic for .rpy and .rpym files (skip tl/)
-        rpy_files = list(search_root.glob("**/*.rpy")) + list(search_root.glob("**/*.rpym"))
-        for file_path in rpy_files:
-            if not _in_tl_folder(file_path):
+        # ONLY Ren'Py related files: .rpy, .rpym, .rpyc, .rpymc
+        extensions = ["**/*.rpy", "**/*.rpym", "**/*.rpyc", "**/*.rpymc"]
+        files = []
+        for ext in extensions:
+            files.extend(list(search_root.glob(ext)))
+            
+        for i, file_path in enumerate(files):
+            if not _in_tl_folder(file_path) and not self._is_excluded_rpy(file_path, search_root):
                 results[file_path] = self.extract_text_entries(file_path)
-
-        # Logic for .json files
-        json_files = [f for f in search_root.glob("**/*.json") if not _in_tl_folder(f)]
-        for file_path in json_files:
-            results[file_path] = self.extract_from_json(file_path)
-
-        # Logic for .csv files
-        csv_files = [f for f in search_root.glob("**/*.csv") if not _in_tl_folder(f)]
-        for file_path in csv_files:
-            results[file_path] = self.extract_from_csv(file_path)
-
-        # Logic for .txt files
-        txt_files = [f for f in search_root.glob("**/*.txt") if not _in_tl_folder(f)]
-        for file_path in txt_files:
-            results[file_path] = self.extract_from_txt(file_path)
-
-        # Logic for .yaml files
-        try:
-            yaml_files = [f for f in search_root.glob("**/*.yaml") if not _in_tl_folder(f)]
-            for file_path in yaml_files:
-                results[file_path] = self.extract_from_yaml(file_path)
-        except ImportError:
-            self.logger.warning("PyYAML not available. Skipping .yaml files.")
-
-        # Logic for .xml files
-        xml_files = [f for f in search_root.glob("**/*.xml") if not _in_tl_folder(f)]
-        for file_path in xml_files:
-            results[file_path] = self.extract_from_xml(file_path)
-
-        # Logic for .ini files
-        ini_files = [f for f in search_root.glob("**/*.ini") if not _in_tl_folder(f)]
-        for file_path in ini_files:
-            results[file_path] = self.extract_from_ini(file_path)
+            
+            # Yield GIL every 5 files to keep UI responsive during large scans
+            if i % 5 == 0:
+                time.sleep(0.001)
 
         return results
 
@@ -781,36 +799,44 @@ class RenPyParser:
 
     def _resolve_search_root(self, directory: Path) -> Path:
         """
-        DEĞİŞİKLİK: Kullanıcı bir klasör seçtiyse, Ren'Py standartlarına uymasa bile
-        o klasördeki TÜM dosyaları taramalıyız. 'game' klasörüne zorlamak,
-        standart dışı paketlenmiş oyunlarda veri kaybına neden oluyor.
+        Prioritize 'game' folder if it exists within the selected directory.
+        Ren'Py games store their translatable assets strictly in 'game/'.
         """
-        # Eski mantığı devre dışı bırakıyoruz veya sadece 'game' klasörü 
-        # seçilen dizinin içindeyse ve kullanıcı KÖK dizini seçtiyse uyarı veriyoruz.
-        
-        # Güvenli yaklaşım: Olduğu gibi bırak, recursive tarama zaten game'i de bulur.
+        game_folder = directory / "game"
+        if game_folder.exists() and game_folder.is_dir():
+            self.logger.info(f"Targeting 'game' folder within selected directory: {game_folder}")
+            return game_folder
         return directory
 
     def _is_excluded_rpy(self, file_path: Path, search_root: Path) -> bool:
         """
         Determines if an .rpy file should be excluded from processing.
-
-        Args:
-            file_path: The path of the file to check.
-            search_root: The root directory of the search.
-
-        Returns:
-            True if the file should be excluded, False otherwise.
+        Excludes system folders (cache, renpy, saves, etc.) and translation folders (tl).
         """
-        # Normalize path to lowercase with forward slashes
-        relative_path = str(file_path.relative_to(search_root)).replace('\\', '/').lower()
+        # Normalize path to lowercase with forward slashes for cross-platform matching
+        rel_str = str(file_path.relative_to(search_root)).replace('\\', '/').lower()
+        full_str = str(file_path).replace('\\', '/').lower()
 
-        # CRITICAL: Always exclude renpy/common and internal renpy/ directories
-        # Also exclude 'tl/' folder to avoid duplicates and scanning existing translations
-        if 'renpy/common' in relative_path or relative_path.startswith('renpy/'):
+        # SUPER EXCLUSION: Never, ever scan internal engine files
+        # Check both relative and full path for 'renpy/common' or 'renpy/display'
+        engine_markers = ['/renpy/common/', '/renpy/display/', '/renpy/library/']
+        if any(marker in full_str or rel_str.startswith('renpy/') for marker in engine_markers):
+            return True
+
+        # Exclude technical/system folders
+        excluded_folders = {
+            'cache/', 'tmp/', 'saves/', 'python-packages/', 'lib/', 'log/', 'logs/',
+            '.git/', '.vscode/', '.idea/'
+        }
+        
+        if any(rel_str.startswith(folder) or f'/{folder}' in rel_str for folder in excluded_folders):
             return True
         
-        if relative_path.startswith('tl/') or '/tl/' in relative_path:
+        if rel_str.startswith('tl/') or '/tl/' in rel_str:
+            return True
+
+        # Exclude specific technical extensions that might be caught by glob
+        if file_path.suffix.lower() == '.rpyb':
             return True
 
         return False
@@ -1113,6 +1139,8 @@ class RenPyParser:
 
         text_lower = text.lower().strip()
         text_strip = text.strip()
+
+
         # Skip generated translation/TL snippets or fragments from .tl/.rpy translation blocks
         # e.g. lines starting with 'translate <lang>' or containing 'old'/'new' markers
         if '\n' in text:
@@ -1129,6 +1157,15 @@ class RenPyParser:
             return False
         
         if text_lower in self.renpy_technical_terms:
+            return False
+            
+        # Reject internal Ren'Py names (staring with _) or internal files (starting with 00)
+        if text_strip.startswith('_') and ' ' not in text_strip:
+            return True
+        if text_strip.startswith('00') and not any(ch.isalpha() for ch in text_strip[:5]):
+            return True
+
+        if self.technical_id_re.match(text_strip):
             return False
 
         if re.fullmatch(r"\s*(\[[^\]]+\]|\{[^}]+\}|%s|%\([^)]+\)[sdif])\s*", text):
@@ -1153,13 +1190,22 @@ class RenPyParser:
 
         technical_patterns = [
             r'^#[0-9a-fA-F]+$',
-            r'\.ttf$',
+            r'\.ttf$|\.otf$|\.woff2?$',
             r'^%s[%\s]*$',
             r'fps|renderer|ms$',
             r'^[0-9.]+$',
             r'game_menu|sync|input|overlay',
             r'vertical|horizontal|linear',
             r'touch_keyboard|subtitle|empty',
+            r'\*\*?/\*\*?', # Glob patterns
+            r'\.old$|\.new$|\.bak$',
+            r'^[a-z0-9_]+\.[a-z0-9_.]+$', # module.sub.attr
+            r'^[a-z0-9_]+=[^=]+$', # Assignment without double equals
+            r'^(?:config|gui|preferences|style)\.[a-z0-9_.]+$', # Internal variables
+            r'\b(?:uniform|attribute|varying|vec[234]|mat[234]|gl_FragColor|sampler2D|gl_Position|texture2D|v_tex_coord|a_tex_coord|a_position|u_transform|u_lod_bias)\b', # Shader/GLSL keywords
+            r'^--?[a-z0-9_\-]+$', # Command line arguments (e.g. --force, -o)
+            r'^[a-z0-9_/.]+\.(?:png|jpg|mp3|ogg|wav|webp|ttf|otf|woff2?|rpyc?|rpa)$', # Asset paths
+            r'^[a-zA-Z0-9_]+/[a-zA-Z0-9_/.\-]+$', # Path fragments (folder/file)
         ]
         for pattern in technical_patterns:
             if re.search(pattern, text_lower):
@@ -1174,11 +1220,38 @@ class RenPyParser:
         if re.search(r'\\x[0-9a-fA-F]{2}|(?:\(\?\:|\(\?P<|\[@-Z\\-_\]|\[0-\?\]\*|\[ -/\]\*|\[@-~\])', text):
              return False
         
-        # Heuristic: If string is long and has high punctuation/symbol density, it's likely code/regex
         if len(text_strip) > 15:
             symbol_count = len(re.findall(r'[\\#\[\](){}|*+?^$]', text_strip))
             if symbol_count > len(text_strip) * 0.25:
                 return False
+        
+        # --- NEW: Gibbberish / Binary / Encrypted String Detection ---
+        # Strings like ">0ہWwLmw8g/τyMȫ9{h|f0`0Z" or binary junk found in .rpyc files
+        if len(text_strip) > 8:
+            # Check for the Unicode Replacement Character (U+FFFD) - definitive junk
+            if '\ufffd' in text_strip:
+                return False
+                
+            # Count "broken" or very unusual characters for a translation string
+            # (Outside standard Latin, Cyrillic, CJK, and common punctuation)
+            # Many obfuscated games use ranges that look like junk.
+            strange_chars = len(re.findall(r'[^\x20-\x7E\s\u0400-\u04FF\u4E00-\u9FFF\u3040-\u30FF\uAC00-\uD7AF\u00A0-\u00FF]', text_strip))
+            if strange_chars > len(text_strip) * 0.4:
+                return False
+            
+            # Check ratio of letters to total length
+            # Real sentences (even short ones) have high letter density.
+            # Junk/Encrypted strings have lots of numbers/symbols/null-like chars.
+            alpha_count = sum(1 for ch in text_strip if ch.isalpha())
+            if alpha_count < len(text_strip) * 0.2 and len(text_strip) > 10:
+                return False
+            
+            # High unique character variety in non-alpha strings is a sign of entropy (encryption/junk)
+            if alpha_count < len(text_strip) * 0.4:
+                unique_chars = len(set(text_strip))
+                if unique_chars > len(text_strip) * 0.7:
+                    return False
+        # -------------------------------------------------------------
 
         if re.match(r'^\d+(?:\.\d+)+$', text.strip()):
             return True
@@ -1198,14 +1271,51 @@ class RenPyParser:
            (text.startswith("_('") and text.endswith("')")):
             return False
 
+        # --- NEW: Expression / Concatenation Detection ---
+        # Strings like '"inventory/" + i.img' or '"part" + str(val)'
+        if ('"' in text_strip or "'" in text_strip) and ('+' in text_strip or 'str(' in text_strip or 'int(' in text_strip):
+            return False
+            
         # Reject obvious function calls or code-like literals captured as strings
         # e.g. some_func(arg), module.attr, key: value
         if re.match(r'^[A-Za-z_]\w*\s*\(.*\)$', text_strip):
             return False
-        if re.match(r'^[A-Za-z_]\w*\.[A-Za-z_]\w*$', text_strip):
+        if re.match(r'^[A-Za-z_]\w*(?:\.[A-Za-z_]\w*)+$', text_strip): # Multiple dots (module.attr)
             return False
         if re.match(r'^[A-Za-z0-9_\-]+\s*:\s*[A-Za-z0-9_\-]+$', text_strip):
             return False
+        if '=' in text_strip and not (text_strip.startswith('{') or '[' in text_strip):
+            # Likely an assignment if it has '=' but no Ren'Py tags/interpolations nearby
+            # Dialogue rarely has '=' unless it's a tag like {color=#f00}
+            if not re.search(r'\{[^}]*=[^}]*\}', text_strip):
+                return False
+        
+        # Docstring / Embedded Code detection: Reject strings containing Python code
+        # These are often docstrings or code blocks captured by mistake from .rpyc files
+        if '\n' in text_strip or len(text_strip) > 60:
+            # Check for Python function/class definitions
+            if re.search(r'\bdef\s+\w+\s*\(|\bclass\s+\w+', text_strip):
+                return False
+            # Check for common Python/Ren'Py code patterns
+            code_patterns = [
+                r'renpy\.\w+',           # renpy.store, renpy.config, etc.
+                r'\w+\s*=\s*\[',         # list assignment
+                r'\w+\s*=\s*\{',         # dict assignment
+                r'for\s+\w+\s+in\s+',    # for loop
+                r'if\s+\w+\s+in\s+',     # if x in y
+                r'\w+\[\w+\]',           # dict/list access
+                r'km\[',                 # keymap access
+                r'_\w+\s*\(',            # private function call
+                r'True\b|False\b|None\b', # Python literals
+                r'import\s+|from\s+\w+\s+import', # imports
+            ]
+            for pattern in code_patterns:
+                if re.search(pattern, text_strip):
+                    return False
+            # General tech word count
+            tech_word_count = sum(1 for word in text_lower.split() if word in self.renpy_technical_terms)
+            if tech_word_count >= 2 or 'python' in text_lower or 'return' in text_lower:
+                return False
 
         # Remove placeholders/tags like [who.name] or {color=...} and check remaining content
         try:
@@ -1219,6 +1329,8 @@ class RenPyParser:
             pass
 
         return any(ch.isalpha() for ch in text) and len(text.strip()) >= 2
+
+
 
     def determine_text_type(
         self,

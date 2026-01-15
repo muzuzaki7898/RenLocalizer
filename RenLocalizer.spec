@@ -14,26 +14,30 @@ hidden_imports += collect_submodules('qfluentwidgets')
 hidden_imports += collect_submodules('aiohttp')
 hidden_imports += collect_submodules('requests')
 hidden_imports += collect_submodules('urllib3')
-hidden_imports += collect_submodules('pykakasi')
 hidden_imports += collect_submodules('PIL')
-hidden_imports += collect_submodules('engineio')
-hidden_imports += collect_submodules('socketio')
 hidden_imports += collect_submodules('rapidfuzz')  # Often used for fuzzy matching
 hidden_imports += collect_submodules('packaging')
 hidden_imports += collect_submodules('chardet')
 hidden_imports += collect_submodules('charset_normalizer')
 hidden_imports += collect_submodules('unrpa')
 hidden_imports += collect_submodules('openai')
-hidden_imports += collect_submodules('google.generativeai')
+hidden_imports += collect_submodules('google.genai')
 hidden_imports += collect_submodules('yaml')
 hidden_imports += collect_submodules('darkdetect')
+hidden_imports += collect_submodules('fontTools')
+hidden_imports += collect_submodules('pyparsing')
+hidden_imports += collect_submodules('certifi')
 
 # Manual additions for specific edge cases
-hidden_imports.extend([
-    'PIL._tkinter_finder', 
-    'engineio.async_drivers.aiohttp',
-    'win32timezone',
-])
+if sys.platform == 'win32':
+    hidden_imports.extend([
+        'PIL._tkinter_finder', 
+        'win32timezone',
+    ])
+else:
+    hidden_imports.extend([
+        'PIL._tkinter_finder',
+    ])
 
 # Define datas with absolute paths to avoid not found errors
 datas_list = [

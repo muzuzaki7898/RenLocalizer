@@ -1,6 +1,6 @@
 #!/bin/bash
 # RenLocalizer GUI Launcher for Linux/Mac
-# Version: 2.4.9
+# Version: 2.5.0
 
 set -e  # Exit on error
 
@@ -14,7 +14,7 @@ YELLOW='\033[1;33m'
 NC='\033[0m' # No Color
 
 echo -e "${GREEN}╔══════════════════════════════════════╗${NC}"
-echo -e "${GREEN}║       RenLocalizer v2.4.9            ║${NC}"
+echo -e "${GREEN}║       RenLocalizer v2.5.0            ║${NC}"
 echo -e "${GREEN}║   Professional Ren'Py Translation    ║${NC}"
 echo -e "${GREEN}╚══════════════════════════════════════╝${NC}"
 echo ""
