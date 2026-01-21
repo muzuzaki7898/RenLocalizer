@@ -10,7 +10,7 @@ import logging
 from pathlib import Path
 from typing import Optional
 
-from PyQt6.QtCore import Qt, pyqtSignal
+from PyQt6.QtCore import Qt, pyqtSignal, pyqtSlot
 from PyQt6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QFileDialog
 
 from qfluentwidgets import (
@@ -389,6 +389,28 @@ class SettingsInterface(ScrollArea):
             self.scroll_widget
         )
         
+        # AI Warning Area
+        from qfluentwidgets import CaptionLabel
+        from PyQt6.QtGui import QColor
+        
+        msg1 = self.config_manager.get_ui_text("ai_hallucination_warning", "⚠️ DİKKAT: Küçük modeller halüsinasyon görebilir.")
+        msg2 = self.config_manager.get_ui_text("ai_vram_warning", "⚠️ DİKKAT: 4GB VRAM sınırına dikkat edin.")
+        msg3 = self.config_manager.get_ui_text("ai_source_lang_warning", "💡 İPUCU: Kaynak dili belirtmek kaliteyi artırır.")
+        
+        self.ai_warn1 = CaptionLabel(msg1)
+        self.ai_warn2 = CaptionLabel(msg2)
+        self.ai_warn3 = CaptionLabel(msg3)
+        
+        # Reddish color for warnings
+        self.ai_warn1.setTextColor(QColor(231, 76, 60), QColor(231, 76, 60))
+        self.ai_warn2.setTextColor(QColor(231, 76, 60), QColor(231, 76, 60))
+        self.ai_warn3.setTextColor(QColor(52, 152, 219), QColor(52, 152, 219)) # Blue for tip
+        
+        self.ai_group.vBoxLayout.addWidget(self.ai_warn1)
+        self.ai_group.vBoxLayout.addWidget(self.ai_warn2)
+        self.ai_group.vBoxLayout.addWidget(self.ai_warn3)
+        self.ai_group.vBoxLayout.addSpacing(10)
+
         # OpenAI / OpenRouter Settings
         self.openai_subset = SettingCard(
             icon=FIF.ROBOT,
@@ -551,6 +573,46 @@ class SettingsInterface(ScrollArea):
         llayout.addSpacing(10)
         
         self.ai_group.addSettingCard(self.local_llm_subset)
+        
+        # Local LLM Advanced Settings Card
+        self.local_llm_advanced_card = SettingCard(
+            icon=FIF.CONNECT,
+            title=self.config_manager.get_ui_text("settings_local_llm_advanced", "Yerel LLM Gelişmiş Ayarları"),
+            content=self.config_manager.get_ui_text("settings_local_llm_advanced_desc", "Bağlantı testi ve zaman aşımı ayarları"),
+            parent=self.ai_group
+        )
+        
+        # Timeout SpinBox
+        timeout_label = BodyLabel(self.config_manager.get_ui_text("local_llm_timeout_label", "Zaman Aşımı (sn):"), self.local_llm_advanced_card)
+        self.local_llm_timeout_spin = SpinBox(self.local_llm_advanced_card)
+        self.local_llm_timeout_spin.setRange(30, 600)
+        self.local_llm_timeout_spin.setValue(getattr(self.config_manager.translation_settings, 'local_llm_timeout', 300))
+        self.local_llm_timeout_spin.setMinimumWidth(80)
+        self.local_llm_timeout_spin.setToolTip(self.config_manager.get_ui_text("local_llm_timeout_tooltip", "Yerel LLM için bekleme süresi (30-600 saniye)"))
+        self.local_llm_timeout_spin.valueChanged.connect(self._on_local_llm_timeout_changed)
+        
+        # Connection Status Label
+        self.local_llm_status_label = BodyLabel("", self.local_llm_advanced_card)
+        self.local_llm_status_label.setMinimumWidth(150)
+        
+        # Health Check Button
+        from qfluentwidgets import PrimaryPushButton
+        self.local_llm_test_btn = PrimaryPushButton(
+            self.config_manager.get_ui_text("test_local_llm_connection", "🩺 Bağlantıyı Test Et"),
+            self.local_llm_advanced_card
+        )
+        self.local_llm_test_btn.clicked.connect(self._test_local_llm_connection)
+        
+        # Layout
+        adv_layout = self.local_llm_advanced_card.hBoxLayout
+        adv_layout.addWidget(timeout_label, 0, Qt.AlignmentFlag.AlignRight)
+        adv_layout.addWidget(self.local_llm_timeout_spin, 0, Qt.AlignmentFlag.AlignRight)
+        adv_layout.addSpacing(15)
+        adv_layout.addWidget(self.local_llm_status_label, 0, Qt.AlignmentFlag.AlignRight)
+        adv_layout.addWidget(self.local_llm_test_btn, 0, Qt.AlignmentFlag.AlignRight)
+        adv_layout.addSpacing(10)
+        
+        self.ai_group.addSettingCard(self.local_llm_advanced_card)
 
         # 1. AI Model Parameters Card
         self.ai_model_params_card = SettingCard(
@@ -574,15 +636,27 @@ class SettingsInterface(ScrollArea):
         self.ai_max_tokens.setMinimumWidth(100)
         self.ai_max_tokens.valueChanged.connect(self._on_ai_max_tokens_changed)
 
+        # Batch Size
+        self.ai_batch_size = SpinBox(self.ai_model_params_card)
+        self.ai_batch_size.setRange(1, 200)
+        self.ai_batch_size.setValue(getattr(self.config_manager.translation_settings, 'ai_batch_size', 50))
+        self.ai_batch_size.setMinimumWidth(80)
+        self.ai_batch_size.setToolTip(self.config_manager.get_ui_text("tooltip_ai_batch_size", "Tek seferde yapay zekaya gönderilecek satır sayısı (Varsayılan: 50)"))
+        self.ai_batch_size.valueChanged.connect(self._on_ai_batch_size_changed)
+
         temp_label = BodyLabel(self.config_manager.get_ui_text("ai_temp_short", "Sıcaklık:"), self.ai_model_params_card)
         tokens_label = BodyLabel(self.config_manager.get_ui_text("ai_tokens_short", "Token:"), self.ai_model_params_card)
+        batch_label = BodyLabel(self.config_manager.get_ui_text("ai_batch_short", "Paket:"), self.ai_model_params_card)
 
         mp_layout = self.ai_model_params_card.hBoxLayout
         mp_layout.addWidget(temp_label, 0, Qt.AlignmentFlag.AlignRight)
         mp_layout.addWidget(self.ai_temperature, 0, Qt.AlignmentFlag.AlignRight)
-        mp_layout.addSpacing(20)
+        mp_layout.addSpacing(15)
         mp_layout.addWidget(tokens_label, 0, Qt.AlignmentFlag.AlignRight)
         mp_layout.addWidget(self.ai_max_tokens, 0, Qt.AlignmentFlag.AlignRight)
+        mp_layout.addSpacing(15)
+        mp_layout.addWidget(batch_label, 0, Qt.AlignmentFlag.AlignRight)
+        mp_layout.addWidget(self.ai_batch_size, 0, Qt.AlignmentFlag.AlignRight)
         mp_layout.addSpacing(10)
         self.ai_group.addSettingCard(self.ai_model_params_card)
 
@@ -918,6 +992,89 @@ class SettingsInterface(ScrollArea):
         self.config_manager.translation_settings.local_llm_url = text
         self.config_manager.save_config()
 
+    def _on_local_llm_timeout_changed(self, value: int):
+        """Handle Local LLM timeout changes."""
+        self.config_manager.translation_settings.local_llm_timeout = value
+        self.config_manager.save_config()
+
+    def _test_local_llm_connection(self):
+        """Test connection to local LLM server."""
+        import asyncio
+        import threading
+        
+        self.local_llm_test_btn.setEnabled(False)
+        self.local_llm_status_label.setText(self.config_manager.get_ui_text("testing_connection", "⏳ Test ediliyor..."))
+        
+        def run_health_check():
+            try:
+                from src.core.ai_translator import LocalLLMTranslator
+                
+                # Create temporary translator for health check
+                translator = LocalLLMTranslator(
+                    model=self.config_manager.translation_settings.local_llm_model or "llama3.2",
+                    base_url=self.config_manager.translation_settings.local_llm_url or "http://localhost:11434/v1",
+                    timeout=getattr(self.config_manager.translation_settings, 'local_llm_timeout', 300),
+                    config_manager=self.config_manager
+                )
+                
+                # Run health check
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+                try:
+                    success, message = loop.run_until_complete(translator.health_check())
+                finally:
+                    loop.run_until_complete(translator.close())
+                    loop.close()
+                
+                # Update UI on main thread
+                from PyQt6.QtCore import QMetaObject, Qt, Q_ARG
+                QMetaObject.invokeMethod(
+                    self, "_update_connection_status",
+                    Qt.ConnectionType.QueuedConnection,
+                    Q_ARG(bool, success),
+                    Q_ARG(str, message)
+                )
+            except Exception as e:
+                from PyQt6.QtCore import QMetaObject, Qt, Q_ARG
+                QMetaObject.invokeMethod(
+                    self, "_update_connection_status",
+                    Qt.ConnectionType.QueuedConnection,
+                    Q_ARG(bool, False),
+                    Q_ARG(str, str(e))
+                )
+        
+        # Run in background thread
+        thread = threading.Thread(target=run_health_check, daemon=True)
+        thread.start()
+
+    @pyqtSlot(bool, str)
+    def _update_connection_status(self, success: bool, message: str):
+        """Update connection status label (called from main thread)."""
+        self.local_llm_test_btn.setEnabled(True)
+        
+        if success:
+            self.local_llm_status_label.setText(self.config_manager.get_ui_text("local_llm_connected", "✅ Bağlandı"))
+            self.local_llm_status_label.setStyleSheet("color: #4CAF50;")  # Green
+            
+            # Show success info bar
+            if self.parent_window:
+                self.parent_window.show_info_bar(
+                    "success",
+                    self.config_manager.get_ui_text("connection_success", "Bağlantı Başarılı"),
+                    message
+                )
+        else:
+            self.local_llm_status_label.setText(self.config_manager.get_ui_text("local_llm_disconnected", "❌ Bağlanamadı"))
+            self.local_llm_status_label.setStyleSheet("color: #F44336;")  # Red
+            
+            # Show error info bar
+            if self.parent_window:
+                self.parent_window.show_info_bar(
+                    "error",
+                    self.config_manager.get_ui_text("connection_failed", "Bağlantı Başarısız"),
+                    message
+                )
+
     def _on_ai_temperature_changed(self, value: int):
         """Handle AI temperature changes."""
         self.config_manager.translation_settings.ai_temperature = value / 10.0
@@ -931,6 +1088,11 @@ class SettingsInterface(ScrollArea):
     def _on_ai_max_tokens_changed(self, value: int):
         """Handle AI max tokens changes."""
         self.config_manager.translation_settings.ai_max_tokens = value
+        self.config_manager.save_config()
+
+    def _on_ai_batch_size_changed(self, value: int):
+        """Handle AI batch size changes."""
+        self.config_manager.translation_settings.ai_batch_size = value
         self.config_manager.save_config()
 
     def _on_ai_retry_changed(self, value: int):

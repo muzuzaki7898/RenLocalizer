@@ -37,6 +37,7 @@
   "batch_size_desc": "Aynı anda çevrilecek metin sayısı",
   "batch_size_label": "Batch Boyutu:",
   "browse": "Gözat",
+  "browse_folder": "Klasör",
   "btn_cancel": "İptal",
   "btn_no": "Hayır",
   "btn_ok": "Tamam",
@@ -142,6 +143,8 @@
   "game_exe_label": "Oyun EXE:",
   "game_exe_placeholder": "Oyun EXE dosyasını seçin (örn: Game.exe)",
   "game_folder_not_found": "✗ 'game' klasörü bulunamadı",
+  "game_mac_placeholder": "Oyun paketini (.app) veya klasörü seçin...",
+  "game_linux_placeholder": "Oyun dosyasını veya klasörü seçin...",
   "general_tab": "Genel",
   "github": "GitHub",
   "glossary": "Sözlük",
@@ -171,448 +174,6 @@
   "health_check_title": "Sağlık Kontrolü",
   "health_issues_found": "Bulunan Sorunlar:",
   "help_menu": "Yardım",
-  "info": "Bilgi",
-  "info_dialog": {
-    "title": "Program Bilgi Merkezi",
-    "tabs": {
-      "formats": "Çıktı Formatları",
-      "performance": "Performans Ayarları",
-      "multi_endpoint": "Multi-Endpoint (v2.1.0)",
-      "features": "Özellikler",
-      "troubleshooting": "Sorun Giderme",
-      "unren": "UnRen"
-    },
-    "formats": {
-      "title": "Çeviri Dosya Formatı",
-      "description": "RenLocalizer v2.4.9, Ren'Py çeviri dosyaları için resmi OLD_NEW formatını kullanır:",
-      "old_new": {
-        "title": "🟩 OLD_NEW Format",
-        "features": [
-          "Ren'Py'nin resmi export formatı",
-          "Tüm Ren'Py sürümleri ile uyumlu (6.0+)",
-          "Eski/yeni metin açık ayrımı",
-          "Ren'Py araçları ile tam uyumluluk",
-          "Otomatik language init dosyası oluşturma"
-        ],
-        "example": "translate tr hello_world:\n    old \"Hello, world!\"\n    new \"Merhaba, dünya!\"",
-        "recommended_for": "Tüm Ren'Py projeleri için önerilen standart format"
-      },
-      "note": "Çıktı dosyaları game/tl/<dil>/ klasörüne kaydedilir."
-    },
-    "translation_engines": {
-      "title": "🤖 Çeviri Motorları (v2.4.9)",
-      "description": "RenLocalizer, 6 farklı çeviri motoru destekler:",
-      "engines": [
-        {
-          "name": "Google Web Translate",
-          "type": "Ücretsiz",
-          "description": "Multi-Endpoint teknolojisiyle 4 farklı Google sunucusu + Lingva fallback."
-        },
-        {
-          "name": "DeepL API",
-          "type": "API Anahtarı",
-          "description": "Ücretsiz tier ayda 500.000 karakter. Yüksek kaliteli çeviri."
-        },
-        {
-          "name": "OpenAI (GPT-4/3.5)",
-          "type": "API Anahtarı",
-          "description": "Base URL ile OpenRouter veya yerel LLM (Ollama) da kullanılabilir."
-        },
-        {
-          "name": "Google Gemini",
-          "type": "API Anahtarı",
-          "description": "Gemini Pro ve Gemini Flash modelleri. Ücretsiz tier mevcuttur."
-        },
-        {
-          "name": "🖥️ Yerel LLM (Ollama/LM Studio...)",
-          "type": "Ücretsiz/Yerel",
-          "description": "Ollama, LM Studio gibi OpenAI uyumlu yerel sunucular. İnternet gerektirmez."
-        },
-        {
-          "name": "Pseudo-Yerelleştirme",
-          "type": "Test",
-          "description": "UI test için sahte çeviri. [!!! işaretler !!!] ve àksànlı karakterler."
-        }
-      ],
-      "ai_note": "AI motorları (OpenAI, Gemini, Yerel LLM) özel ayarlara sahiptir: Temperature, Timeout, Max Tokens, Custom Prompt."
-    },
-    "multi_endpoint": {
-      "title": "🚀 Multi-Endpoint Google Translator",
-      "description": "Google Web Translate motoru, birden fazla sunucuya paralel istek göndererek çeviri hızını 2-3 kat artırır.",
-      "how_it_works": {
-        "title": "Nasıl Çalışır?",
-        "steps": [
-          "Metinler slice'lara bölünür, 3 endpoint'e paralel istek gönderilir",
-          "İlk başarılı yanıt kabul edilir, diğerleri iptal edilir",
-          "Tüm endpoint'ler başarısız olursa Lingva fallback devreye girer"
-        ]
-      },
-      "endpoints": {
-        "title": "Kullanılan Endpoint'ler",
-        "google": [
-          "translate.googleapis.com (Ana)",
-          "translate.google.com (Yedek 1)",
-          "translate.google.com.tr (Yedek 2)",
-          "translate.google.co.uk (Yedek 3)"
-        ],
-        "lingva": [
-          "lingva.ml",
-          "lingva.lunar.icu"
-        ]
-      },
-      "performance": {
-        "title": "Performans",
-        "before": "Tek endpoint: ~3-4 metin/saniye",
-        "after": "Multi-endpoint: ~8-10 metin/saniye",
-        "note": "AI motorları daha yavaştır ama daha yüksek kalite sunar."
-      }
-    },
-    "text_types": {
-      "title": "Metin Türleri Filtresi",
-      "description": "RenLocalizer V2, Ren'Py projelerindeki farklı metin türlerini ayırt eder ve hangi türlerin çeviriye dahil edileceğini seçmenize olanak tanır.",
-      "core_types": {
-        "title": "Temel Metin Türleri",
-        "items": [
-          {
-            "name": "Diyaloglar",
-            "description": "Karakter konuşmaları ve anlatıcı (narrator) metinleri. Oyunun ana hikaye içeriğini oluşturur.",
-            "example": "e \"Merhaba, nasılsın?\""
-          },
-          {
-            "name": "Menü Seçenekleri",
-            "description": "Oyuncu seçim menülerindeki seçenekler. Oyuncunun hikaye akışını belirlediği kritik metinler.",
-            "example": "menu:\n    \"Kabul et\":\n        ..."
-          },
-          {
-            "name": "Butonlar",
-            "description": "textbutton ve benzeri ekran öğeleri. Oyun arayüzündeki tıklanabilir öğeler.",
-            "example": "textbutton \"Oyuna Başla\""
-          }
-        ]
-      },
-      "ui_types": {
-        "title": "Arayüz Metinleri",
-        "items": [
-          {
-            "name": "UI Metinleri",
-            "description": "Ekran text() öğeleri ve genel arayüz yazıları.",
-            "example": "text \"Ayarlar\""
-          },
-          {
-            "name": "Giriş Kutuları",
-            "description": "input elementlerinin default, prefix ve suffix değerleri.",
-            "example": "input default \"İsminizi girin\""
-          },
-          {
-            "name": "Alternatif Metinler (Alt Text)",
-            "description": "imagebutton, hotspot ve hotbar elementlerinin erişilebilirlik için kullanılan alt metinleri.",
-            "example": "imagebutton ... alt \"Kaydet butonu\""
-          }
-        ]
-      },
-      "notification_types": {
-        "title": "Bildirimler ve Onaylar",
-        "items": [
-          {
-            "name": "Bildirimler",
-            "description": "Notify() eylemleri ve renpy.notify() çağrıları ile gösterilen anlık mesajlar.",
-            "example": "$ renpy.notify(\"Oyun kaydedildi!\")"
-          },
-          {
-            "name": "Onay Diyalogları",
-            "description": "Confirm() eylemleri ve renpy.confirm() çağrıları ile gösterilen onay pencereleri.",
-            "example": "Confirm(\"Çıkmak istediğinize emin misiniz?\")"
-          }
-        ]
-      },
-      "config_types": {
-        "title": "Yapılandırma Metinleri",
-        "items": [
-          {
-            "name": "Config Stringleri",
-            "description": "config.* değişkenlerinde tanımlanan metinler (oyun adı, versiyon vb.).",
-            "example": "define config.name = \"Oyun Adı\""
-          },
-          {
-            "name": "GUI Stringleri",
-            "description": "gui.* değişkenlerinde tanımlanan arayüz metinleri.",
-            "example": "define gui.main_menu_title = \"Ana Menü\""
-          },
-          {
-            "name": "Define Stringleri",
-            "description": "define statements ile tanımlanan genel metinler. Dikkatli kullanın - bazıları kod içerir.",
-            "example": "define about_text = \"Bu oyun...\""
-          },
-          {
-            "name": "Ren'Py Fonksiyonları",
-            "description": "renpy.input() ve benzeri fonksiyonlardaki metinler.",
-            "example": "$ player_name = renpy.input(\"Adınız nedir?\")"
-          }
-        ]
-      },
-      "tips": {
-        "title": "Kullanım İpuçları",
-        "items": [
-          "Varsayılan ayarlar çoğu proje için uygundur - sadece ihtiyaç duyduğunuzda değiştirin.",
-          "Define Stringleri dikkatli kullanın - bazen değişken adları veya kod parçaları içerebilir.",
-          "Alt Text çevirisi erişilebilirlik için önemlidir - ekran okuyucu kullanan oyuncular için.",
-          "Config ve GUI stringleri genellikle options.rpy ve gui.rpy dosyalarında bulunur.",
-          "Bir metin türünü kapatırsanız, o türdeki metinler çıktı dosyasına dahil edilmez."
-        ]
-      },
-      "note": "Metin türü filtreleri Ayarlar → Metin Türleri sekmesinden yapılandırılabilir."
-    },
-    "performance": {
-      "title": "Performans Ayarları Rehberi",
-      "description": "Sistem performansını optimize etmek için kritik ayarlar:",
-      "parser_workers": {
-        "title": "Parser Workers (Parser İş Parçacıkları)",
-        "description": "Dosyaları paralel olarak işlemek için kullanılan iş parçacığı sayısı.",
-        "ideal_settings": [
-          "Düşük sistemler (2-4 çekirdek): 2-4",
-          "Orta sistemler (4-8 çekirdek): 4-8",
-          "Güçlü sistemler (8+ çekirdek): 8-16"
-        ],
-        "note": "CPU çekirdek sayınızdan fazla ayarlamak performansı düşürür."
-      },
-      "concurrent_threads": {
-        "title": "Eş Zamanlı Thread",
-        "description": "Çeviri işlemi sırasında eş zamanlı çalışan thread sayısı.",
-        "ideal_settings": [
-          "Yavaş internet: 8-16",
-          "Orta internet: 16-32",
-          "Hızlı internet: 32-64"
-        ],
-        "note": "Çok yüksek değerler rate limit sorunları yaratabilir."
-      },
-      "batch_size": {
-        "title": "Batch Boyutu",
-        "description": "Tek seferde işlenecek çeviri isteklerinin sayısı.",
-        "ideal_settings": [
-          "Küçük projeler: 50-100",
-          "Orta projeler: 100-200",
-          "Büyük projeler: 200-500"
-        ],
-        "note": "Büyük batch boyutları daha hızlı ama daha fazla bellek kullanır."
-      },
-      "request_delay": {
-        "title": "İstek Gecikmesi",
-        "description": "Çeviri istekleri arasındaki bekleme süresi (milisaniye).",
-        "ideal_settings": [
-          "Premium API: 50-100ms",
-          "Ücretsiz API: 200-500ms",
-          "Rate limit sorunu varsa: 1000ms+"
-        ],
-        "note": "Çok düşük değerler API limitine takılmanıza neden olur."
-      }
-    },
-    "features": {
-      "title": "Program Özellikleri (v2.4.9)",
-      "description": "RenLocalizer'in sundugu gelişmiş özellikler:",
-      "current": [
-        {
-          "title": "🤖 AI Çeviri Motorları",
-          "description": "OpenAI (GPT-4/3.5), Google Gemini ve yerel Ollama desteği. Custom System Prompt ile özelleştirilebilir."
-        },
-        {
-          "title": "🚀 Multi-Endpoint Google",
-          "description": "4 farklı Google sunucusu + Lingva fallback ile hızlı ve güvenilir çeviri"
-        },
-        {
-          "title": "🎨 6 Tema Desteği",
-          "description": "Dark, Light, Red, Turquoise, Green ve Neon temaları arasında anlık geçiş"
-        },
-        {
-          "title": "📦 Native UnRPA",
-          "description": "Tüm platformlarda çalışan dahili RPA arşiv çıkarma. .bat dosyalarına ihtiyaç yok."
-        },
-        {
-          "title": "🔍 Derin String Tarama",
-          "description": "init python blokları, dictionary'ler ve değişken atamalarındaki gizli stringleri tarar"
-        },
-        {
-          "title": "📦 RPYC Okuyucu",
-          "description": "Derlenmiş .rpyc dosyalarını AST ile doğrudan okur - decompile gerekmez"
-        },
-        {
-          "title": "🎯 Akıllı Pattern Tanıma",
-          "description": "Diyaloglar, menüler, UI elementleri için 40+ regex pattern"
-        },
-        {
-          "title": "🔄 Değişken Koruma",
-          "description": "[player], {b}, {color} gibi etiketleri çeviri sırasında güvenle korur"
-        },
-        {
-          "title": "⚡ Paralel İşleme",
-          "description": "Async worker'lar ile birden fazla dosyayı eş zamanlı işler"
-        },
-        {
-          "title": "📚 Sözlük Sistemi",
-          "description": "Sık kullanılan terimler için tercih edilen çevirileri tanımlayın"
-        },
-        {
-          "title": " Sağlık Kontrolü",
-          "description": "Çeviriden önce sarmalanmamış stringler ve sözdizimi hatalarını tespit eder"
-        },
-        {
-          "title": "🔤 Font Yardımcısı",
-          "description": "Oyun fontlarının hedef dil karakterlerini destekleyip desteklemediğini kontrol eder"
-        },
-        {
-          "title": "🧪 Pseudo-Yerelleştirme",
-          "description": "UI sınırlarını ve font uyumluluğunu test etmek için sahte çeviri"
-        },
-        {
-          "title": "🔄 Fuzzy Eşleşme",
-          "description": "Kaynak dosyalar değiştiğinde akıllı benzerlik eşleşmesi ile çevirileri kurtarın"
-        },
-        {
-          "title": "� CLI Desteği",
-          "description": "Windows, Linux ve macOS'ta komut satırından tam çeviri"
-        }
-      ],
-      "upcoming": [
-        {
-          "title": "📊 İlerleme Analizi",
-          "description": "Detaylı çeviri raporu ve istatistikler"
-        },
-        {
-          "title": "🎨 Metin Türleri UI",
-          "description": "Hangi metin türlerinin çevrileceğini seçmek için görsel arayüz"
-        }
-      ],
-      "new_tools_v240": {
-        "title": "Yeni Araçlar (v2.4.0)",
-        "description": "RenLocalizer v2.4.0, güçlü yeni analiz ve test araçları sunar:",
-        "tools": [
-          {
-            "name": "🔍 Sağlık Kontrolü",
-            "menu_path": "Araçlar → Sağlık Kontrolü",
-            "description": "Çeviriden önce yaygın yerelleştirme sorunlarını tespit eden statik analiz.",
-            "features": [
-              "_() ile sarmalanmamış UI stringlerini tespit eder",
-              "Yer tutucu tutarlılığını kontrol eder ([var], {tag})",
-              "Boş çevirileri bulur",
-              "Sözdizimini doğrular (dengesiz tırnak işaretleri)"
-            ],
-            "usage": "Araçlar → Sağlık Kontrolü'nü seçin ve taramak için bir oyun dizini seçin."
-          },
-          {
-            "name": "🔤 Font Uyumluluğu",
-            "menu_path": "Araçlar → Font Uyumluluğu",
-            "description": "Oyun fontlarının hedef dil karakterlerini destekleyip desteklemediğini doğrular.",
-            "features": [
-              "15+ dil karakter seti (CJK, Kiril, Arapça vb.)",
-              "Kapsam yüzdesi raporlaması",
-              "Her dil için font önerileri",
-              "□□□ (eksik glif) sorunlarını önler"
-            ],
-            "usage": "Araçlar → Font Uyumluluğu'nu seçin, dizin seçin, ardından hedef dilinize göre kontrol edin."
-          },
-          {
-            "name": "🧪 Pseudo-Yerelleştirme",
-            "menu_path": "Çeviri Motoru açılır listesi",
-            "description": "Gerçek çeviri olmadan UI'ı test edin - düzen ve font sorunlarını anında ortaya çıkarır.",
-            "features": [
-              "[!!! işaretçiler !!!] metin taşmasını gösterir",
-              "àksànlı karakterler font kapsamını test eder",
-              "API çağrısı yok - anında yerel dönüşüm",
-              "Üç mod: genişlet, aksan veya her ikisi"
-            ],
-            "usage": "Çeviri Motoru'ndan '🧪 Pseudo-Yerelleştirme (Test)' seçin, ardından çeviriyi başlatın."
-          },
-          {
-            "name": "🔄 Akıllı Güncelleme (Fuzzy)",
-            "menu_path": "Araçlar → Akıllı Güncelleme (Fuzzy)",
-            "description": "Kaynak betikler sürümler arasında hafif değiştiğinde çevirileri kurtarın.",
-            "features": [
-              "Otomatik uygulama için %90 benzerlik eşiği",
-              "Düşük benzerlik eşleşmeleri için insan incelemesi",
-              "Yaygın UI stringleri ile Çeviri Belleği",
-              "Toplu işlemler için tam CLI desteği"
-            ],
-            "usage": "CLI kullanın: python run_cli.py fuzzy eski_tl/ yeni_tl/ --threshold 0.9"
-          }
-        ]
-      }
-    },
-    "troubleshooting": {
-      "title": "Sorun Giderme Rehberi",
-      "description": "Sık karşılaşılan sorunlar ve çözümleri:",
-      "common_issues": [
-        {
-          "problem": "Çeviri çok yavaş",
-          "solutions": [
-            "Parser Workers sayısını artırın",
-            "Batch Size'ı büyütün",
-            "İstek Gecikmesi'ni azaltın",
-            "Daha hızlı çeviri motoru seçin"
-          ]
-        },
-        {
-          "problem": "Bellek kullanımı yüksek",
-          "solutions": [
-            "Batch Size'ı küçültün",
-            "Parser Workers sayısını azaltın",
-            "Büyük dosyaları parçalara bölün"
-          ]
-        },
-        {
-          "problem": "API rate limit hatası",
-          "solutions": [
-            "İstek Gecikmesi'ni artırın",
-            "Eş Zamanlı Thread sayısını azaltın",
-            "Premium API anahtarı kullanın"
-          ]
-        },
-        {
-          "problem": "Çıktı dosyası bozuk",
-          "solutions": [
-            "Farklı output format deneyin",
-            "Encoding ayarlarını kontrol edin",
-            "Parser ayarlarını sıfırlayın"
-          ]
-        }
-      ]
-    },
-    "unren": {
-      "title": "RPA Arşiv Çıkarma (v2.4.9)",
-      "description": "RenLocalizer, .rpa arşivlerini çıkarmak için unrpa kütüphanesini ve dahili native parser'ı kullanır. .bat dosyalarına ihtiyaç yoktur.",
-      "how_it_works": {
-        "title": "Nasıl Çalışır?",
-        "steps": [
-          "Araçlar → RPA Arşivlerini Aç butonuna tıklayın",
-          "Oyun klasörünü seçin (game/ alt klasörü olan dizin)",
-          "Tüm .rpa dosyaları otomatik olarak çıkarılır",
-          "Çıkarılan dosyalar game/ klasörüne yerleştirilir"
-        ]
-      },
-      "features": [
-        "Tüm platformlarda çalışır (Windows, Linux, macOS)",
-        "RPA-3.0 ve RPA-2.0 formatlarını destekler",
-        "unrpa başarısız olursa native parser otomatik devreye girer",
-        "PyInstaller build'lerde de sorunsuz çalışır"
-      ],
-      "troubleshooting": [
-        {
-          "problem": "RPA dosyası bulunamadı",
-          "solution": "Oyun kök klasörünü (game/ alt klasörü olan dizin) seçtiğinizden emin olun."
-        },
-        {
-          "problem": "Çıkarma başarısız",
-          "solution": "Disk alanı yeterli mi kontrol edin. RPA boyutunun 2 katı kadar boş alan gerekir."
-        },
-        {
-          "problem": ".rpy dosyaları görünmüyor",
-          "solution": "Bazı oyunlar sadece .rpyc dosyaları içerir. RenLocalizer bunları da okuyabilir."
-        }
-      ],
-      "note": "Eski UnRen .bat dosyaları artık kullanılmıyor. Tüm çıkarma işlemi Python kütüphaneleri ile yapılır."
-    }
-  },
-  "info_formats_title": "Çıktı Dosya Formatları",
-  "info_unren_features": "Özellikler",
-  "info_unren_what": "UnRen Nedir?",
   "input_section": "Girdi Bölümü",
   "language_changed": "Dil Değiştirildi",
   "language_restart": "Değişikliklerin tam olarak uygulanması için uygulamayı yeniden başlatın.",
@@ -666,7 +227,6 @@
   "multi_endpoint_tooltip": "Birden fazla Google Çeviri sunucusuna paralel istek gönderir, en hızlı yanıtı alır",
   "nav_about": "Hakkında",
   "nav_home": "Ana Sayfa",
-  "nav_info_center": "Bilgi Merkezi",
   "nav_settings": "Ayarlar",
   "nav_support": "Destek Ol",
   "nav_tools": "Araçlar",
@@ -852,6 +412,9 @@
   "scanning_directory": "Klasör taranıyor...",
   "select_directory_title": "Klasör Seçin",
   "select_game_exe_title": "Oyun EXE'sini Seçin",
+  "select_game_mac_title": "Oyun Paketi Seç",
+  "select_game_linux_title": "Oyun Dosyası Seç",
+  "select_game_folder_title": "Oyun Klasörünü Seç",
   "select_output_directory": "Çıktı Klasörü Seçin",
   "select_unren_folder": "UnRen Klasörü Seç",
   "settings": "Ayarlar",
@@ -1062,5 +625,31 @@
   "view_menu": "Görünüm",
   "warning": "Uyarı",
   "aggressive_retry": "Agresif Çeviri",
-  "aggressive_retry_desc": "Çevrilmemiş metinleri alternatif yöntemlerle tekrar dene (yavaş ama daha kapsamlı)"
+  "aggressive_retry_desc": "Çevrilmemiş metinleri alternatif yöntemlerle tekrar dene (yavaş ama daha kapsamlı)",
+  "force_runtime": "Zorla Çeviri (Force Translate)",
+  "force_runtime_desc": "Oyun içi metinleri çalışma anında zorla çevir (eksik !t bayrakları için)",
+  "nav_wiki": "Dokümantasyon (Wiki)",
+  "error_local_llm_connection": "Yerel LLM sunucusuna bağlanılamıyor: {url}. Sunucunun çalıştığından emin olun.",
+  "error_local_llm_no_model": "'{model}' modeli bulunamadı. LLM sunucunuzda (LM Studio/Ollama) modelin yüklü olduğunu kontrol edin.",
+  "error_local_llm_timeout": "Yerel LLM yanıt vermedi ({timeout}s). Daha küçük bir model deneyin veya ayarlardan zaman aşımını artırın.",
+  "error_local_llm_empty_response": "Yerel LLM boş yanıt döndürdü. Model düzgün yüklenmemiş olabilir veya hâlâ işliyor olabilir.",
+  "error_local_llm_invalid_response": "Yerel LLM sunucusundan geçersiz yanıt alındı. Sunucu yapılandırması hatalı olabilir.",
+  "log_local_llm_health_ok": "✅ Yerel LLM sunucusu hazır ({server_type})",
+  "error_ai_no_choices": "AI yanıtında seçenek yok. Yerel LLM'inizin düzgün çalıştığını kontrol edin.",
+  "error_ai_no_message": "AI yanıtında mesaj yok. Model düzgün yüklenmemiş olabilir.",
+  "settings_local_llm_advanced": "Yerel LLM Gelişmiş Ayarları",
+  "settings_local_llm_advanced_desc": "Bağlantı testi ve zaman aşımı ayarları",
+  "local_llm_timeout_label": "Zaman Aşımı (sn):",
+  "local_llm_timeout_tooltip": "Yerel LLM için bekleme süresi (30-600 saniye)",
+  "test_local_llm_connection": "🩺 Bağlantıyı Test Et",
+  "testing_connection": "⏳ Test ediliyor...",
+  "local_llm_connected": "✅ Bağlandı",
+  "local_llm_disconnected": "❌ Bağlanamadı",
+  "connection_success": "Bağlantı Başarılı",
+  "connection_failed": "Bağlantı Başarısız",
+  "ai_batch_short": "Paket:",
+  "tooltip_ai_batch_size": "Tek seferde yapay zekaya gönderilecek satır sayısı (Varsayılan: 50)",
+  "ai_hallucination_warning": "⚠️ Küçük modeller (7B altı) halüsinasyon görme eğilimindedir ve çeviri yerine rastgele metinler üretebilir.",
+  "ai_vram_warning": "⚠️ Model boyutunun GPU belleğinden (VRAM) büyük olması performans sorunlarına yol açabilir.",
+  "ai_source_lang_warning": "💡 Kaynak dili 'Otomatik' yerine açıkça belirtmek çeviri kalitesini artırır."
 }

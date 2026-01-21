@@ -37,6 +37,7 @@
   "batch_size_desc": "Anzahl der gleichzeitig zu übersetzenden Texte",
   "batch_size_label": "Batch-Größe:",
   "browse": "Durchsuchen",
+  "browse_folder": "Ordner",
   "btn_cancel": "Abbrechen",
   "btn_no": "Nein",
   "btn_ok": "OK",
@@ -142,6 +143,8 @@
   "game_exe_label": "Spiel-EXE:",
   "game_exe_placeholder": "Spiel-EXE-Datei auswählen (z. B. Game.exe)",
   "game_folder_not_found": "✗ 'game'-Ordner nicht gefunden",
+  "game_mac_placeholder": "Wählen Sie das Spielpaket (.app) oder den Ordner aus...",
+  "game_linux_placeholder": "Wählen Sie die Spieldatei oder den Ordner aus...",
   "general_tab": "Allgemein",
   "github": "GitHub",
   "glossary": "Glossar",
@@ -171,575 +174,6 @@
   "health_check_title": "Gesundheitscheck",
   "health_issues_found": "Gefundene Probleme:",
   "help_menu": "Hilfe",
-  "info": "Info",
-  "info_dialog": {
-    "title": "Programm-Informationszentrum",
-    "tabs": {
-      "formats": "Ausgabeformate",
-      "performance": "Leistungseinstellungen",
-      "multi_endpoint": "Multi-Endpoint (v2.1.0)",
-      "features": "Funktionen",
-      "troubleshooting": "Fehlerbehebung",
-      "unren": "UnRen"
-    },
-    "formats": {
-      "title": "Übersetzungsdateiformate",
-      "description": "RenLocalizer V2 unterstützt zwei Ausgabeformate für Ren'Py-Übersetzungsdateien:",
-      "simple": {
-        "title": "🟦 SIMPLE Format (Standard)",
-        "features": [
-          "Saubere und lesbare Syntax",
-          "Originaltext in Kommentaren",
-          "Weniger Codezeilen",
-          "Ideal für manuelle Bearbeitung",
-          "Kompatibel mit modernem Ren'Py (7.0+)"
-        ],
-        "example": "translate en hello_world:\n    # \"Hello, world!\"\n    \"Hello, world!\"",
-        "recommended_for": "Moderne Projekte, manuelle Bearbeitung, saubere Ausgabe"
-      },
-      "old_new": {
-        "title": "🟩 OLD_NEW Format (Offiziell)",
-        "features": [
-          "Offizielles Ren'Py-Exportformat",
-          "Kompatibel mit allen Ren'Py-Versionen (6.0+)",
-          "Explizite Trennung von altem/neuem Text",
-          "Volle Kompatibilität mit Ren'Py-Tools",
-          "Strukturierterer Ansatz"
-        ],
-        "example": "translate en hello_world:\n    old \"Hello, world!\"\n    new \"Hello, world!\"",
-        "recommended_for": "Alte Projekte, offizielle Tools, maximale Kompatibilität"
-      },
-      "note": "Beide Formate funktionieren perfekt in der Ren'Py-Engine. Der Unterschied liegt nur im Syntaxstil und der Lesbarkeit.",
-      "change_setting": "Sie können das Ausgabeformat in Einstellungen → Allgemein → Ausgabeformat ändern."
-    },
-    "multi_endpoint": {
-      "title": "🚀 Multi-Endpoint Google Translator (v2.1.0)",
-      "description": "Die neue Übersetzungsarchitektur sendet parallele Anfragen an mehrere Google-Server und erhöht die Geschwindigkeit um das 2-3-fache.",
-      "how_it_works": {
-        "title": "Wie es funktioniert",
-        "steps": [
-          "Texte werden in 12.000 Zeichen 'Slices' aufgeteilt",
-          "Jedes Slice sendet parallele Anfragen an 3 verschiedene Google-Endpoints",
-          "Erste erfolgreiche Antwort wird akzeptiert, andere abgebrochen",
-          "Fehlgeschlagene Endpoints werden vorübergehend depriorisiert",
-          "Wenn alle Google-Endpunkte fehlschlagen, springt Lingva ein"
-        ]
-      },
-      "endpoints": {
-        "title": "Verwendete Endpoints",
-        "google": [
-          "translate.googleapis.com (Primär)",
-          "translate.google.com (Backup 1)",
-          "translate.google.com.tr (Backup 2)",
-          "translate.google.co.uk (Backup 3)"
-        ],
-        "lingva": [
-          "lingva.ml",
-          "lingva.lunar.icu"
-        ]
-      },
-      "settings": {
-        "title": "Einstellungen erklärt",
-        "items": [
-          {
-            "name": "Multi-Endpoint verwenden",
-            "description": "Sendet parallele Anfragen an mehrere Google-Server."
-          },
-          {
-            "name": "Lingva Fallback",
-            "description": "Wenn alle Google-Endpunkte fehlschlagen, springt Lingva Translate ein."
-          },
-          {
-            "name": "Parallele Anfragen",
-            "description": "Wie viele Slices gleichzeitig verarbeitet werden."
-          },
-          {
-            "name": "Max Zeichen pro Anfrage",
-            "description": "Maximale Zeichen in einem Slice."
-          }
-        ]
-      },
-      "performance": {
-        "title": "Leistungsvergleich",
-        "before": "Früheres System (v2.0.x): ~3-4 Texte/Sekunde",
-        "after": "Neues System (v2.1.0): ~8-10 Texte/Sekunde",
-        "note": "Tatsächliche Leistung hängt von Internetgeschwindigkeit ab."
-      },
-      "tips": {
-        "title": "Tipps",
-        "items": [
-          "Bei Ratenlimit-Fehlern Parallele Anfragen auf 8 reduzieren",
-          "Für sehr lange Texte Max Zeichen auf 8000 reduzieren",
-          "Lingva kann langsam sein - für dringende Jobs deaktivieren"
-        ]
-      }
-    },
-    "translation_engines": {
-      "title": "🤖 Übersetzungs-Engines (v2.4.9)",
-      "description": "RenLocalizer unterstützt 6 verschiedene Übersetzungs-Engines:",
-      "engines": [
-        {
-          "name": "Google Web Translate",
-          "type": "Kostenlos",
-          "description": "Multi-Endpoint-Technologie mit 4 Google-Servern + Lingva-Fallback."
-        },
-        {
-          "name": "DeepL API",
-          "type": "API-Schlüssel",
-          "description": "Kostenloses Kontingent bietet 500.000 Zeichen/Monat. Hochwertige Übersetzung."
-        },
-        {
-          "name": "OpenAI (GPT-4/3.5)",
-          "type": "API-Schlüssel",
-          "description": "Unterstützt OpenRouter oder lokale LLM (Ollama) über Basis-URL."
-        },
-        {
-          "name": "Google Gemini",
-          "type": "API-Schlüssel",
-          "description": "Gemini Pro und Gemini Flash Modelle. Kostenloses Kontingent verfügbar."
-        },
-        {
-          "name": "🖥️ Lokale LLM (Ollama/LM Studio...)",
-          "type": "Kostenlos/Lokal",
-          "description": "OpenAI-kompatible lokale Server wie Ollama oder LM Studio. Kein Internet erforderlich."
-        },
-        {
-          "name": "Pseudo-Lokalisierung",
-          "type": "Test",
-          "description": "Gefälschte Übersetzung für UI-Tests. Fügt [!!! Marker !!!] und akzentuierte Zeichen hinzu."
-        }
-      ],
-      "ai_note": "KI-Engines (OpenAI, Gemini, Lokale LLM) haben spezielle Einstellungen: Temperatur, Timeout, Max Tokens, Benutzerdefinierter Prompt."
-    },
-    "text_types": {
-      "title": "Texttyp-Filter",
-      "description": "RenLocalizer V2 unterscheidet zwischen verschiedenen Texttypen.",
-      "core_types": {
-        "title": "Kern-Texttypen",
-        "items": [
-          {
-            "name": "Dialoge",
-            "description": "Charakterdialoge und Erzählertexte.",
-            "example": "e \"Hallo, wie geht es dir?\""
-          },
-          {
-            "name": "Menüoptionen",
-            "description": "Optionen in Spielermenüs.",
-            "example": "menu:\n    \"Akzeptieren\":\n        ..."
-          },
-          {
-            "name": "Schaltflächen",
-            "description": "textbutton und ähnliche Elemente.",
-            "example": "textbutton \"Spiel starten\""
-          }
-        ]
-      },
-      "ui_types": {
-        "title": "Interface-Texte",
-        "items": [
-          {
-            "name": "UI-Texte",
-            "description": "Bildschirm-text() Elemente.",
-            "example": "text \"Einstellungen\""
-          },
-          {
-            "name": "Eingabefelder",
-            "description": "Standardwerte von input.",
-            "example": "input default \"Name eingeben\""
-          },
-          {
-            "name": "Alt-Texte",
-            "description": "Barrierefreiheits-Alt-Texte.",
-            "example": "imagebutton ... alt \"Speichern\""
-          }
-        ]
-      },
-      "notification_types": {
-        "title": "Benachrichtigungen",
-        "items": [
-          {
-            "name": "Benachrichtigungen",
-            "description": "Notify()-Aktionen.",
-            "example": "$ renpy.notify(\"Gespeichert!\")"
-          },
-          {
-            "name": "Bestätigungsdialoge",
-            "description": "Confirm()-Fenster.",
-            "example": "Confirm(\"Beenden?\")"
-          }
-        ]
-      },
-      "config_types": {
-        "title": "Konfigurationstexte",
-        "items": [
-          {
-            "name": "Config-Strings",
-            "description": "Texte in config.* Variablen.",
-            "example": "define config.name = \"Spielname\""
-          },
-          {
-            "name": "GUI-Strings",
-            "description": "Texte in gui.* Variablen.",
-            "example": "define gui.main_menu_title = \"Hauptmenü\""
-          },
-          {
-            "name": "Define-Strings",
-            "description": "Allgemeine definierte Texte.",
-            "example": "define about_text = \"Dieses Spiel...\""
-          },
-          {
-            "name": "Ren'Py-Funktionen",
-            "description": "Texte in renpy.input().",
-            "example": "$ name = renpy.input(\"Name?\")"
-          }
-        ]
-      },
-      "tips": {
-        "title": "Tipps",
-        "items": [
-          "Standardeinstellungen funktionieren meist gut.",
-          "Verwenden Sie Define-Strings vorsichtig.",
-          "Alt-Text ist wichtig für Barrierefreiheit.",
-          "Config/GUI-Strings sind meist in options.rpy/gui.rpy."
-        ]
-      },
-      "note": "Filter können im Tab Texttypen konfiguriert werden."
-    },
-    "performance": {
-      "title": "Leistungsleitfaden",
-      "description": "Kritische Einstellungen:",
-      "parser_workers": {
-        "title": "Parser-Worker",
-        "description": "Anzahl der Worker-Threads.",
-        "ideal_settings": [
-          "Low-End: 2-4",
-          "Mittelklasse: 4-8",
-          "High-End: 8-16"
-        ],
-        "note": "Mehr als CPU-Kerne verringert Leistung."
-      },
-      "concurrent_threads": {
-        "title": "Gleichzeitige Threads",
-        "description": "Anzahl der Übersetzungs-Threads.",
-        "ideal_settings": [
-          "Langsames Internet: 8-16",
-          "Mittleres Internet: 16-32",
-          "Schnelles Internet: 32-64"
-        ],
-        "note": "Zu hoch kann Ratenlimits verursachen."
-      },
-      "batch_size": {
-        "title": "Batch-Größe",
-        "description": "Anzahl der Anfragen pro Batch.",
-        "ideal_settings": [
-          "Kleine Projekte: 50-100",
-          "Mittlere Projekte: 100-200",
-          "Große Projekte: 200-500"
-        ],
-        "note": "Größer ist schneller, braucht aber mehr Speicher."
-      },
-      "request_delay": {
-        "title": "Anfrageverzögerung",
-        "description": "Wartezeit zwischen Anfragen (ms).",
-        "ideal_settings": [
-          "Premium API: 50-100ms",
-          "Free API: 200-500ms",
-          "Ratenlimits: 1000ms+"
-        ],
-        "note": "Zu niedrig kann API blockieren."
-      }
-    },
-    "features": {
-      "title": "Programmfunktionen",
-      "description": "Erweiterte Funktionen:",
-      "current": [
-        {
-          "title": "🚀 Multi-Endpoint Google",
-          "description": "Schnellere Übersetzung durch parallele Server."
-        },
-        {
-          "title": "🔍 Tiefenscan",
-          "description": "Findet versteckte Strings in Python-Blöcken."
-        },
-        {
-          "title": "📦 RPYC-Reader",
-          "description": "Liest kompilierte Dateien ohne Dekompilierung."
-        },
-        {
-          "title": "🎯 Smart Pattern",
-          "description": "Erkennt Dialoge, Menüs, UI usw."
-        },
-        {
-          "title": "🔄 Variablenschutz",
-          "description": "Schützt Tags wie [player] oder {b}."
-        },
-        {
-          "title": "⚡ Parallele Verarbeitung",
-          "description": "Verarbeitet mehrere Dateien gleichzeitig."
-        },
-        {
-          "title": "📚 Glossar",
-          "description": "Bevorzugte Begriffe definieren."
-        },
-        {
-          "title": "🌐 Engines",
-          "description": "Google (Kostenlos), DeepL, OpenAI, Gemini."
-        },
-        {
-          "title": "🔧 UnRen",
-          "description": "Integrierte Unterstützung zum Entpacken."
-        },
-        {
-          "title": "💾 Auto-Save",
-          "description": "Speichert automatisch."
-        },
-        {
-          "title": "🔍 Gesundheitscheck",
-          "description": "Analysiert Probleme vor der Übersetzung."
-        },
-        {
-          "title": "🔤 Schrift-Helper",
-          "description": "Prüft Font-Kompatibilität."
-        },
-        {
-          "title": "🧪 Pseudo-Lokalisierung",
-          "description": "Testet UI-Grenzen."
-        },
-        {
-          "title": "🔄 Fuzzy-Matching",
-          "description": "Aktualisiert Übersetzungen bei Änderungen."
-        },
-        {
-          "title": "📝 Translation Memory",
-          "description": "Eingebaute UI-Strings."
-        },
-        {
-          "title": "🗂️ Kontext-Viewer",
-          "description": "Zeigt, wo Text erscheint."
-        }
-      ],
-      "upcoming": [
-        {
-          "title": "📊 Analytik",
-          "description": "Detaillierte Berichte."
-        },
-        {
-          "title": "🎨 Texttypen-UI",
-          "description": "Visuelle Auswahl."
-        }
-      ],
-      "new_tools_v240": {
-        "title": "Neue Tools (v2.4.0)",
-        "description": "Neue Analyse-Tools:",
-        "tools": [
-          {
-            "name": "🔍 Gesundheitscheck",
-            "menu_path": "Werkzeuge → Gesundheitscheck",
-            "description": "Findet Probleme vor der Übersetzung.",
-            "features": [
-              "Erkennt nicht eingewickelte Strings",
-              "Prüft Platzhalter",
-              "Findet leere Übersetzungen",
-              "Validiert Syntax"
-            ],
-            "usage": "Wählen Sie Werkzeuge → Gesundheitscheck."
-          },
-          {
-            "name": "🔤 Schriftkompatibilität",
-            "menu_path": "Werkzeuge → Schriftkompatibilität",
-            "description": "Prüft, ob Fonts Zeichen unterstützen.",
-            "features": [
-              "15+ Sprachen",
-              "Prozentberichte",
-              "Schriftvorschläge",
-              "Verhindert □□□ Boxen"
-            ],
-            "usage": "Wählen Sie Werkzeuge → Schriftkompatibilität."
-          },
-          {
-            "name": "🧪 Pseudo-Lokalisierung",
-            "menu_path": "Übersetzungswahl",
-            "description": "Testet UI ohne echte Übersetzung.",
-            "features": [
-              "[!!! Marker !!!]",
-              "Akzentuierte Zeichen",
-              "Keine API-Aufrufe",
-              "Drei Modi"
-            ],
-            "usage": "Wählen Sie '🧪 Pseudo-Lokalisierung' als Engine."
-          },
-          {
-            "name": "🔄 Smart Update (Fuzzy)",
-            "menu_path": "Werkzeuge → Smart Update",
-            "description": "Stellt Übersetzungen wieder her.",
-            "features": [
-              "90% Ähnlichkeitsschwelle",
-              "Menschliche Überprüfung",
-              "Translation Memory",
-              "CLI-Unterstützung"
-            ],
-            "usage": "Verwenden Sie CLI oder Menü."
-          }
-        ]
-      }
-    },
-    "troubleshooting": {
-      "title": "Fehlerbehebung",
-      "description": "Häufige Probleme:",
-      "common_issues": [
-        {
-          "problem": "Übersetzung zu langsam",
-          "solutions": [
-            "Worker erhöhen",
-            "Batch erhöhen",
-            "Verzögerung verringern",
-            "Schnellere Engine wählen"
-          ]
-        },
-        {
-          "problem": "Hoher Speicherverbrauch",
-          "solutions": [
-            "Batch verringern",
-            "Worker verringern",
-            "Dateien splitten"
-          ]
-        },
-        {
-          "problem": "API Ratenlimit",
-          "solutions": [
-            "Verzögerung erhöhen",
-            "Threads verringern",
-            "Premium-Key nutzen"
-          ]
-        },
-        {
-          "problem": "Ausgabedatei beschädigt",
-          "solutions": [
-            "Format ändern",
-            "Encoding prüfen",
-            "Reset Parser"
-          ]
-        }
-      ]
-    },
-    "unren": {
-      "title": "UnRen-Integrationsleitfaden",
-      "description": "RenLocalizer lädt UnRen herunter und cacht es.",
-      "versions": {
-        "title": "Welchen Build starten?",
-        "description": "Erste zwei Optionen zeigen auf verschiedene Runtimes.",
-        "options": [
-          {
-            "title": "UnRen-current.bat",
-            "description": "Python 3 für moderne Ren'Py-Builds (7.4+, 8.x).",
-            "versions_label": "Beste für:",
-            "versions": "Ren'Py 7.4+, Ren'Py 8",
-            "note": "Wenn game/renpy/common/version.txt 7.4+ oder 8.x zeigt."
-          },
-          {
-            "title": "UnRen-legacy.bat",
-            "description": "Klassische Python 2 Toolchain.",
-            "versions_label": "Beste für:",
-            "versions": "Ren'Py 6.x, 7.0-7.3",
-            "note": "Für ältere Spiele oder 32-Bit."
-          }
-        ]
-      },
-      "automatic": {
-        "title": "Automatischer Modus",
-        "points": [
-          "Führt Optionen 1+2 sequentiell aus",
-          "Streamt Ausgabe in Logs",
-          "Wenn Konsole nicht schließt, manuell beenden"
-        ]
-      },
-      "manual": {
-        "title": "Manueller Modus",
-        "points": [
-          "Öffnet UnRen-Konsole für volle Kontrolle",
-          "Ideal für fortgeschrittene Optionen (3-6)",
-          "Fallback, wenn Automatik hängt"
-        ],
-        "warning": "Falsche Wahl kann Projekt beschädigen."
-      },
-      "checklist": {
-        "title": "Checkliste",
-        "items": [
-          "Ordner muss game/ enthalten",
-          "Backup machen",
-          "Antivirus prüfen",
-          "Freier Speicherplatz beachten"
-        ]
-      },
-      "manual_flow": {
-        "title": "Manueller Ablauf",
-        "steps": [
-          {
-            "title": "1) Laden & Prüfen",
-            "detail": "Pfad notieren."
-          },
-          {
-            "title": "2) Starten",
-            "detail": "Pfad in Konsole prüfen."
-          },
-          {
-            "title": "3) RPA Extrahieren",
-            "detail": "Warten bis fertig."
-          },
-          {
-            "title": "4) RPYC Dekompilieren",
-            "detail": "Overwrite erlauben."
-          },
-          {
-            "title": "5) Extras",
-            "detail": "Optionen 3-6 bei Bedarf."
-          },
-          {
-            "title": "6) Offen lassen",
-            "detail": "Erst schließen wenn fertig."
-          }
-        ],
-        "note": "Bei Fehler Screenshot machen."
-      },
-      "verification": {
-        "title": "Verifizierung",
-        "items": [
-          "Frische .rpy Dateien prüfen",
-          "Original .rpa lassen",
-          "Scan Files in RenLocalizer erneut ausführen",
-          "Logs prüfen"
-        ]
-      },
-      "tips_title": "Tipps",
-      "tips": [
-        "UnRen immer vom Root starten",
-        "Backup machen",
-        "Manueller Modus als Fallback",
-        "Markieren zum Kopieren nutzen"
-      ],
-      "troubleshooting": {
-        "title": "Fehlerbehebung",
-        "items": [
-          {
-            "issue": "Konsole schließt sofort",
-            "resolution": "Schreibrechte/Antivirus prüfen. Als Admin starten."
-          },
-          {
-            "issue": "Automatik friert ein",
-            "resolution": "Logs prüfen, manuell versuchen."
-          },
-          {
-            "issue": "Keine Dateien in RenLocalizer",
-            "resolution": "Projektpfad prüfen, neu scannen."
-          }
-        ]
-      },
-      "footer": "Doku in UnRen-current.bat prüfen."
-    }
-  },
-  "info_formats_title": "Ausgabedateiformate",
-  "info_unren_features": "Funktionen",
-  "info_unren_what": "Was ist UnRen?",
   "input_section": "Eingabebereich",
   "language_changed": "Sprache geändert",
   "language_restart": "Bitte starten Sie die Anwendung neu, damit die Änderungen vollständig wirksam werden.",
@@ -793,7 +227,6 @@
   "multi_endpoint_tooltip": "Sendet parallele Anfragen an mehrere Google Translate-Server, verwendet schnellste Antwort",
   "nav_about": "Über",
   "nav_home": "Startseite",
-  "nav_info_center": "Informationszentrum",
   "nav_settings": "Einstellungen",
   "nav_support": "Unterstützung",
   "nav_tools": "Werkzeuge",
@@ -974,6 +407,9 @@
   "scanning_directory": "Scanne Verzeichnis...",
   "select_directory_title": "Verzeichnis auswählen",
   "select_game_exe_title": "Spiel-EXE auswählen",
+  "select_game_mac_title": "Spielpaket auswählen",
+  "select_game_linux_title": "Spieldatei auswählen",
+  "select_game_folder_title": "Spielordner auswählen",
   "select_output_directory": "Ausgabeverzeichnis auswählen",
   "select_unren_folder": "UnRen-Ordner auswählen",
   "settings": "Einstellungen",
@@ -1182,6 +618,32 @@
   "verbose_logging_tooltip": " Alle Operationen detailliert protokollieren - nützlich zur Fehlerbehebung",
   "view_menu": "Ansicht",
   "warning": "Warnung",
-  "aggressive_retry": "Aggressive Übersetzung",
-  "aggressive_retry_desc": "Unveränderte Übersetzungen mit alternativen Methoden erneut versuchen (langsamer, aber gründlicher)"
+  "aggressive_retry": "Aggressives Übersetzen",
+  "aggressive_retry_desc": "Unveränderte Übersetzungen mit alternativen Methoden erneut versuchen (langsamer, aber gründlicher)",
+  "force_runtime": "Erzwungene Übersetzung (Force Translate)",
+  "force_runtime_desc": "Spieltexte zur Laufzeit erzwingen (behebt fehlende !t-Flags)",
+  "nav_wiki": "Wiki",
+  "error_local_llm_connection": "Verbindung zum lokalen LLM-Server unter {url} nicht möglich. Stellen Sie sicher, dass der Server läuft.",
+  "error_local_llm_no_model": "Modell '{model}' nicht gefunden. Bitte prüfen Sie, ob das Modell in Ihrem LLM-Server (LM Studio/Ollama) geladen ist.",
+  "error_local_llm_timeout": "Lokaler LLM hat nicht rechtzeitig geantwortet ({timeout}s). Versuchen Sie ein kleineres Modell oder erhöhen Sie das Timeout in den Einstellungen.",
+  "error_local_llm_empty_response": "Lokaler LLM hat eine leere Antwort zurückgegeben. Das Modell ist möglicherweise nicht korrekt geladen oder generiert noch.",
+  "error_local_llm_invalid_response": "Ungültige Antwort vom lokalen LLM-Server. Der Server ist möglicherweise falsch konfiguriert.",
+  "log_local_llm_health_ok": "✅ Lokaler LLM-Server ist bereit ({server_type})",
+  "error_ai_no_choices": "Keine Auswahlmöglichkeiten in der AI-Antwort. Überprüfen Sie, ob Ihr lokaler LLM korrekt funktioniert.",
+  "error_ai_no_message": "Keine Nachricht in der AI-Antwort. Das Modell ist möglicherweise nicht korrekt geladen.",
+  "settings_local_llm_advanced": "Lokale LLM Erweiterte Einstellungen",
+  "settings_local_llm_advanced_desc": "Verbindungstest und Timeout-Einstellungen",
+  "local_llm_timeout_label": "Zeitüberschreitung (Sek.):",
+  "local_llm_timeout_tooltip": "Wartezeit für lokalen LLM (30-600 Sekunden)",
+  "test_local_llm_connection": "🩺 Verbindung testen",
+  "testing_connection": "⏳ Teste...",
+  "local_llm_connected": "✅ Verbunden",
+  "local_llm_disconnected": "❌ Nicht verbunden",
+  "connection_success": "Verbindung erfolgreich",
+  "connection_failed": "Verbindung fehlgeschlagen",
+  "ai_batch_short": "Satz:",
+  "tooltip_ai_batch_size": "Anzahl der Zeilen, die in einer einzigen Anfrage an die KI gesendet werden (Standard: 50)",
+  "ai_hallucination_warning": "⚠️ Kleine Modelle (unter 7B) neigen zu Halluzinationen und können zufälligen Text anstelle von Übersetzungen erzeugen.",
+  "ai_vram_warning": "⚠️ Wenn die Modellgröße Ihren GPU-Speicher (VRAM) überschreitet, kann dies zu Leistungsproblemen führen.",
+  "ai_source_lang_warning": "💡 Das explizite Festlegen der 'Ausgangssprache' anstelle von 'Auto' verbessert die Übersetzungsqualität."
 }

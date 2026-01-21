@@ -13,6 +13,7 @@ hidden_imports = collect_submodules('src')
 hidden_imports += collect_submodules('qfluentwidgets')
 hidden_imports += collect_submodules('aiohttp')
 hidden_imports += collect_submodules('requests')
+hidden_imports += collect_submodules('httpx')
 hidden_imports += collect_submodules('urllib3')
 hidden_imports += collect_submodules('PIL')
 hidden_imports += collect_submodules('rapidfuzz')  # Often used for fuzzy matching

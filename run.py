@@ -16,6 +16,19 @@ from pathlib import Path
 os.environ["QT_QPA_PLATFORM_THEME"] = ""  # Disable system theme
 os.environ["QT_STYLE_OVERRIDE"] = ""  # Disable style override
 
+# ============================================================
+# CRITICAL: Set AppUserModelId for Windows taskbar icon
+# This MUST be done early, before any Qt/GUI initialization
+# Without this, Windows associates the app with Python and shows wrong/no icon
+# ============================================================
+if sys.platform == "win32":
+    try:
+        import ctypes
+        myappid = "LordOfTurk.RenLocalizer.GUI.2"
+        ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(myappid)
+    except Exception:
+        pass  # Silent fail - will work without it, just no taskbar icon
+
 # Suppress noisy SyntaxWarning about invalid escape sequences originating from
 # third-party packages or non-raw regex literals. These warnings are harmless
 # for runtime but confuse users when redirecting output. Narrow the filter to
@@ -352,6 +365,9 @@ def main() -> int:
         app.setAttribute(Qt.ApplicationAttribute.AA_DontCreateNativeWidgetSiblings)
         app.setApplicationName("RenLocalizer")
         app.setApplicationVersion(VERSION)
+
+        # Note: AppUserModelId is already set at module load time (line 20+)
+        # This ensures Windows taskbar shows our icon correctly
 
         # Note: FluentWindow handles its own styling, no need for Fusion style
         # app.setStyle("Fusion")

@@ -330,6 +330,18 @@ class HomeInterface(ScrollArea):
                     duration=9000,
                     position=InfoBarPosition.TOP_RIGHT
                 )
+        
+        # Show warning for Local LLM (hallucination risk)
+        if engine == TranslationEngine.LOCAL_LLM:
+            if self.parent_window:
+                self.parent_window.show_info_bar(
+                    "warning",
+                    self.config_manager.get_ui_text("warning", "Warning"),
+                    self.config_manager.get_ui_text("ai_hallucination_warning", 
+                        "⚠️ Small models (under 7B) are prone to hallucinations."),
+                    duration=9000,
+                    position=InfoBarPosition.TOP_RIGHT
+                )
 
     def _browse_game_exe(self):
         """Browse for game EXE or binary file."""
@@ -504,7 +516,7 @@ class HomeInterface(ScrollArea):
                         proxy_manager=self.proxy_manager if use_proxy else None,
                         config_manager=self.config_manager,
                         temperature=self.config_manager.translation_settings.ai_temperature,
-                        timeout=self.config_manager.translation_settings.ai_timeout,
+                        timeout=getattr(self.config_manager.translation_settings, 'local_llm_timeout', 300),
                         max_tokens=self.config_manager.translation_settings.ai_max_tokens
                     )
                 )

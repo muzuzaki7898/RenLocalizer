@@ -281,7 +281,7 @@ class GoogleTranslator(BaseTranslator):
             # Slider ile kontrol edilen 'max_concurrent_threads' değerini baz alıyoruz
             self.multi_q_concurrency = getattr(ts, 'max_concurrent_threads', 16)
             self.max_slice_chars = getattr(ts, 'max_chars_per_request', 5000)
-            self.max_texts_per_slice = getattr(ts, 'max_texts_per_slice', 25)
+            self.max_texts_per_slice = getattr(ts, 'ai_batch_size', 25)  # Use universal batch size
             self.aggressive_retry = getattr(ts, 'aggressive_retry_translation', False)
         else:
             self.aggressive_retry = False
@@ -1315,12 +1315,15 @@ class TranslationManager:
         for attempt in range(self.max_retries + 1):
             try:
                 res = await tr.translate_single(req)
+                print(f"[DEBUG] translate_single returned: success={res.success}, text='{res.translated_text[:50] if res.translated_text else 'EMPTY'}', error={res.error}")
                 if res.success:
                     await self._cache_put(key, res)
+                    print(f"[DEBUG] Added to cache: {req.text[:30]}...")
                     await self._record_metric(time.time() - start, True)
                     return res
                 last_err = res.error
             except Exception as e:
+                print(f"[DEBUG] translate_single EXCEPTION: {e}")
                 last_err = str(e)
             if attempt < self.max_retries:
                 await asyncio.sleep(self.retry_delays[min(attempt, len(self.retry_delays)-1)])
@@ -1428,6 +1431,9 @@ class TranslationManager:
                 results = await asyncio.gather(*[run_single(i, r) for i, r in items])
                 for idx, res in results:
                     final_results[idx] = res
+                    if res and res.success:
+                        key2 = (res.engine.value, res.source_lang, res.target_lang, res.original_text)
+                        await self._cache_put(key2, res)
 
         # 3. Sonuçları kopya (deduplicated) satırlara dağıt
         for key, indices in unique_req_map.items():
@@ -1526,6 +1532,7 @@ class TranslationManager:
 
     def save_cache(self, file_path: str):
         """Cache içeriğini diske kaydet."""
+        print(f"[DEBUG] save_cache called. Cache size: {len(self._cache)}")  # Console'a yaz
         try:
             import json
             data = {}
@@ -1542,8 +1549,10 @@ class TranslationManager:
 
             with open(file_path, 'w', encoding='utf-8') as f:
                 json.dump(data, f, ensure_ascii=False, indent=2)
+            print(f"[DEBUG] Cache written to {file_path} with {len(self._cache)} entries")  # Console'a yaz
             self.logger.info(f"Cache saved: {file_path} ({len(self._cache)} entries)")
         except Exception as e:
+            print(f"[DEBUG] Cache save FAILED: {e}")  # Console'a yaz
             self.logger.error(f"Failed to save cache: {e}")
 
     def load_cache(self, file_path: str):

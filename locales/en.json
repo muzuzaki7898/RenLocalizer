@@ -10,7 +10,6 @@
   "glossary_menu": "Glossary",
   "help_menu": "Help",
   "about": "About",
-  "info": "Info",
   "support_patreon": "Support on Patreon",
   "view_menu": "View",
   "theme_menu": "Theme",
@@ -46,9 +45,15 @@
   "directory_label": "Directory:",
   "directory_placeholder": "Select directory path",
   "browse": "Browse",
+  "browse_folder": "Folder",
   "game_exe_label": "Game EXE:",
   "game_exe_placeholder": "Select game EXE file (e.g. Game.exe)",
+  "game_mac_placeholder": "Select game app (.app) or folder...",
+  "game_linux_placeholder": "Select game file or folder...",
   "select_game_exe_title": "Select Game EXE",
+  "select_game_mac_title": "Select Game App",
+  "select_game_linux_title": "Select Game File",
+  "select_game_folder_title": "Select Game Folder",
   "auto_detect": "Auto Detect (auto)",
   "log_placeholder": "Log messages will appear here...",
   "exe_selected": "EXE selected: {path}",
@@ -350,444 +355,6 @@
     },
     "manual_hint": "Automatic mode is experimental; it may not behave as expected and menus might stay open. Manual mode is recommended. See Help → Info → UnRen for detailed instructions."
   },
-  "info_dialog": {
-    "title": "Program Information Center",
-    "tabs": {
-      "formats": "Output Formats",
-      "performance": "Performance Settings",
-      "multi_endpoint": "Multi-Endpoint (v2.1.0)",
-      "features": "Features",
-      "troubleshooting": "Troubleshooting",
-      "unren": "UnRen"
-    },
-    "formats": {
-      "title": "Translation File Format",
-      "description": "RenLocalizer v2.4.9 uses the official OLD_NEW format for Ren'Py translation files:",
-      "old_new": {
-        "title": "🟩 OLD_NEW Format",
-        "features": [
-          "Official Ren'Py export format",
-          "Compatible with all Ren'Py versions (6.0+)",
-          "Clear old/new text separation",
-          "Full compatibility with Ren'Py tools",
-          "Automatic language init file generation"
-        ],
-        "example": "translate en hello_world:\n    old \"Hello, world!\"\n    new \"Hello, world!\"",
-        "recommended_for": "Recommended standard format for all Ren'Py projects"
-      },
-      "note": "Output files are saved to game/tl/<language>/ folder."
-    },
-    "translation_engines": {
-      "title": "🤖 Translation Engines (v2.4.9)",
-      "description": "RenLocalizer supports 6 different translation engines:",
-      "engines": [
-        {
-          "name": "Google Web Translate",
-          "type": "Free",
-          "description": "Multi-Endpoint technology with 4 Google servers + Lingva fallback."
-        },
-        {
-          "name": "DeepL API",
-          "type": "API Key",
-          "description": "Free tier offers 500,000 characters/month. High-quality translation."
-        },
-        {
-          "name": "OpenAI (GPT-4/3.5)",
-          "type": "API Key",
-          "description": "Supports OpenRouter or local LLM (Ollama) via Base URL."
-        },
-        {
-          "name": "Google Gemini",
-          "type": "API Key",
-          "description": "Gemini Pro and Gemini Flash models. Free tier available."
-        },
-        {
-          "name": "🖥️ Local LLM (Ollama/LM Studio...)",
-          "type": "Free/Local",
-          "description": "OpenAI-compatible local servers like Ollama or LM Studio. No internet needed."
-        },
-        {
-          "name": "Pseudo-Localization",
-          "type": "Test",
-          "description": "Fake translation for UI testing. Adds [!!! markers !!!] and accented characters."
-        }
-      ],
-      "ai_note": "AI engines (OpenAI, Gemini, Local LLM) have special settings: Temperature, Timeout, Max Tokens, Custom Prompt."
-    },
-    "multi_endpoint": {
-      "title": "🚀 Multi-Endpoint Google Translator",
-      "description": "Google Web Translate sends parallel requests to multiple servers, increasing speed by 2-3x.",
-      "how_it_works": {
-        "title": "How It Works",
-        "steps": [
-          "Texts are split into slices, parallel requests sent to 3 endpoints",
-          "First successful response is accepted, others are cancelled",
-          "If all endpoints fail, Lingva fallback kicks in"
-        ]
-      },
-      "endpoints": {
-        "title": "Endpoints Used",
-        "google": [
-          "translate.googleapis.com (Primary)",
-          "translate.google.com (Backup 1)",
-          "translate.google.com.tr (Backup 2)",
-          "translate.google.co.uk (Backup 3)"
-        ],
-        "lingva": [
-          "lingva.ml",
-          "lingva.lunar.icu"
-        ]
-      },
-      "performance": {
-        "title": "Performance",
-        "before": "Single endpoint: ~3-4 texts/second",
-        "after": "Multi-endpoint: ~8-10 texts/second",
-        "note": "AI engines are slower but provide higher quality."
-      }
-    },
-    "text_types": {
-      "title": "Text Type Filters",
-      "description": "RenLocalizer V2 distinguishes between different text types in Ren'Py projects and allows you to select which types to include in translation.",
-      "core_types": {
-        "title": "Core Text Types",
-        "items": [
-          {
-            "name": "Dialogues",
-            "description": "Character dialogues and narrator texts. Forms the main story content of the game.",
-            "example": "e \"Hello, how are you?\""
-          },
-          {
-            "name": "Menu Options",
-            "description": "Options in player choice menus. Critical texts where players determine the story flow.",
-            "example": "menu:\n    \"Accept\":\n        ..."
-          },
-          {
-            "name": "Buttons",
-            "description": "textbutton and similar screen elements. Clickable elements in the game interface.",
-            "example": "textbutton \"Start Game\""
-          }
-        ]
-      },
-      "ui_types": {
-        "title": "Interface Texts",
-        "items": [
-          {
-            "name": "UI Texts",
-            "description": "Screen text() elements and general interface strings.",
-            "example": "text \"Settings\""
-          },
-          {
-            "name": "Input Fields",
-            "description": "Default, prefix and suffix values of input elements.",
-            "example": "input default \"Enter your name\""
-          },
-          {
-            "name": "Alt Texts",
-            "description": "Accessibility alt texts for imagebutton, hotspot and hotbar elements.",
-            "example": "imagebutton ... alt \"Save button\""
-          }
-        ]
-      },
-      "notification_types": {
-        "title": "Notifications and Confirmations",
-        "items": [
-          {
-            "name": "Notifications",
-            "description": "Instant messages shown via Notify() actions and renpy.notify() calls.",
-            "example": "$ renpy.notify(\"Game saved!\")"
-          },
-          {
-            "name": "Confirmation Dialogs",
-            "description": "Confirmation windows shown via Confirm() actions and renpy.confirm() calls.",
-            "example": "Confirm(\"Are you sure you want to quit?\")"
-          }
-        ]
-      },
-      "config_types": {
-        "title": "Configuration Texts",
-        "items": [
-          {
-            "name": "Config Strings",
-            "description": "Texts defined in config.* variables (game name, version, etc.).",
-            "example": "define config.name = \"Game Name\""
-          },
-          {
-            "name": "GUI Strings",
-            "description": "Interface texts defined in gui.* variables.",
-            "example": "define gui.main_menu_title = \"Main Menu\""
-          },
-          {
-            "name": "Define Strings",
-            "description": "General texts defined with define statements. Use with caution - some may contain code.",
-            "example": "define about_text = \"This game...\""
-          },
-          {
-            "name": "Ren'Py Functions",
-            "description": "Texts in renpy.input() and similar functions.",
-            "example": "$ player_name = renpy.input(\"What is your name?\")"
-          }
-        ]
-      },
-      "tips": {
-        "title": "Usage Tips",
-        "items": [
-          "Default settings work well for most projects - only change when needed.",
-          "Use Define Strings carefully - they may contain variable names or code fragments.",
-          "Alt Text translation is important for accessibility - for players using screen readers.",
-          "Config and GUI strings are typically found in options.rpy and gui.rpy files.",
-          "If you disable a text type, those texts will not be included in the output file."
-        ]
-      },
-      "note": "Text type filters can be configured in Settings → Text Types tab."
-    },
-    "performance": {
-      "title": "Performance Settings Guide",
-      "description": "Critical settings to optimize system performance:",
-      "parser_workers": {
-        "title": "Parser Workers",
-        "description": "Number of worker threads used to process files in parallel.",
-        "ideal_settings": [
-          "Low-end systems (2-4 cores): 2-4",
-          "Mid-range systems (4-8 cores): 4-8",
-          "High-end systems (8+ cores): 8-16"
-        ],
-        "note": "Setting more than your CPU core count will decrease performance."
-      },
-      "concurrent_threads": {
-        "title": "Concurrent Threads",
-        "description": "Number of threads running simultaneously during translation.",
-        "ideal_settings": [
-          "Slow internet: 8-16",
-          "Medium internet: 16-32",
-          "Fast internet: 32-64"
-        ],
-        "note": "Very high values may cause rate limit issues."
-      },
-      "batch_size": {
-        "title": "Batch Size",
-        "description": "Number of translation requests to process at once.",
-        "ideal_settings": [
-          "Small projects: 50-100",
-          "Medium projects: 100-200",
-          "Large projects: 200-500"
-        ],
-        "note": "Larger batch sizes are faster but use more memory."
-      },
-      "request_delay": {
-        "title": "Request Delay",
-        "description": "Wait time between translation requests (milliseconds).",
-        "ideal_settings": [
-          "Premium API: 50-100ms",
-          "Free API: 200-500ms",
-          "Rate limit issues: 1000ms+"
-        ],
-        "note": "Very low values may cause you to hit API limits."
-      }
-    },
-    "features": {
-      "title": "Program Features (v2.4.9)",
-      "description": "Advanced features offered by RenLocalizer:",
-      "current": [
-        {
-          "title": "🤖 AI Translation Engines",
-          "description": "OpenAI (GPT-4/3.5), Google Gemini, and local Ollama support. Customizable with Custom System Prompt."
-        },
-        {
-          "title": "🚀 Multi-Endpoint Google",
-          "description": "4 different Google servers + Lingva fallback for fast and reliable translation"
-        },
-        {
-          "title": "🎨 6 Theme Support",
-          "description": "Instant switching between Dark, Light, Red, Turquoise, Green, and Neon themes"
-        },
-        {
-          "title": "📦 Native UnRPA",
-          "description": "Built-in RPA archive extraction that works on all platforms. No .bat files needed."
-        },
-        {
-          "title": "🔍 Deep String Scanner",
-          "description": "Scans for hidden strings in init python blocks, dictionaries, and variable assignments"
-        },
-        {
-          "title": "📦 RPYC Reader",
-          "description": "Reads compiled .rpyc files directly via AST - no decompilation needed"
-        },
-        {
-          "title": "🎯 Smart Pattern Recognition",
-          "description": "40+ regex patterns for dialogues, menus, UI elements"
-        },
-        {
-          "title": "🔄 Variable Protection",
-          "description": "Safely preserves [player], {b}, {color} and similar tags during translation"
-        },
-        {
-          "title": "⚡ Parallel Processing",
-          "description": "Process multiple files simultaneously with async workers"
-        },
-        {
-          "title": "📚 Glossary System",
-          "description": "Define preferred translations for frequently used terms"
-        },
-        {
-          "title": "🔍 Health Check",
-          "description": "Detects unwrapped strings and syntax errors before translation"
-        },
-        {
-          "title": "🔤 Font Helper",
-          "description": "Check if game fonts support target language characters"
-        },
-        {
-          "title": "🧪 Pseudo-Localization",
-          "description": "Fake translation for testing UI bounds and font compatibility"
-        },
-        {
-          "title": "🔄 Fuzzy Matching",
-          "description": "Recover translations when source files change using smart similarity matching"
-        },
-        {
-          "title": "💻 CLI Support",
-          "description": "Full command-line translation on Windows, Linux, and macOS"
-        }
-      ],
-      "upcoming": [
-        {
-          "title": "📊 Progress Analytics",
-          "description": "Detailed translation reports and statistics"
-        },
-        {
-          "title": "🎨 Text Types UI",
-          "description": "Visual interface for selecting which text types to translate"
-        }
-      ],
-      "new_tools_v240": {
-        "title": "New Tools (v2.4.0)",
-        "description": "RenLocalizer v2.4.0 introduces powerful new analysis and testing tools:",
-        "tools": [
-          {
-            "name": "🔍 Health Check",
-            "menu_path": "Tools → Health Check",
-            "description": "Static analysis for detecting common localization issues before translation.",
-            "features": [
-              "Detects UI strings not wrapped in _()",
-              "Checks placeholder consistency ([var], {tag})",
-              "Finds empty translations",
-              "Validates syntax (unbalanced quotes)"
-            ],
-            "usage": "Select Tools → Health Check and choose a game directory to scan."
-          },
-          {
-            "name": "🔤 Font Compatibility",
-            "menu_path": "Tools → Font Compatibility",
-            "description": "Verifies if game fonts support target language characters.",
-            "features": [
-              "15+ language character sets (CJK, Cyrillic, Arabic, etc.)",
-              "Coverage percentage reporting",
-              "Font suggestions for each language",
-              "Prevents □□□ (missing glyph) issues"
-            ],
-            "usage": "Select Tools → Font Compatibility, choose directory, then check against your target language."
-          },
-          {
-            "name": "🧪 Pseudo-Localization",
-            "menu_path": "Translation Engine dropdown",
-            "description": "Test UI without real translation - reveals layout and font issues instantly.",
-            "features": [
-              "[!!! markers !!!] show text overflow",
-              "àccéntéd characters test font coverage",
-              "No API calls - instant local transformation",
-              "Three modes: expand, accent, or both"
-            ],
-            "usage": "Select '🧪 Pseudo-Localization (Test)' from Translation Engine, then start translation."
-          },
-          {
-            "name": "🔄 Smart Update (Fuzzy)",
-            "menu_path": "Tools → Smart Update (Fuzzy)",
-            "description": "Recover translations when source scripts change slightly between versions.",
-            "features": [
-              "90% similarity threshold for auto-apply",
-              "Human review for lower similarity matches",
-              "Translation Memory with common UI strings",
-              "Full CLI support for batch operations"
-            ],
-            "usage": "Use CLI: python run_cli.py fuzzy old_tl/ new_tl/ --threshold 0.9"
-          }
-        ]
-      }
-    },
-    "troubleshooting": {
-      "title": "Troubleshooting Guide",
-      "description": "Common issues and their solutions:",
-      "common_issues": [
-        {
-          "problem": "Translation is too slow",
-          "solutions": [
-            "Increase Parser Workers count",
-            "Increase Batch Size",
-            "Decrease Request Delay",
-            "Choose faster translation engine"
-          ]
-        },
-        {
-          "problem": "High memory usage",
-          "solutions": [
-            "Decrease Batch Size",
-            "Reduce Parser Workers count",
-            "Split large files into chunks"
-          ]
-        },
-        {
-          "problem": "API rate limit error",
-          "solutions": [
-            "Increase Request Delay",
-            "Reduce Concurrent Threads",
-            "Use premium API key"
-          ]
-        },
-        {
-          "problem": "Output file corrupted",
-          "solutions": [
-            "Try different output format",
-            "Check encoding settings",
-            "Reset parser settings"
-          ]
-        }
-      ]
-    },
-    "unren": {
-      "title": "RPA Archive Extraction (v2.4.9)",
-      "description": "RenLocalizer uses the unrpa library and built-in native parser to extract .rpa archives. No .bat files needed.",
-      "how_it_works": {
-        "title": "How It Works",
-        "steps": [
-          "Click Tools → Extract RPA Archives button",
-          "Select game folder (directory containing game/ subfolder)",
-          "All .rpa files are automatically extracted",
-          "Extracted files are placed in the game/ folder"
-        ]
-      },
-      "features": [
-        "Works on all platforms (Windows, Linux, macOS)",
-        "Supports RPA-3.0 and RPA-2.0 formats",
-        "Native parser kicks in automatically if unrpa fails",
-        "Works seamlessly in PyInstaller builds"
-      ],
-      "troubleshooting": [
-        {
-          "problem": "RPA file not found",
-          "solution": "Make sure you select the game root folder (directory containing game/ subfolder)."
-        },
-        {
-          "problem": "Extraction failed",
-          "solution": "Check if you have enough disk space. You need roughly 2x the RPA file size."
-        },
-        {
-          "problem": ".rpy files not showing",
-          "solution": "Some games only contain .rpyc files. RenLocalizer can read these too."
-        }
-      ],
-      "note": "Legacy UnRen .bat files are no longer used. All extraction is done via Python libraries."
-    }
-  },
   "translation_engines": {
     "google": "Google Translate (WEB - Free)",
     "deepl": "DeepL (API - Key Required)",
@@ -1056,10 +623,32 @@
   "settings_ai_prompt_desc": "Empty = default prompt. Variables {source_lang} and {target_lang} are available.",
   "placeholder_ai_prompt": "You are a translator. Translate from {source_lang} to {target_lang}...",
   "tooltip_ai_prompt": "Instruction given to AI. Leave empty to use built-in VN translation prompt.",
-  "nav_info_center": "Info Center",
-  "info_formats_title": "Output File Formats",
-  "info_unren_what": "What is UnRen?",
-  "info_unren_features": "Features",
   "aggressive_retry": "Aggressive Translation",
-  "aggressive_retry_desc": "Retry unchanged translations with alternative methods (slower but more thorough)"
+  "aggressive_retry_desc": "Retry unchanged translations with alternative methods (slower but more thorough)",
+  "force_runtime": "Force Runtime Translation",
+  "force_runtime_desc": "Force translate in-game texts at runtime (fixes missing !t flags)",
+  "nav_wiki": "Wiki",
+  "error_local_llm_connection": "Cannot connect to local LLM server at {url}. Make sure the server is running.",
+  "error_local_llm_no_model": "Model '{model}' not found. Please check if the model is loaded in your LLM server (LM Studio/Ollama).",
+  "error_local_llm_timeout": "Local LLM took too long to respond ({timeout}s). Try a smaller model or increase timeout in settings.",
+  "error_local_llm_empty_response": "Local LLM returned empty response. The model may not be loaded properly or is still generating.",
+  "error_local_llm_invalid_response": "Invalid response from local LLM server. The server may be misconfigured.",
+  "log_local_llm_health_ok": "✅ Local LLM server is ready ({server_type})",
+  "error_ai_no_choices": "AI response has no choices. Check if your local LLM is running correctly.",
+  "error_ai_no_message": "AI response has no message. The model may not be loaded properly.",
+  "settings_local_llm_advanced": "Local LLM Advanced Settings",
+  "settings_local_llm_advanced_desc": "Connection test and timeout settings",
+  "local_llm_timeout_label": "Timeout (sec):",
+  "local_llm_timeout_tooltip": "Wait time for local LLM (30-600 seconds)",
+  "test_local_llm_connection": "🩺 Test Connection",
+  "testing_connection": "⏳ Testing...",
+  "local_llm_connected": "✅ Connected",
+  "local_llm_disconnected": "❌ Disconnected",
+  "connection_success": "Connection Successful",
+  "connection_failed": "Connection Failed",
+  "ai_batch_short": "Batch:",
+  "tooltip_ai_batch_size": "Number of lines to send to AI in a single request (Default: 50)",
+  "ai_hallucination_warning": "⚠️ Small models (under 7B) are prone to hallucinations and may produce random text instead of translations.",
+  "ai_vram_warning": "⚠️ If the model size exceeds your GPU memory (VRAM), it may cause performance issues.",
+  "ai_source_lang_warning": "💡 Explicitly setting 'Source Language' instead of 'Auto' improves translation quality."
 }

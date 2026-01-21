@@ -2,6 +2,32 @@
 
 
 
+## [2.5.1] - 2026-01-21
+### 🛠️ Critical Bug Fixes (Local LLM)
+- **NameError Fix (`AI_LOCAL_URL`):** Fixed critical startup crash caused by missing `AI_LOCAL_URL` constant in `constants.py`.
+- **NameError Fix (`re` module):** Fixed `NameError: name 're' is not defined` crash in `LocalLLMTranslator` by adding missing `import re` statement.
+- **Abstract Class Error:** Fixed `Can't instantiate abstract class LocalLLMTranslator` error by implementing missing `_generate_completion` and `health_check` methods.
+- **Cache Not Saving:** Fixed a critical bug where translations were not being saved to `translation_cache.json`. The issue was that successful results from the single-translation flow were not being added to the in-memory cache before `save_cache()` was called.
+
+### ⚡ Local LLM Improvements
+- **Per-Batch Checkpoint Save:** Cache is now saved after every translation batch (instead of every 5 batches). This ensures zero data loss even on power outage or crash.
+- **Ultra-Minimal Prompt:** Drastically simplified the system prompt for local models. Removed problematic few-shot examples that small models were copying verbatim instead of translating.
+- **Full Language Name Mapping:** Language codes (`tr`, `en`, `de`) are now converted to full names (`Turkish`, `English`, `German`) for better model comprehension.
+- **Aggressive Response Cleanup:** Added comprehensive regex patterns to strip model "chatter" (e.g., "Translating to Turkish:", "Here is the translation:") from the output.
+- **Batch Override for Local LLM:** `LocalLLMTranslator` now overrides `translate_batch` to force one-by-one translation, bypassing XML-style batching that confused smaller models.
+- **Placeholder Corruption Guard:** If the model corrupts `XRPYX` placeholders, the system now falls back to the original text to prevent game-breaking translations.
+
+### 🔔 UI/UX Improvements
+- **InfoBar Warning for Local LLM:** Added a visible warning (same style as Gemini censorship warning) that appears in the top-right corner when Local LLM is selected, alerting users to potential hallucination issues with small models.
+- **Settings Panel Warnings:** Added three persistent warning/tip labels to the AI Settings section:
+  - ⚠️ Hallucination risk for models under 7B parameters
+  - ⚠️ VRAM limitations advisory
+  - 💡 Tip: Setting source language explicitly improves quality
+
+### 🌍 Localization
+- **New Keys:** Added `ai_hallucination_warning`, `ai_vram_warning`, and `ai_source_lang_warning` keys.
+- **Full Sync:** Updated all 8 language files (`tr`, `en`, `de`, `es`, `fr`, `ru`, `fa`, `zh-CN`) with new warning messages.
+
 ## [2.5.0] - 2026-01-14
 ### 🚀 New Features (Major)
 - **Force Runtime Translation:** Added "Force Runtime Translation" (Zorla Çeviri) feature. This dynamically injects a `01_renlocalizer_runtime.rpy` script into the game folder. It hooks into Ren'Py's `config.replace_text` to translate strings lacking the `!t` flag at runtime, ensuring 100% translation coverage for dynamic strings without manual code edits.

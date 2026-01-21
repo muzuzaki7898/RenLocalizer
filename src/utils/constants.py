@@ -12,6 +12,7 @@ AI_DEFAULT_TIMEOUT = 120  # seconds
 AI_LOCAL_TIMEOUT = 180    # seconds, for local LLMs which might be slower
 AI_DEFAULT_MAX_TOKENS = 2048
 AI_MAX_RETRIES = 3
+AI_LOCAL_URL = "http://localhost:11434/v1"  # Default Ollama URL
 
 # UI Constants
 WINDOW_DEFAULT_WIDTH = 1200

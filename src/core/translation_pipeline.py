@@ -1828,10 +1828,10 @@ init 100 python:
         # Batch çeviri için hazırla
         batch_size = self.config.translation_settings.max_batch_size
         
-        # Optimize for AI: LLMs handle smaller batches more reliably (< 100 items usually better)
+        # Optimize for AI: Use the user-defined ai_batch_size from settings
         if self.engine in (TranslationEngine.OPENAI, TranslationEngine.GEMINI, TranslationEngine.LOCAL_LLM):
-            batch_size = min(batch_size, 50)
-            self.log_message.emit("debug", f"AI engine detected, optimizing batch size to {batch_size}")
+            batch_size = getattr(self.config.translation_settings, 'ai_batch_size', 50)
+            self.log_message.emit("debug", f"AI engine detected, using batch size: {batch_size}")
 
         api_target_lang = RENPY_TO_API_LANG.get(self.target_language, self.target_language)
         api_source_lang = RENPY_TO_API_LANG.get(self.source_language, self.source_language)
@@ -2027,10 +2027,12 @@ init 100 python:
                         except Exception:
                             pass
                 
-                # Periyodik Cache Kaydı (Checkpoint)
-                if i % (batch_size * 5) == 0:  # Her 5 batch'te bir kaydet
-                    self.translation_manager.save_cache(cache_file)
-                    self.log_message.emit("debug", f"Checkpoint saved: {cache_file}")
+                # Her batch çevirisinden sonra cache kaydet (Daha güvenli checkpoint)
+                self.translation_manager.save_cache(cache_file)
+                
+                # Sadece her 50 metinde bir "Checkpoint saved" logu bas (log kirliliğini önlemek için)
+                if current % 50 == 0:
+                    self.log_message.emit("debug", f"Checkpoint saved: {cache_file} (Progress: {current}/{total})")
 
                 if stop_quota:
                     self.log_message.emit("error", self.config.get_log_text('error_api_quota'))

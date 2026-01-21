@@ -146,10 +146,12 @@ class TranslationSettings:
     gemini_safety_settings: str = "BLOCK_NONE"  # BLOCK_NONE, BLOCK_ONLY_HIGH, STANDARD
     local_llm_model: str = "llama3.2"
     local_llm_url: str = "http://localhost:11434/v1"
+    local_llm_timeout: int = 300  # Local LLM için ayrı timeout (saniye) - yerel modeller daha yavaş olabilir
     # Advanced AI Settings
     ai_temperature: float = AI_DEFAULT_TEMPERATURE  # 0.0-1.0, lower = more consistent, higher = more creative
     ai_timeout: int = AI_DEFAULT_TIMEOUT  # seconds, timeout for AI requests
     ai_max_tokens: int = AI_DEFAULT_MAX_TOKENS  # max output tokens
+    ai_batch_size: int = 50  # Number of lines per AI request batch (1-200) tokens
     ai_retry_count: int = AI_MAX_RETRIES  # number of retries on failure
     ai_concurrency: int = 2  # NEW: Maximum concurrent requests for AI engines
     ai_request_delay: float = 1.5  # NEW: Delay between AI requests (seconds)
