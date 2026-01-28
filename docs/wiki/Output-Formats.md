@@ -1,11 +1,11 @@
 # 📄 Understanding Output Formats
 
-RenLocalizer supports two different ways of generating translation files. Choosing the right one is important for game compatibility.
+RenLocalizer supports three main ways of interacting with translation data. Choosing the right one is important for your technical or AI-driven workflow.
 
 ---
 
-## 🔹 1. OLD_NEW Format (Recommended)
-This is the modern, official Ren'Py translation standard.
+## 🔹 1. OLD_NEW Format (Native Ren'Py)
+This is the official Ren'Py translation standard. RenLocalizer uses this for writing directly to your game files.
 
 *   **How it looks:**
     ```renpy
@@ -13,35 +13,58 @@ This is the modern, official Ren'Py translation standard.
     old "Hello world"
     new "Hola mundo"
     ```
-*   **Pros:**
-    *   ✅ Follows official Ren'Py documentation.
-    *   ✅ Supports high-performance "Translation ID" matching.
-    *   ✅ compatible with Ren'Py 7.x and 8.x.
-    *   ✅ Safe; won't break original script logic.
-*   **Best for:** Most modern games and official localizations.
+*   **Pros:** Official standard, used by the engine at runtime.
+*   **Best for:** The final translated files in your `game/tl/` directory.
 
 ---
 
-## 🔹 2. SIMPLE Format (Legacy/Removed)
-> [!NOTE]
-> This format has been removed in v2.5.0 to ensure maximum compatibility and stability.
+## 🔹 2. External JSON (Structured AI)
+A bridge format for external translation tools that support file uploads.
+
+*   **How it looks:**
+    ```json
+    {
+      "original": "Hello world",
+      "translation": "",
+      "character": "Eileen",
+      "file_path": "game/script.rpy",
+      "translation_id": "id_1234abcd5678efgh"
+    }
+    ```
+*   **Best for:** Professional AI APIs (OpenRouter, DeepL) or batch processing tools.
 
 ---
 
-## 🛠️ Format Selection
-In version 2.5.0 and later, **RenLocalizer permanently uses the OLD_NEW format**. This ensures that all translations are fully compatible with Ren'Py's internal ID system and incremental updates (Smart Skip).
+## 🔹 3. Simple TXT (Chat-Friendly)
+New in v2.6.0. A minimalist text format designed for "Copy-Paste" workflows with AI Chat web interfaces.
 
-The "Output Format" setting has been removed from the application to simplify the user experience and prevent accidental game corruption.
+*   **How it looks:**
+    ```text
+    123|||Hello world
+    124|||How are you?
+    ```
+*   **Pros:** High token efficiency, easy to read, impossible for AI to "break" the JSON syntax because there is no JSON.
+*   **Best for:** Free versions of ChatGPT or Claude where you can't easily upload files.
 
 ---
 
-> ⚠️ **Important:** If you change the format, we recommend deleting the existing files in your `game/tl/` folder and re-translating to avoid duplicate definition errors.
+## 🛠️ Format Management inside RenLocalizer
+
+In the **Tools** interface, you can select between JSON and Simple TXT for your Export/Import workflow. 
+
+### Why did the "Output Format" setting disappear from the main menu?
+In version 2.5.0 and later, **RenLocalizer permanently uses the OLD_NEW format** for internal game writing. This ensures that all translations are fully compatible with Ren'Py's internal ID system and incremental updates (Smart Skip). We removed the option to simplify the UI and prevent accidental game corruption by using legacy formats.
 
 ---
 
 ## 📂 Directory Structure
-Regardless of the format, RenLocalizer places its output in:
+Regardless of the format, RenLocalizer places its final game-ready output in:
 `game/tl/[target_language]/`
 
 For example, if you choose Spanish (`es`):
-`game/tl/es/all_translations.rpy`
+`game/tl/es/script.rpy` (or other matched script names).
+
+---
+
+> 🔗 **Related Pages:**
+> * [[External-AI-Translation]] — How to use these formats in your workflow.

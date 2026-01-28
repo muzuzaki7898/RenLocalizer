@@ -1,5 +1,77 @@
 # Changelog
 
+## [2.6.0] - 2026-01-27
+### 🧠 Smart Language Detection (Google Translate)
+- **Intelligent Source Language Detection:** When source language is set to "Auto Detect", the system now analyzes 15 random text samples at the start of translation to determine the actual source language with high confidence.
+- **Majority Voting Algorithm:** Uses a voting system across multiple samples to prevent misdetection when games have mixed-language content (e.g., an English game with some Russian dialogue).
+- **70% Confidence Threshold:** Source language is only locked if at least 70% of samples agree on the same language. If confidence is below threshold, falls back to per-request auto-detection.
+- **Target Language Safety Check:** If detected source language equals the target language (which would be nonsensical), the system automatically falls back to auto mode.
+- **Fixes "Untranslated Short Text" Issue:** Short texts like "OK", "Yes", character names, and ellipsis (`...`) are now correctly translated because the source language is known upfront.
+
+### 🐛 Critical Bug Fixes & Stability (v2.6.0 Hotfix)
+- **Startup Freeze (RPYC Parsing):** Fixed a major issue where the application would hang for minutes on startup when scanning large projects. The parser now intelligently delegates binary `.rpyc` files to a specialized reader instead of attempting to text-parse them.
+- **Data Integrity:** Ensured 100% extraction coverage by making the binary `.rpyc` scanner mandatory, capturing up to 60% more translatable content in games with missing source code.
+- **Smart Resume System:** Fixed the "loss of progress" issue. The translation engine now checks the in-memory cache before generating translation files, pre-filling known translations instantly instead of starting from scratch.
+- **"Event Loop Closed" Fix:** Resolved a technical conflict where "Smart Language Detection" was inadvertently closing the main translation engine's connection pool, causing "Event loop is closed" errors and phantom bans.
+- **App Icon Fix:** Implemented a forceful icon refresh strategy to ensure the application icon and taskbar icon appear correctly on Windows systems.
+
+### 🌟 New Features
+- **Cache Explorer:** Added a powerful new tool in the Tools menu to view, search, edit, and delete translation cache entries manually.
+- **Glossary Import/Export:** You can now export your glossary to JSON, Excel, or CSV and import it back, making it easy to share glossaries between projects.
+
+### 🚨 Improved Error Handling (API Keys)
+- **User-Friendly Error Messages:** Added clear, localized error messages for missing API keys (OpenAI, Gemini). Instead of ambiguous crashes or technical tracebacks, the system now explicitly warns users: *"Gemini API key missing! Please add in Settings."*
+- **Preventative Checks:** The translation engine now validates API keys *before* attempting initialization, ensuring smoother stability.
+- **DeepSeek Engine Removed:** Removed the standalone DeepSeek engine option as it is fully redundant with the "OpenAI / OpenRouter" compatible mode. Users can still use DeepSeek models via the OpenAI engine setting.
+
+### 🌍 UI Localization
+- **New Strings:** Added localized error messages for API key failures to all supporting languages (`tr`, `en`, `de`, `es`, `fr`, `ru`, `zh-CN`, `fa`).
+
+### 🐛 Bug Fixes
+- **Windows Taskbar Icon:** Fixed an issue where the application icon would sometimes not appear immediately on the Windows Taskbar upon startup. Implemented a robust `AppUserModelID` check and forceful icon refresh.
+
+### 🌍 UI Localization & Consistency
+- **Fixed Hardcoded Strings:** Resolved multiple instances of hardcoded Turkish text in the UI (Settings, Glossary, Update Dialog) that persisted even when English was selected.
+- **Locale Sync:** Fully synchronized all 8 supported languages (`tr`, `en`, `de`, `es`, `fr`, `ru`, `zh-CN`, `fa`) with the latest UI keys.
+- **Icon Loading Fix:** Fixed a "double file prefix" bug (`file:///file:///`) that caused application icons to fail loading on some systems.
+
+### 🔔 User Feedback Improvements
+- **Explicit Update Check:** "Check for Updates" button now provides immediate visual feedback (Success/No Update/Error dialogs) instead of silently failing or only showing success.
+- **Proxy Layout:** Improved the alignment and readability of the Proxy Settings section in the UI.
+
+### 🎨 QML UI Framework (Major Rewrite)
+- **Complete UI Modernization:** Migrated the entire user interface from Python/Qt Widgets to QML (Qt Modeling Language) for a more modern, fluid, and responsive experience.
+- **Declarative Design:** UI components are now declarative and reactive, enabling smoother animations, transitions, and state management.
+- **Component-Based Architecture:** Introduced reusable QML components (`NavigationBar`, `ApiField`, `SettingsPage`, etc.) for better maintainability and consistency.
+- **Better Theming Support:** QML's native styling capabilities allow for easier theme customization and future dark/light mode improvements.
+- **Improved Performance:** QML's hardware-accelerated rendering provides noticeably smoother scrolling and interactions, especially on large translation lists.
+
+## [2.5.2] - 2026-01-25
+### 🛡️ The "Ultra-Aggressive" Patch Engine
+- **Late-Load Priority (zzz_ prefix):** All initializer and hook files now use the `zzz_` prefix, ensuring they are loaded last by the Ren'Py engine. This allows RenLocalizer to overwrite even the most stubborn hardcoded language settings.
+- **Improved Initializer:** Replaced the fragile `init -999` with a more robust `init 1500` logic. This ensures the game has fully initialized its styles and internal stores before we apply the translation patch.
+- **Engine-Level Force:** Added `define config.default_language` and `_preferences.language` synchronization, providing a dual-layer lock to ensure the game starts in the desired language.
+- **Professional Runtime Hook:** Overhauled the runtime translation hook. It now uses a "wrapper" pattern to preserve existing game filters while adding translation support on top.
+- **Language Hotkey (Shift+L):** Added a universal keyboard shortcut. If the game developer's code prevents automatic language switching, users can press `Shift+L` at any time to force-switch to the translated language. A notification confirms the change.
+
+### 📂 Smart Directory Filtering & Cache (v2.5.2)
+- **Global Translation Memory (Portable Cache):** Added a new system to store translation data in a central `cache/` folder next to the program. This keeps game projects clean, prevents accidental deletion of translations, and makes the application truly portable.
+- **Exclude System Folders:** New setting (enabled by default) to automatically skip Ren'Py internal folders (`renpy/`, `common/`), cache, saves, and development folders (`.git/`, `.vscode/`).
+- **Selective .rpym Scanning:** Added a setting (disabled by default) to skip `.rpym` and `.rpymc` files, reducing "translation noise" from technical modules.
+- **Performance Optimized:** Directory scanning is now dynamic, adaptive, and significantly faster for large-scale projects.
+- **Safety Hard-Block:** Critical engine folders are now always excluded to prevent accidental modification of Ren'Py core files.
+
+### ⚡ UI Performance & Stability (v2.5.2)
+- **Lazy Tab Loading:** Improved startup speed significantly by loading interface pages (Settings, Tools, etc.) only when they are first visited.
+- **Log Buffering (Throttle):** Implemented a message throttling system to prevent the GUI from freezing or lagging during rapid translation processes.
+- **NameError Fix:** Resolved a critical pipeline crash caused by a missing `sys` import in the new global cache logic.
+- **Resource Optimization:** Applied best practices from modern open-source projects to ensure memory and CPU efficiency on the main UI thread.
+
+### 🐛 Safety & Stability Fixes
+- **NoneType Exception Fix:** Resolved a critical crash (`TypeError: argument of type 'NoneType' is not iterable`) caused by calling `renpy.change_language` too early in the boot sequence.
+- **Automatic Cleanup:** The system now automatically detects and removes legacy `a0_` or `01_` prefix scripts to prevent file conflicts.
+- **Better Encoding:** Standardized all generated `.rpy` files to use `UTF-8 with BOM`, ensuring 100% compatibility with Ren'Py 7 & 8 on all operating systems.
+
 
 
 ## [2.5.1] - 2026-01-21
@@ -7,6 +79,11 @@
 - **NameError Fix (`AI_LOCAL_URL`):** Fixed critical startup crash caused by missing `AI_LOCAL_URL` constant in `constants.py`.
 - **NameError Fix (`re` module):** Fixed `NameError: name 're' is not defined` crash in `LocalLLMTranslator` by adding missing `import re` statement.
 - **Abstract Class Error:** Fixed `Can't instantiate abstract class LocalLLMTranslator` error by implementing missing `_generate_completion` and `health_check` methods.
+- **Integrated Glossary to AI Prompt:** Glossary terms are now dynamically injected into AI system prompts (OpenAI, Gemini, Local LLM), ensuring consistent terminology for new translations.
+- **Cache Persistence Fix:** Fixed an issue where translation memory (cache) appeared empty after application restart due to incorrect path resolution.
+- **Dynamic Cache Handling:** Cache path now updates immediately when switching projects or target languages.
+- **Advanced Cache Management:** Added ability to clear, delete, and edit cache entries directly from the UI.
+- **Improved Localization:** Added missing Turkish and English translations for new features (RPA, Glossary).
 - **Cache Not Saving:** Fixed a critical bug where translations were not being saved to `translation_cache.json`. The issue was that successful results from the single-translation flow were not being added to the in-memory cache before `save_cache()` was called.
 
 ### ⚡ Local LLM Improvements

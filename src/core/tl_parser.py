@@ -169,7 +169,16 @@ class TLParser:
         # Ensure line endings are normalized to LF
         source_text = source_text.replace('\r\n', '\n').replace('\r', '\n')
 
-        base = f"{Path(file_path).as_posix()}|{line_number}|{ctx}|{source_text}"
+        # Kararlı ID Mantığı (v3):
+        # Ren'Py diyalog blokları benzersiz bir ID'ye sahiptir (örn: script_1234abcd).
+        # Eğer blok bir ID ise, satır numarasını hash'ten çıkartıyoruz.
+        is_stable = ctx and ctx != 'strings' and not ctx.startswith('id_')
+        
+        if is_stable:
+            base = f"{Path(file_path).as_posix()}|{ctx}|{source_text}"
+        else:
+            base = f"{Path(file_path).as_posix()}|{line_number}|{ctx}|{source_text}"
+            
         digest = hashlib.sha1(base.encode('utf-8', errors='ignore')).hexdigest()[:16]
         return f"id_{digest}"
     

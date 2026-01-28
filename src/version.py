@@ -1,5 +1,1 @@
-APP_NAME = "RenLocalizer V2"
-VERSION = "2.5.1"
-COPYRIGHT_YEAR = "2026"
-TEAM_NAME_EN = "RenLocalizer Team"
-TEAM_NAME_TR = "RenLocalizer Ekibi"
+VERSION = "2.6.0"

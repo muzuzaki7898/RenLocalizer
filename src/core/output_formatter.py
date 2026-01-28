@@ -939,12 +939,22 @@ class RenPyOutputFormatter:
         return None
     
     def _create_language_init_file(self, game_dir: Path, language_code: str):
-        """RenPy dökümantasyonuna tam uyumlu, sade başlatıcı dosya üretimi."""
+        """RenPy dökümantasyonuna tam uyumlu, akıllı başlatıcı dosya üretimi."""
         try:
-            init_file_path = game_dir / f"a0_{language_code}_language.rpy"
-            init_content = f'define config.language = "{language_code}"\n'
+            init_file_path = game_dir / f"zzz_{language_code}_language.rpy"
+            content = (
+                f"# Auto-generated language initializer by RenLocalizer\n"
+                f"init 1500 python:\n"
+                f"    # Ensure the game switches to this language upon first install or change\n"
+                f"    # Using late init (1500) to overwrite other scripts safely\n"
+                f"    if getattr(persistent, 'renlocalizer_target_lang', None) != \"{language_code}\":\n"
+                f"        persistent.renlocalizer_target_lang = \"{language_code}\"\n"
+                f"        _preferences.language = \"{language_code}\"\n"
+                f"\n"
+                f"define config.default_language = \"{language_code}\"\n"
+            )
             with open(init_file_path, 'w', encoding='utf-8-sig', newline='\n') as f:
-                f.write(init_content)
-            self.logger.info(f"Created minimal language file: {init_file_path}")
+                f.write(content)
+            self.logger.info(f"Created smart language file: {init_file_path}")
         except Exception as e:
             self.logger.error(f"Error creating language init file: {e}")

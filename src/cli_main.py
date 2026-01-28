@@ -759,7 +759,7 @@ def main() -> int:
     translate_parser.add_argument("--config", help="Path to JSON configuration file")
     translate_parser.add_argument("--target-lang", "-t", default="tr", help="Target language code (default: tr)")
     translate_parser.add_argument("--source-lang", "-s", default="auto", help="Source language code (default: auto)")
-    translate_parser.add_argument("--engine", "-e", default="google", choices=["google", "deepl", "pseudo"], help="Translation engine (pseudo for UI testing)")
+    translate_parser.add_argument("--engine", "-e", default="google", choices=["google", "deepl", "openai", "gemini", "local_llm", "pseudo"], help="Translation engine")
     translate_parser.add_argument("--mode", choices=["auto", "full", "translate"], default="auto", 
                         help="Operation mode: 'auto' (detect), 'full' (UnRen+Trans), 'translate' (Trans only)")
     translate_parser.add_argument("--proxy", action="store_true", help="Enable proxy")
@@ -808,7 +808,7 @@ def main() -> int:
     parser.add_argument("--config", help="Path to JSON configuration file to override settings")
     parser.add_argument("--target-lang", "-t", default="tr", help="Target language code (default: tr)")
     parser.add_argument("--source-lang", "-s", default="auto", help="Source language code (default: auto)")
-    parser.add_argument("--engine", "-e", default="google", choices=["google", "deepl", "pseudo"], help="Translation engine")
+    parser.add_argument("--engine", "-e", default="google", choices=["google", "deepl", "openai", "gemini", "local_llm", "pseudo"], help="Translation engine")
     parser.add_argument("--mode", choices=["auto", "full", "translate"], default="auto", 
                         help="Operation mode: 'auto' (detect), 'full' (UnRen+Trans), 'translate' (Trans only)")
     parser.add_argument("--proxy", action="store_true", help="Enable proxy")
@@ -902,7 +902,79 @@ def main() -> int:
     proxy_manager.configure_from_settings(config_manager.proxy_settings)
     
     # Pass proxy_manager to TranslationManager
-    translation_manager = TranslationManager(proxy_manager=proxy_manager)
+    # Pass proxy_manager to TranslationManager
+    translation_manager = TranslationManager(proxy_manager=proxy_manager, config_manager=config_manager)
+    
+    # =========================================================================
+    # SETUP TRANSLATION ENGINES (CLI Version)
+    # =========================================================================
+    try:
+        from src.core.ai_translator import OpenAITranslator, GeminiTranslator, LocalLLMTranslator
+        from src.core.translator import GoogleTranslator, DeepLTranslator
+        
+        # Determine engine from args (default priority) or config
+        selected_engine_code = args.engine.lower()
+        
+        ts = config_manager.translation_settings
+        
+        # Configure the selected engine
+        if selected_engine_code == 'deepl':
+             translation_manager.add_translator(
+                TranslationEngine.DEEPL,
+                DeepLTranslator(
+                    api_key=config_manager.api_keys.deepl_api_key,
+                    proxy_manager=proxy_manager
+                )
+            )
+        elif selected_engine_code == 'openai':
+            openai_key = config_manager.get_api_key("openai")
+            if not openai_key:
+                print("Error: OpenAI API key not found in config.")
+                return 1
+            translation_manager.add_translator(
+                TranslationEngine.OPENAI,
+                OpenAITranslator(
+                    api_key=openai_key,
+                    model=getattr(ts, 'openai_model', 'gpt-3.5-turbo'),
+                    base_url=getattr(ts, 'openai_base_url', None),
+                    config_manager=config_manager,
+                    proxy_manager=proxy_manager
+                )
+            )
+        elif selected_engine_code == 'gemini':
+            gemini_key = config_manager.get_api_key("gemini")
+            if not gemini_key:
+                 print("Error: Gemini API key not found in config.")
+                 return 1
+            
+            gemini_translator = GeminiTranslator(
+                api_key=gemini_key,
+                model=getattr(ts, 'gemini_model', 'gemini-pro'),
+                safety_level=getattr(ts, 'gemini_safety_settings', None),
+                config_manager=config_manager,
+                proxy_manager=proxy_manager
+            )
+            # Add fallback
+            fallback = GoogleTranslator(proxy_manager, config_manager)
+            gemini_translator.set_fallback_translator(fallback)
+            
+            translation_manager.add_translator(TranslationEngine.GEMINI, gemini_translator)
+            
+        elif selected_engine_code == 'local_llm':
+            translation_manager.add_translator(
+                TranslationEngine.LOCAL_LLM,
+                LocalLLMTranslator(
+                    model=getattr(ts, 'local_llm_model', 'llama3.2'),
+                    base_url=getattr(ts, 'local_llm_url', 'http://localhost:11434/v1'),
+                    config_manager=config_manager,
+                    proxy_manager=proxy_manager
+                )
+            )
+            
+    except Exception as e:
+        print(f"Error setting up translation engine: {e}")
+        # Continue with default (Google) if possible
+
     pipeline = TranslationPipeline(config_manager, translation_manager)
     
     # Create CLI Handler
@@ -966,9 +1038,11 @@ def main() -> int:
     print("-" * 40)
     
     # Configure Pipeline
-    engine_enum = TranslationEngine.GOOGLE
-    if args.engine.lower() == "deepl":
-        engine_enum = TranslationEngine.DEEPL
+    try:
+        engine_enum = TranslationEngine(args.engine.lower())
+    except ValueError:
+        engine_enum = TranslationEngine.GOOGLE
+        print(f"Warning: Unknown engine '{args.engine}', falling back to Google.")
 
     # Setup pipeline based on mode
     if mode == "full":

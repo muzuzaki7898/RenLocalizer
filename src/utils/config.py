@@ -23,6 +23,13 @@ class Language(Enum):
     """Supported UI languages."""
     TURKISH = "tr"
     ENGLISH = "en"
+    GERMAN = "de"
+    FRENCH = "fr"
+    SPANISH = "es"
+    RUSSIAN = "ru"
+    PERSIAN = "fa"
+    CHINESE_S = "zh-CN"
+    JAPANESE = "ja"
 
 TURKIC_PRIMARY_LANG_IDS = {
     0x1F,  # Turkish
@@ -110,7 +117,6 @@ class TranslationSettings:
     # Multi-endpoint Google Translator settings (v2.1.0)
     use_multi_endpoint: bool = True  # Birden fazla Google mirror kullan
     enable_lingva_fallback: bool = True  # Lingva fallback (ücretsiz, API key gerektirmez)
-    endpoint_concurrency: int = 16  # Paralel endpoint istekleri
     max_chars_per_request: int = MAX_CHARS_PER_REQUEST  # Bir istekteki maksimum karakter
     # Glossary & critical terms
     # Glossary & critical terms
@@ -138,10 +144,11 @@ class TranslationSettings:
     enable_rpyc_reader: bool = True  # Varsayılan artık açık (derlenmiş .rpyc okuma)
     # Include renpy/common from installed Ren'Py SDKs (optional)
     include_engine_common: bool = True
+    context_limit: int = 10  # Number of surrounding lines for context
     # AI Settings (v2.5.0)
-    ai_provider: str = "openai"  # openai, gemini, local
     openai_model: str = "gpt-3.5-turbo"
     openai_base_url: str = ""  # For OpenRouter or Local
+    deepseek_model: str = "deepseek-chat"
     gemini_model: str = "gemini-pro"
     gemini_safety_settings: str = "BLOCK_NONE"  # BLOCK_NONE, BLOCK_ONLY_HIGH, STANDARD
     local_llm_model: str = "llama3.2"
@@ -158,6 +165,13 @@ class TranslationSettings:
     ai_custom_system_prompt: str = ""  # User-defined system prompt (empty = use built-in)
     # Aggressive Translation Retry: Retry unchanged translations with Lingva/alt endpoints (slower but more thorough)
     aggressive_retry_translation: bool = False  # Default off for speed
+    # NEW: Directory & File filtering (v2.5.2)
+    exclude_system_folders: bool = True  # Automatically skip renpy/, cache/, saves/, etc.
+    scan_rpym_files: bool = False       # Skip .rpym and .rpymc files by default (usually technical)
+    auto_generate_hook: bool = True     # Automatically generate Runtime Hook after translation
+    # NEW: Cache Management (v2.5.3)
+    use_global_cache: bool = True       # Global cache (keeps translations in program folder for portability)
+    cache_path: str = "cache"           # Global cache directory name
     # DeepL Settings
     deepl_formality: str = "default"  # default, formal, informal - Hitap şekli (Sen/Siz)
     # Runtime Translation Hook (Zorla Çeviri)
@@ -168,35 +182,22 @@ class TranslationSettings:
 @dataclass
 class ApiKeys:
     """API keys for various translation services."""
-    google_api_key: str = ""
     deepl_api_key: str = ""
     openai_api_key: str = ""
     gemini_api_key: str = ""
-    bing_api_key: str = ""
-    yandex_api_key: str = ""
+    deepseek_api_key: str = ""
 
 @dataclass
 class AppSettings:
     """General application settings."""
     ui_language: str = ""  # Will be auto-detected if empty
-    theme: str = "solarized"  # Varsayılan tema solarized olarak ayarlandı
     app_theme: str = "dark"  # Application theme: 'dark', 'light', or 'auto'
-    window_width: int = WINDOW_DEFAULT_WIDTH
-    window_height: int = 800
     last_input_directory: str = ""
-    last_output_directory: str = ""
-    auto_save_settings: bool = True
-    auto_save_translations: bool = True
     check_for_updates: bool = True
     # Output format: 'old_new' (Ren'Py official old/new blocks, recommended) or 'simple' (legacy)
     output_format: str = "old_new"
-    # Parser workers for parallel file processing
-    parser_workers: int = 4
-    # UnRen integration
+    # UnRen integration (Auto RPA Extraction)
     unren_auto_download: bool = True
-    unren_custom_path: str = ""
-    unren_cached_version: str = ""
-    unren_last_checked: str = ""
 
 @dataclass
 class ProxySettings:
@@ -412,7 +413,8 @@ class ConfigManager:
                 config_loaded = True
                 self.logger.info("Configuration loaded successfully")
             else:
-                self.logger.info("Config file doesn't exist, using defaults")
+                self.logger.info("Config file not found. Creating default configuration.")
+                self.save_config()  # Create the file with default values immediately
             
             # Auto-detect system language if not set or if using defaults
             if not self.app_settings.ui_language or not config_loaded:
@@ -474,6 +476,18 @@ class ConfigManager:
             self.logger.error(f"Error saving configuration: {e}")
             return False
     
+    def save_glossary(self) -> bool:
+        """Save glossary to file."""
+        try:
+            filename = self.translation_settings.glossary_file
+            with open(filename, 'w', encoding='utf-8') as f:
+                json.dump(self.glossary, f, indent=4, ensure_ascii=False)
+            self.logger.info(f"Glossary saved to {filename}")
+            return True
+        except Exception as e:
+            self.logger.error(f"Error saving glossary: {e}")
+            return False
+
     def get_api_key(self, service: str) -> str:
         """Get API key for a service."""
         return getattr(self.api_keys, f"{service}_api_key", "")
@@ -517,6 +531,11 @@ class ConfigManager:
                     self.save_config()
         except Exception as e:
             self.logger.error(f"Error setting {key} to {value}: {e}")
+
+    def load_locale(self, lang: Language) -> None:
+        """Compatibility method for language switching."""
+        self.app_settings.ui_language = lang.value
+        self.logger.info(f"UI Language shifted to: {lang.value}")
     
     def get_supported_languages(self) -> Dict[str, str]:
         """Get supported language codes and names (API code -> English name)."""

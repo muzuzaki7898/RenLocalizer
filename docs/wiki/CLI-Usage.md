@@ -28,7 +28,7 @@ python run_cli.py "/path/to/game" --target-lang es --engine local_llm --mode ful
 | `--engine` | `google`, `deepl`, `openai`, `gemini`, `local_llm`. |
 | `--mode` | `full` (Extract + Translate) or `translate` (Translate existing files). |
 | `--deep-scan` | Enable AST-based deep scanning. |
-| `--rpyc-reader` | Read directly from binary RPYC files. |
+| `--rpyc` | Read directly from binary RPYC files. |
 | `--force-ui` | Force translation of all UI elements. |
 
 ---

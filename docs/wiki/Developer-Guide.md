@@ -11,7 +11,9 @@ The project is split into logical components:
     *   `translation_pipeline.py`: Orchestrates the entire flow (Extract -> Parse -> Translate -> Save).
     *   `parser.py`: The high-performance Regex extractor.
     *   `rpyc_reader.py`: The binary unpickler for compiled scripts.
-*   📂 **`src/gui/`**: PyQt6-based interface and Fluent widgets.
+*   📂 **`src/gui/`**: PyQt6 + QML (Fluid Design) interface.
+    *   `qml/`: Contains all .qml files for the UI.
+    *   `settings_backend.py`: Bridges settings between Python and QML.
 *   📂 **`src/utils/`**: Shared helpers, configuration manager, and constants.
 *   📂 **`tools/`**: Standalone scripts for testing and debugging.
 
@@ -30,7 +32,7 @@ Before submitting a PR, please run the following sanity checks:
 1.  Inherit from `BaseTranslator` in `src/core/translator.py`.
 2.  Implement `translate_single` and `translate_batch`.
 3.  Register your engine in the factory within `src/core/translator.py`.
-4.  Update the UI in `src/gui/tl_translate_dialog.py`.
+4.  Update the UI logic in `src/backend/app_backend.py` to recognize the new engine enum.
 
 ---
 

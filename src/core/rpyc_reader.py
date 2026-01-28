@@ -1105,15 +1105,16 @@ class ASTTextExtractor:
     Extracts translatable text from Ren'Py AST nodes.
     """
     
-    def __init__(self):
+    def __init__(self, config_manager=None):
         self.extracted: List[ExtractedText] = []
         # Map text -> (context, ExtractedText) to handle deduplication and prefer more specific
         self.seen_map: Dict[tuple, ExtractedText] = {}
         self.current_file: str = ""
+        self.config_manager = config_manager
         # Copy whitelist from parser for context-aware extraction
         self.DATA_KEY_WHITELIST = DATA_KEY_WHITELIST
         # Instantiate parser once for performance (placeholder preservation, etc.)
-        self.parser = RenPyParser()
+        self.parser = RenPyParser(config_manager)
     
     def extract_from_file(self, file_path: Union[str, Path]) -> List[ExtractedText]:
         """
@@ -1173,7 +1174,11 @@ class ASTTextExtractor:
             else:
                 return
         
-        # Skip technical strings
+        # Skip technical strings using the advanced parser logic
+        if not self.parser.is_meaningful_text(text):
+            return
+        
+        # Additional context-aware technical filtering
         if self._is_technical_string(text, context):
             return
         
@@ -1207,7 +1212,7 @@ class ASTTextExtractor:
         )
     
     def _is_technical_string(self, text: str, context: str = "") -> bool:
-        """Check if string is technical (not translatable)."""
+        """Additional context-dependent technical string checks."""
         import re
         p = self.parser
 
@@ -1401,8 +1406,20 @@ class ASTTextExtractor:
                     val = node.s
                 
                 if val:
-                    # Let _add_text handle filtering
-                    self._add_text(val, line_number, 'python_ast', context='python')
+                    # Extraction Rules for naked strings:
+                    # Naked strings in Python code are often technical IDs (pept, nifacecream).
+                    # We only extract them if they look like real human-readable text.
+                    
+                    val_strip = val.strip()
+                    # 1. Has spaces -> Likely a sentence or phrase
+                    if ' ' in val_strip:
+                        self._add_text(val, line_number, 'python_ast', context='python_naked')
+                    # 2. Starts with Uppercase and meaningful -> Potential UI label or Name
+                    elif val_strip and val_strip[0].isupper() and len(val_strip) > 2:
+                        if self.parser.is_meaningful_text(val):
+                            self._add_text(val, line_number, 'python_ast', context='python_naked')
+                    # 3. Else: skip likely technical IDs (pept, pedom, etc)
+                    # Note: _() and renpy.say() are handled separately below by Call node processing
                 
                 # Translatable calls: _("text"), __("text"), renpy.say(...)
                 if isinstance(node, ast.Call):
@@ -1463,12 +1480,12 @@ class ASTTextExtractor:
         if isinstance(node, FakeTranslateSay):
             character = getattr(node, 'who', '') or ""
             what = getattr(node, 'what', '')
-            if what:
+            if what and isinstance(what, str):
                 self._add_text(
-                    what,
+                    str(what),
                     getattr(node, 'linenumber', 0),
                     'dialogue',
-                    character=character,
+                    character=str(character) if character else "",
                     context=f"translate:{getattr(node, 'identifier', '')}",
                     node_type=node_type
                 )
@@ -1477,12 +1494,14 @@ class ASTTextExtractor:
         elif isinstance(node, FakeSay):
             character = getattr(node, 'who', '') or ""
             what = getattr(node, 'what', '')
-            if what:
+            
+            # Metadata optimization: what can be a FakePyExpr (subclass of str) or literal str
+            if what and isinstance(what, str):
                 self._add_text(
-                    what,
+                    str(what),
                     getattr(node, 'linenumber', 0),
                     'dialogue',
-                    character=character,
+                    character=str(character) if character else "",
                     context=context,
                     node_type=node_type
                 )
@@ -2017,18 +2036,20 @@ class ASTTextExtractor:
 
 
 def extract_texts_from_rpyc(
-    file_path: Union[str, Path]
+    file_path: Union[str, Path],
+    config_manager: Any = None
 ) -> List[Dict[str, Any]]:
     """
     Extract translatable texts from a .rpyc file.
     
     Args:
         file_path: Path to .rpyc file
+        config_manager: Optional config manager instance
         
     Returns:
         List of dicts with text, line_number, text_type, etc.
     """
-    extractor = ASTTextExtractor()
+    extractor = ASTTextExtractor(config_manager)
     results = extractor.extract_from_file(file_path)
     
     return [
@@ -2049,7 +2070,8 @@ def extract_texts_from_rpyc(
 
 def extract_texts_from_rpyc_directory(
     directory: Union[str, Path],
-    recursive: bool = True
+    recursive: bool = True,
+    config_manager: Any = None
 ) -> Dict[Path, List[Dict[str, Any]]]:
     """
     Extract translatable texts from all .rpyc files in a directory.
@@ -2057,6 +2079,7 @@ def extract_texts_from_rpyc_directory(
     Args:
         directory: Directory path (should be the game folder directly)
         recursive: Search subdirectories
+        config_manager: Optional config manager instance
 
     Returns:
         Dict mapping file paths to extracted texts
@@ -2096,7 +2119,7 @@ def extract_texts_from_rpyc_directory(
 
     for rpyc_file in rpyc_files:
         try:
-            texts = extract_texts_from_rpyc(rpyc_file)
+            texts = extract_texts_from_rpyc(rpyc_file, config_manager=config_manager)
             results[rpyc_file] = texts
             logger.debug(f"Extracted {len(texts)} texts from {rpyc_file}")
         except Exception as e:

@@ -13,7 +13,8 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Dict, List, Optional, Tuple
 from abc import ABC, abstractmethod
-from collections import OrderedDict, deque
+from collections import OrderedDict, deque, Counter
+import random
 
 
 # Ren'Py değişken ve tag koruma regex'leri
@@ -35,8 +36,9 @@ PROTECT_RE = re.compile(
     r'\u27e6[^\u27e7]+\u27e7)'
 )
 
-# Aggressive spaced pattern for restoration
-SPACED_RE_TEMPLATE = r'X\s*R\s*P\s*Y\s*X\s*{core}\s*X\s*R\s*P\s*Y\s*X'
+# Agresif bozulma temizliği için şablon
+# [ [ v 0 ] ], [[V 0]], [[ v0]] gibi durumları yakalamak için
+CLEANUP_RE = re.compile(r'\[\s*\[\s*([vteg])\s*(\d+)\s*\]\s*\]', re.IGNORECASE)
 
 
 def protect_renpy_syntax(text: str) -> Tuple[str, Dict[str, str]]:
@@ -56,18 +58,21 @@ def protect_renpy_syntax(text: str) -> Tuple[str, Dict[str, str]]:
         out_parts.append(text[last:start])
         token = m.group(0)
         if token in ('{{', '}}'):
-            prefix = 'ESC'
+            prefix = 'e'  # escaped
         elif token.startswith('{') and token.endswith('}'):
-            prefix = 'TAG'
+            prefix = 't'  # tag
         else:
-            prefix = 'VAR'
-        key = f"XRPYX{prefix}{counter}XRPYX"
-        placeholders[key] = token
+            prefix = 'v'  # variable
+        key = f" [[{prefix}{counter}]] "  # Etrafına boşluk ekle (Tampon)
+        placeholders[key.strip()] = token
         out_parts.append(key)
         counter += 1
         last = end
     out_parts.append(text[last:])
     protected = ''.join(out_parts)
+    
+    # Fazla boşlukları temizle (isteğe bağlı ama temizlik iyidir)
+    # protected = re.sub(r'\s{2,}', ' ', protected)
 
     return protected, placeholders
 
@@ -84,26 +89,24 @@ def restore_renpy_syntax(text: str, placeholders: Dict[str, str]) -> str:
         # 1. Tam eşleşme (Hızlı)
         if placeholder in result:
             result = result.replace(placeholder, original)
-        else:
-            # 2. Case-insensitive ve ufak bozulma (boşluk vb.) temizliği
-            # Bazı motorlar "XRPYX VAR 0 XRPYX" veya "xrpyxvar0xrpyx" döndürebiliyor.
-            # Sadece XRPYX yapıları için özel bir esneklik tanıyalım
-            if placeholder.startswith("XRPYX") and placeholder.endswith("XRPYX"):
-                # İçerideki kısımları ayır: XRPYX[TAG|VAR|GLO][ID]XRPYX
-                core = placeholder[5:-5]
-                # Regex: X R P Y X (boşluklar?) [CORE] (boşluklar?) X R P Y X
-                # Ama daha basiti: xrpyx[core]xrpyx durumlarını yakalamak
-                pattern = re.compile(re.escape(placeholder), re.IGNORECASE)
-                result = pattern.sub(original, result)
-                
-                # Eğer hala bulamadıysa boşluklu halini dene
-                if original not in result:
-                    # XRPYX VAR 1 XRPYX gibi durumlar için
-                    spaced_pattern = re.compile(SPACED_RE_TEMPLATE.format(core=re.escape(core)), re.IGNORECASE)
-                    result = spaced_pattern.sub(original, result)
-            else:
-                pattern = re.compile(re.escape(placeholder), re.IGNORECASE)
-                result = pattern.sub(original, result)
+            continue
+
+        # 2. Case-insensitive ve boşluk temizliği (Daha yavaş ama güvenli)
+        # Motorlar bazen "[[ v0 ]]" veya "[[V0]]" döndürebiliyor.
+        # CLEANUP_RE zaten tüm varyasyonları standart [[v0]] haline getirmeye odaklı.
+        core_match = re.search(r'\[\[([vteg]\d+)\]\]', placeholder)
+        if core_match:
+            core = core_match.group(1) # v0, t1 vb.
+            # Boşlukları ve büyük/küçük harf farklarını temizleyen regex
+            # [[ v 0 ]], [ [v0] ], [[V0]] vb. her şeyi yakalar
+            pattern = re.compile(
+                r'\[\s*\[\s*' + re.escape(core[0]) + r'\s*' + re.escape(core[1:]) + r'\s*\]\s*\]',
+                re.IGNORECASE
+            )
+            result = pattern.sub(original, result)
+            
+    # Eğer hala temizlenmemiş "[[...]]" kalıntıları varsa (farklı bir ID kalmışsa vb.)
+    # onları da en son bir kez daha temizlemeyi deneyebiliriz ama placeholders içindekiler öncelikli.
                 
     return result
 
@@ -187,6 +190,10 @@ class BaseTranslator(ABC):
             self._session = None
             self._connector = None
 
+    async def close_session(self):
+        """Alias for close() to match naming convention used in detection logic."""
+        await self.close()
+
     def set_proxy_enabled(self, enabled: bool):
         self.use_proxy = enabled
 
@@ -219,6 +226,21 @@ class BaseTranslator(ABC):
     @abstractmethod
     def get_supported_languages(self) -> Dict[str, str]: ...
 
+    def _check_integrity(self, text: str, placeholders: Dict[str, str]) -> bool:
+        """
+        Check if all original placeholder values (e.g., [name], {{tag}}) are present in the text.
+        Returns False if any placeholder value is missing.
+        """
+        if not placeholders:
+            return True
+        
+        # Orijinal tokenlerin (örn: [name]) çevrilmiş metinde geçip geçmediğine bak
+        # Case-insensitive arama yapalım çünkü AI bazen büyük/küçük harf değiştirebilir
+        text_lower = text.lower()
+        for orig_val in placeholders.values():
+            if orig_val.lower().strip() not in text_lower:
+                return False
+        return True
 
 class GoogleTranslator(BaseTranslator):
     """Multi-endpoint Google Translator with Lingva fallback.
@@ -281,7 +303,7 @@ class GoogleTranslator(BaseTranslator):
             # Slider ile kontrol edilen 'max_concurrent_threads' değerini baz alıyoruz
             self.multi_q_concurrency = getattr(ts, 'max_concurrent_threads', 16)
             self.max_slice_chars = getattr(ts, 'max_chars_per_request', 5000)
-            self.max_texts_per_slice = getattr(ts, 'ai_batch_size', 25)  # Use universal batch size
+            self.max_texts_per_slice = getattr(ts, 'max_batch_size', 200)  # Use general batch size for Google
             self.aggressive_retry = getattr(ts, 'aggressive_retry_translation', False)
         else:
             self.aggressive_retry = False
@@ -432,6 +454,12 @@ class GoogleTranslator(BaseTranslator):
                             alt_result = await try_endpoint(alt_endpoint)
                             if alt_result:
                                 alt_final = restore_renpy_syntax(alt_result, placeholders)
+                                
+                                # INTEGRITY CHECK
+                                if placeholders and not self._check_integrity(alt_final, placeholders):
+                                     self.logger.warning("Integrity check failed (Retry): Placeholders missing. Using original.")
+                                     alt_final = request.text
+                                
                                 if alt_final.strip() != request.text.strip():
                                     return TranslationResult(
                                         request.text, alt_final, request.source_lang, request.target_lang,
@@ -441,6 +469,11 @@ class GoogleTranslator(BaseTranslator):
                         
                         # All retries failed, return the unchanged text with lower confidence
                         self.logger.warning(f"Translation unchanged after retries: {request.text[:50]}")
+                    
+                    # INTEGRITY CHECK
+                    if placeholders and not self._check_integrity(final_text, placeholders):
+                         self.logger.warning("Integrity check failed (Google Multi): Placeholders missing. Using original.")
+                         final_text = request.text
                     
                     return TranslationResult(
                         request.text, final_text, request.source_lang, request.target_lang,
@@ -481,6 +514,11 @@ class GoogleTranslator(BaseTranslator):
                                 )
                         await asyncio.sleep(0.3)
                 
+                # INTEGRITY CHECK
+                if placeholders and not self._check_integrity(final_text, placeholders):
+                     self.logger.warning("Integrity check failed (Google Single): Placeholders missing. Using original.")
+                     final_text = request.text
+                
                 return TranslationResult(
                     request.text, final_text, request.source_lang, request.target_lang,
                     TranslationEngine.GOOGLE, True, confidence=0.9, metadata=request.metadata
@@ -496,6 +534,12 @@ class GoogleTranslator(BaseTranslator):
             if lingva_result:
                 # Ren'Py değişkenlerini geri koy
                 final_text = restore_renpy_syntax(lingva_result, placeholders)
+                
+                # BÜTÜNLÜK KONTROLÜ
+                if placeholders and not self._check_integrity(final_text, placeholders):
+                        self.logger.warning(f"Integrity check failed (Lingva): Placeholders missing in translation. Using original text.")
+                        final_text = request.text
+
                 return TranslationResult(
                     request.text, final_text, request.source_lang, request.target_lang,
                     TranslationEngine.GOOGLE, True, confidence=0.85, metadata=request.metadata
@@ -517,7 +561,14 @@ class GoogleTranslator(BaseTranslator):
                 if data2 and isinstance(data2, list) and data2[0]:
                     text = ''.join(part[0] for part in data2[0] if part and part[0])
                     # Ren'Py değişkenlerini geri koy
+                    # Ren'Py değişkenlerini geri koy
                     final_text = restore_renpy_syntax(text, placeholders)
+                    
+                    # BÜTÜNLÜK KONTROLÜ
+                    if placeholders and not self._check_integrity(final_text, placeholders):
+                        self.logger.warning(f"Integrity check failed (Fallback): Placeholders missing. Using original text.")
+                        final_text = request.text
+
                     return TranslationResult(
                         request.text, final_text, request.source_lang, request.target_lang,
                         TranslationEngine.GOOGLE, True, confidence=0.8, metadata=request.metadata
@@ -529,6 +580,120 @@ class GoogleTranslator(BaseTranslator):
             request.text, "", request.source_lang, request.target_lang,
             TranslationEngine.GOOGLE, False, self._get_text('error_all_engines_failed', "All translation methods failed"), metadata=request.metadata
         )
+
+    # =====================================================================
+    # SMART LANGUAGE DETECTION
+    # =====================================================================
+    # Detect source language by analyzing multiple text samples using
+    # majority voting. This prevents incorrect detection when games have
+    # mixed-language content (e.g., English game with some Russian dialogue).
+    # =====================================================================
+    
+    # Detection configuration constants
+    DETECT_MIN_TEXT_LENGTH = 30      # Minimum characters for a sample to be valid
+    DETECT_SAMPLE_SIZE = 15          # Number of samples to analyze
+    DETECT_CONFIDENCE_THRESHOLD = 0.70  # Minimum 70% agreement required
+    
+    async def detect_language(self, texts: List[str], target_lang: str = None) -> Optional[str]:
+        """
+        Detects source language from a list of text samples using majority voting.
+        
+        This method analyzes multiple text samples and uses a confidence threshold
+        to ensure reliable detection. If the confidence is below the threshold,
+        it returns None, signaling that 'auto' mode should be used.
+        
+        Args:
+            texts: List of text strings to analyze
+            target_lang: Target language code (to avoid detecting target as source)
+            
+        Returns:
+            ISO 639-1 language code (e.g., 'en', 'fr', 'ru') or None if confidence is low
+        """
+        # Filter meaningful texts (long enough for reliable detection)
+        candidates = [t for t in texts if len(t.strip()) >= self.DETECT_MIN_TEXT_LENGTH]
+        
+        if not candidates:
+            self.logger.debug("No suitable text samples for language detection")
+            return None
+        
+        # Take random sample to avoid bias from specific game sections
+        sample_size = min(self.DETECT_SAMPLE_SIZE, len(candidates))
+        samples = random.sample(candidates, sample_size)
+        
+        self.logger.info(f"[Smart Detect] Analyzing {sample_size} text samples for language detection...")
+        
+        # Detect language for each sample
+        detected_langs: List[str] = []
+        for text in samples:
+            lang = await self._detect_single_language(text)
+            if lang:
+                detected_langs.append(lang)
+        
+        if not detected_langs:
+            self.logger.warning("[Smart Detect] Could not detect language from any sample")
+            return None
+        
+        # Majority voting
+        counter = Counter(detected_langs)
+        winner, count = counter.most_common(1)[0]
+        confidence = count / len(detected_langs)
+        
+        self.logger.info(f"[Smart Detect] Results: {dict(counter)} | Winner: {winner} ({confidence:.0%})")
+        
+        # Safety check: detected language should not equal target language
+        if target_lang and winner.lower() == target_lang.lower():
+            self.logger.warning(f"[Smart Detect] Detected language ({winner}) equals target language. Falling back to auto.")
+            return None
+        
+        # Apply confidence threshold
+        if confidence >= self.DETECT_CONFIDENCE_THRESHOLD:
+            self.logger.info(f"[Smart Detect] ✓ Confirmed source language: {winner}")
+            return winner
+        else:
+            self.logger.warning(f"[Smart Detect] Confidence {confidence:.0%} below threshold {self.DETECT_CONFIDENCE_THRESHOLD:.0%}. Using auto mode.")
+            return None
+    
+    async def _detect_single_language(self, text: str) -> Optional[str]:
+        """
+        Detects the language of a single text using Google Translate API.
+        
+        Args:
+            text: Text to analyze (should be 30+ characters for accuracy)
+            
+        Returns:
+            ISO 639-1 language code or None on error
+        """
+        # Use Google's language detection endpoint
+        params = {
+            'client': 'gtx',
+            'sl': 'auto',
+            'tl': 'en',  # Target doesn't matter for detection
+            'dt': 't',
+            'q': text[:500]  # Limit text length for API efficiency
+        }
+        
+        try:
+            endpoint = self._get_next_endpoint()
+            session = await self._get_session()
+            
+            async with session.get(
+                endpoint,
+                params=params,
+                timeout=aiohttp.ClientTimeout(total=5),
+                ssl=False
+            ) as resp:
+                if resp.status == 200:
+                    data = await resp.json(content_type=None)
+                    # Google returns detected language at index [2]
+                    # Format: [[["translated", "original", null, null, 10]], null, "detected_lang"]
+                    if data and isinstance(data, list) and len(data) > 2:
+                        detected = data[2]
+                        if isinstance(detected, str) and len(detected) >= 2:
+                            return detected.lower()
+        except Exception as e:
+            self.logger.debug(f"Language detection failed for sample: {e}")
+        
+        return None
 
     async def translate_batch(self, requests: List[TranslationRequest]) -> List[TranslationResult]:
         """Optimize edilmiş toplu çeviri:
@@ -1247,6 +1412,9 @@ class TranslationManager:
             self.max_retries = getattr(ts, 'max_retries', 1)
             self.max_batch_size = getattr(ts, 'max_batch_size', 500)
             self.max_concurrent_requests = getattr(ts, 'max_concurrent_threads', 32)
+            self.use_cache = getattr(ts, 'use_cache', True)
+        else:
+            self.use_cache = True
 
         self.cache_capacity = 20000
         self._cache: OrderedDict = OrderedDict()
@@ -1285,6 +1453,8 @@ class TranslationManager:
             await asyncio.gather(*tasks, return_exceptions=True)
 
     async def _cache_get(self, key: Tuple[str,str,str,str]) -> Optional[TranslationResult]:
+        if not self.use_cache:
+            return None
         async with self._cache_lock:
             val = self._cache.get(key)
             if val:
@@ -1292,7 +1462,7 @@ class TranslationManager:
             return val
 
     async def _cache_put(self, key: Tuple[str,str,str,str], val: TranslationResult):
-        if not val.success:
+        if not self.use_cache or not val.success:
             return
         async with self._cache_lock:
             self._cache[key] = val

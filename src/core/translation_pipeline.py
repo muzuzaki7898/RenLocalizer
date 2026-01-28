@@ -9,6 +9,7 @@ Bu modül tüm çeviri sürecini entegre bir pipeline olarak yönetir.
 """
 
 import os
+import sys
 import logging
 import asyncio
 import re
@@ -177,6 +178,12 @@ class TranslationPipeline(QObject):
         self.current_stage = PipelineStage.IDLE
         self.should_stop = False
         self.is_running = False
+        
+        # Log Buffering (v2.5.3 Optimization)
+        self._log_queue = []
+        self._last_log_time = 0
+        self._log_throttle_interval = 0.08  # ~12 FPS limit for logs
+        
         # Settings (default values; overridden via configure)
         self.game_exe_path: Optional[str] = None
         self.project_path: Optional[str] = None
@@ -185,6 +192,20 @@ class TranslationPipeline(QObject):
         self.engine: TranslationEngine = TranslationEngine.GOOGLE
         self.auto_unren: bool = True # Legacy name, means auto extraction
         self.use_proxy: bool = False
+
+    def emit_log(self, level: str, message: str):
+        """
+        Send log message to UI with throttling for better performance.
+        High-priority logs (error, warning) are sent immediately.
+        """
+        if level in ('error', 'warning'):
+            self.log_message.emit(level, message)
+            return
+
+        current_time = time.time()
+        if current_time - self._last_log_time > self._log_throttle_interval:
+            self.log_message.emit(level, message)
+            self._last_log_time = current_time
 
     def _log_error(self, message: str):
         """Persist errors for later inspection (not shown to user as 'fatal')."""
@@ -353,42 +374,47 @@ class TranslationPipeline(QObject):
         has_rpa = self._has_rpa_files(game_dir)  # Arşiv dosyası kontrolü
 
         # .rpymc dosyalarını bul ve gerçek AST tabanlı okuyucuyu kullan
-        rpymc_files = self._find_rpymc_files(game_dir)
         self.rpymc_entries = []
-        if rpymc_files:
-            from src.core.rpyc_reader import extract_texts_from_rpyc
-            for rpymc_path in rpymc_files:
-                try:
-                    texts = extract_texts_from_rpyc(rpymc_path)
-                    for t in texts:
-                        text_val = t.get('text') or ""
-                        if not text_val:
-                            continue
-                        ctx_path = t.get('context_path') or []
-                        if isinstance(ctx_path, str):
-                            ctx_path = [ctx_path]
-                        entry = TranslationEntry(
-                            original_text=text_val,
-                            translated_text="",
-                            file_path=str(rpymc_path),
-                            line_number=t.get('line_number', 0) or 0,
-                            entry_type="rpymc",
-                            character=t.get('character'),
-                            source_comment=None,
-                            block_id=None,
-                            context_path=ctx_path,
-                            translation_id=TLParser.make_translation_id(
-                                    str(rpymc_path), t.get('line_number', 0) or 0, text_val, ctx_path, t.get('raw_text')
-                                )
-                        )
-                        self.rpymc_entries.append(entry)
-                except Exception as e:
-                    msg = f".rpymc extraction failed: {rpymc_path} ({e})"
-                    self.log_message.emit('warning', msg)
-                    self._log_error(msg)
+        should_scan_rpym = getattr(self.config.translation_settings, 'scan_rpym_files', False)
+        
+        if should_scan_rpym:
+            rpymc_files = self._find_rpymc_files(game_dir)
+            if rpymc_files:
+                from src.core.rpyc_reader import extract_texts_from_rpyc
+                for rpymc_path in rpymc_files:
+                    try:
+                        texts = extract_texts_from_rpyc(rpymc_path, config_manager=self.config)
+                        for t in texts:
+                            text_val = t.get('text') or ""
+                            if not text_val:
+                                continue
+                            ctx_path = t.get('context_path') or []
+                            if isinstance(ctx_path, str):
+                                ctx_path = [ctx_path]
+                            entry = TranslationEntry(
+                                original_text=text_val,
+                                translated_text="",
+                                file_path=str(rpymc_path),
+                                line_number=t.get('line_number', 0) or 0,
+                                entry_type="rpymc",
+                                character=t.get('character'),
+                                source_comment=None,
+                                block_id=None,
+                                context_path=ctx_path,
+                                translation_id=TLParser.make_translation_id(
+                                        str(rpymc_path), t.get('line_number', 0) or 0, text_val, ctx_path, t.get('raw_text')
+                                    )
+                            )
+                            self.rpymc_entries.append(entry)
+                    except Exception as e:
+                        msg = f".rpymc extraction failed: {rpymc_path} ({e})"
+                        self.log_message.emit('warning', msg)
+                        self._log_error(msg)
 
-            # Log .rpymc entry count
-            self.log_message.emit('debug', self.config.get_log_text('rpymc_entry_count', count=len(self.rpymc_entries)))
+                # Log .rpymc entry count
+                self.log_message.emit('debug', self.config.get_log_text('rpymc_entry_count', count=len(self.rpymc_entries)))
+        else:
+            self.log_message.emit('debug', "Skipping .rpymc scan (scan_rpym_files disabled)")
         
         if self.should_stop:
             return self._stopped_result()
@@ -399,7 +425,7 @@ class TranslationPipeline(QObject):
         needs_decompile = not has_rpy and has_rpyc and self.auto_unren
         
         if needs_extraction or needs_decompile:
-            self.log_message.emit("info", self.config.get_log_text('unren_needed', has_rpy=has_rpy, has_rpyc=has_rpyc, has_rpa=has_rpa))
+            self.log_message.emit("info", self.config.get_log_text('rpa_extraction_needed'))
             self._set_stage(PipelineStage.UNRPA, self.config.get_ui_text("stage_unren"))
             
             # Decompile/Extract
@@ -753,38 +779,63 @@ class TranslationPipeline(QObject):
             if not game_dir.exists():
                 return
                 
-            hook_filename = "01_renlocalizer_runtime.rpy"
+            hook_filename = "zzz_renlocalizer_runtime.rpy"
             hook_path = game_dir / hook_filename
             
+            # Clean up old versions
+            for old in game_dir.glob("*_renlocalizer_*.rpy"):
+                if old.name != hook_filename:
+                    old.unlink(missing_ok=True)
+
             should_exist = getattr(self.config.translation_settings, 'force_runtime_translation', False)
             
+            # Hedef dili al
+            target_lang = getattr(self, 'target_language', None) or getattr(self.config.translation_settings, 'target_language', 'turkish') or 'turkish'
+            # ISO -> Ren'Py native
+            reverse_lang_map = {v.lower(): k for k, v in RENPY_TO_API_LANG.items()}
+            renpy_lang = reverse_lang_map.get(target_lang.lower(), target_lang)
+            
             if should_exist:
-                content = '''# RenLocalizer Runtime Translation Hook
+                content = f'''# RenLocalizer Runtime Translation Hook
 # This script forces translation lookup for all text displayed by Ren'Py,
 # solving issues where developers missed the !t flag on interpolated strings.
+# Press Shift+L to manually switch to the translated language.
 # Generated by RenLocalizer.
 
-init 100 python:
+init 1501 python:
+    # =========================================================================
+    # LANGUAGE HOTKEY: Shift+L
+    # =========================================================================
+    def _renlocalizer_switch_lang():
+        target = "{renpy_lang}"
+        renpy.change_language(target)
+        persistent.renlocalizer_target_lang = target
+        renpy.notify("RenLocalizer: Language → {renpy_lang.title()}")
+        renpy.restart_interaction()
+
+    # Register Shift+L as language toggle
+    config.underlay.append(renpy.Keymap(shift_K_l=_renlocalizer_switch_lang))
+
+    # =========================================================================
+    # RUNTIME TEXT TRANSLATION HOOK
+    # =========================================================================
     # Save original replacer if it exists and hasn't been wrapped yet
     if not hasattr(store, '_renlocalizer_old_replace_text'):
         if hasattr(config, 'replace_text') and config.replace_text:
             store._renlocalizer_old_replace_text = config.replace_text
         else:
-            def _renlocalizer_noop(s): return s
-            store._renlocalizer_old_replace_text = _renlocalizer_noop
+            store._renlocalizer_old_replace_text = lambda s: s
 
     def _renlocalizer_force_translate(s):
-        # 1. Run original replacer
-        if hasattr(store, '_renlocalizer_old_replace_text'):
-            s = store._renlocalizer_old_replace_text(s)
-        
-        # 2. Force translation lookup
-        # renpy.translate_string(s) looks up 's' in the current language's strings.
+        # 1. Run original game filters
+        s = store._renlocalizer_old_replace_text(s)
+        # 2. Force Ren'Py translation lookup
         if s:
             return renpy.translate_string(s)
         return s
 
-    # Install the hook
+    # Install the hooks
+    config.say_menu_text_filter = _renlocalizer_force_translate
     config.replace_text = _renlocalizer_force_translate
 '''
                 with open(hook_path, "w", encoding="utf-8") as f:
@@ -828,16 +879,18 @@ init 100 python:
                     self.log_message.emit("warning", self.config.get_log_text('target_lang_default'))
 
             # Once eski otomatik init dosyalarini temizle ki tek dosya aktif kalsin
+            # Once eski otomatik init dosyalarini temizle ki tek dosya aktif kalsin
             try:
-                for existing in Path(game_dir).glob("a0_*_language.rpy"):
-                    if existing.name != f"a0_{language_code}_language.rpy":
-                        existing.unlink(missing_ok=True)
-                        self.log_message.emit("info", self.config.get_log_text('old_lang_init_deleted', name=existing.name))
+                for existing in Path(game_dir).glob("*_language.rpy"):
+                    if "renlocalizer" in existing.name or existing.name.startswith("a0_") or existing.name.startswith("zzz_"):
+                        if existing.name != f"zzz_{language_code}_language.rpy":
+                            existing.unlink(missing_ok=True)
+                            self.log_message.emit("info", self.config.get_log_text('old_lang_init_deleted', name=existing.name))
             except Exception:
                 pass
 
-            # Dosya adi: a0_[lang]_language.rpy (RenPy dokumantasyonuna uygun, one cikar)
-            init_file = os.path.join(game_dir, f'a0_{language_code}_language.rpy')
+            # Dosya adi: zzz_[lang]_language.rpy (En son yuklenir, oyunun ayarlarini ezer)
+            init_file = os.path.join(game_dir, f'zzz_{language_code}_language.rpy')
 
             self.log_message.emit(
                 "info",
@@ -852,9 +905,15 @@ init 100 python:
 
             # Sade ve dinamik baslaticinin icerigi
             content = (
-                f'init python:\n'
-                f'    config.language = "{language_code}"\n'
-                f'    config.default_language = "{language_code}"\n'
+                f"# Auto-generated language initializer by RenLocalizer\n"
+                f"init 1500 python:\n"
+                f"    # Ensure the game switches to this language upon first install or change\n"
+                f"    # Using late init (1500) to overwrite other scripts safely\n"
+                f"    if getattr(persistent, 'renlocalizer_target_lang', None) != \"{language_code}\":\n"
+                f"        persistent.renlocalizer_target_lang = \"{language_code}\"\n"
+                f"        _preferences.language = \"{language_code}\"\n"
+                f"\n"
+                f"define config.default_language = \"{language_code}\"\n"
             )
 
             with open(init_file, 'w', encoding='utf-8-sig', newline='\n') as f:
@@ -1427,8 +1486,10 @@ init 100 python:
                 # If explicit override wasn't set (or False), fallback to config
                 if not use_deep:
                     use_deep = getattr(settings, 'enable_deep_scan', getattr(settings, 'use_deep_scan', True))
-                if not use_rpyc:
-                    use_rpyc = getattr(settings, 'enable_rpyc_reader', getattr(settings, 'use_rpyc', False))
+                
+                # USER REQUEST: Force enable RPYC scanning to ensure maximum coverage
+                # We always scan RPYC files to catch strings missing from decompiled RPYs
+                use_rpyc = True 
 
             # Remove any entries that originate from game/renpy/common — we'll re-parse them with
             # a temporary parser that forces UI scanning for engine common strings.
@@ -1525,11 +1586,13 @@ init 100 python:
 
             # 4. RPYC Execution
             if use_rpyc:
+                self.log_message.emit("warning", "⏳ .rpyc (Binary) veri tabanı taranıyor... Bu işlem dosya boyutuna göre zaman alabilir. Lütfen bekleyin, program donmadı!")
                 self.log_message.emit("info", self.config.get_log_text('rpyc_scan_running'))
                 # Import here to avoid circular imports if any
                 try:
                     from src.core.rpyc_reader import extract_texts_from_rpyc_directory
                     rpyc_results = extract_texts_from_rpyc_directory(game_dir)
+                    self.log_message.emit("success", f"✅ .rpyc taraması tamamlandı. {len(rpyc_results)} dosya işlendi.")
                 except ImportError:
                     self.log_message.emit("warning", self.config.get_log_text('rpyc_module_not_found'))
             # --- FIX END ---
@@ -1734,8 +1797,39 @@ init 100 python:
                 comment_parts.append('[engine_common]')
             
             lines.append(f"    # {' '.join(comment_parts)}")
+            # Check cache for existing translation to support seamless resume
+            cached_translation = ""
+            if self.translation_manager:
+                # Cache lookup needs to match the key logic in translation_manager
+                # (Engine, Source, Target, Text) -> Result
+                # We do a 'best effort' check here.
+                # Assuming engine is consistent or we just want *any* translation for this text/mylang.
+                
+                # Direct cache access via manager helper if available, or manual lookup
+                # Since cache keys include engine/source/target, we iterate to find a match for current target/text
+                # This is slightly expensive but worth it for resume UX.
+                
+                # Fast path: Try with current engine settings
+                api_target = RENPY_TO_API_LANG.get(self.target_language, self.target_language)
+                api_source = RENPY_TO_API_LANG.get(self.source_language, self.source_language)
+                
+                # Check for cached result
+                cache_key = (self.engine.value, api_source, api_target, text)
+                cached_res = self.translation_manager._cache.get(cache_key)
+                
+                # If not found with exact key, try loose match (any engine, same languages)
+                if not cached_res:
+                    for k, v in self.translation_manager._cache.items():
+                        # buffer check: k[2] is target, k[3] is original text
+                        if len(k) >= 4 and k[2] == api_target and k[3] == text:
+                            cached_res = v
+                            break
+                            
+                if cached_res and cached_res.success:
+                    cached_translation = self._escape_rpy_string(cached_res.translated_text)
+
             lines.append(f'    old "{escaped_text}"')
-            lines.append(f'    new ""')
+            lines.append(f'    new "{cached_translation}"')
             lines.append("")
             
             # Yield GIL periodically to keep UI alive
@@ -1769,7 +1863,7 @@ init 100 python:
             
             def replace_func(match):
                 nonlocal counter
-                key = f"XRPYXGLO{counter}XRPYX"
+                key = f"[[g{counter}]]"
                 placeholders[key] = dst  # Hedef çeviriyi yer tutucu sözlüğüne koy!
                 counter += 1
                 return key
@@ -1834,10 +1928,87 @@ init 100 python:
             self.log_message.emit("debug", f"AI engine detected, using batch size: {batch_size}")
 
         api_target_lang = RENPY_TO_API_LANG.get(self.target_language, self.target_language)
+        
+        # =====================================================================
+        # SMART LANGUAGE DETECTION
+        # =====================================================================
+        # When source_language is "auto", we detect it once at the start instead
+        # of letting Google guess on each request. This prevents short texts like
+        # "OK", "Yes", or character names from being incorrectly detected.
+        # =====================================================================
         api_source_lang = RENPY_TO_API_LANG.get(self.source_language, self.source_language)
+        
+        if self.source_language.lower() == "auto" and self.engine == TranslationEngine.GOOGLE:
+            self.log_message.emit("info", self.config.get_log_text(
+                'smart_detect_starting', 
+                "[Smart Detect] Kaynak dil tespit ediliyor..."
+            ))
+            
+            # Get text samples from entries
+            text_samples = [e.original_text for e in entries]
+            
+            # Detect using Google Translator
+            translator = self.translation_manager.translators.get(TranslationEngine.GOOGLE)
+            if not translator:
+                translator = GoogleTranslator(config_manager=self.config)
+                self.translation_manager.add_translator(TranslationEngine.GOOGLE, translator)
+            
+            try:
+                # Create a specialized translator just for detection to avoid session/loop conflicts
+                # This prevents the 'Event loop is closed' error on the main translator
+                detection_translator = GoogleTranslator(config_manager=self.config)
+                
+                # Create temporary event loop for detection
+                detect_loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(detect_loop)
+                
+                detected_lang = detect_loop.run_until_complete(
+                    detection_translator.detect_language(text_samples, target_lang=api_target_lang)
+                )
+                
+                # Close the temporary loop and the detection translator's session
+                detect_loop.run_until_complete(detection_translator.close_session())
+                detect_loop.close()
+                
+                if detected_lang:
+                    api_source_lang = detected_lang
+                    self.log_message.emit("info", self.config.get_log_text(
+                        'smart_detect_success',
+                        f"[Smart Detect] ✓ Kaynak dil tespit edildi: {detected_lang.upper()}"
+                    ))
+                else:
+                    self.log_message.emit("warning", self.config.get_log_text(
+                        'smart_detect_fallback',
+                        "[Smart Detect] Güven eşiği geçilemedi, 'auto' modunda devam ediliyor."
+                    ))
+                    api_source_lang = "auto"
+            except Exception as e:
+                self.logger.warning(f"Smart language detection failed: {e}")
+                api_source_lang = "auto"
 
-        # Cache path: tl/<lang>/translation_cache.json
-        cache_dir = os.path.join(self.project_path, 'game', 'tl', self.target_language)
+        # Cache path management (Global vs Local)
+        should_use_global_cache = getattr(self.config.translation_settings, 'use_global_cache', True)
+        
+        if should_use_global_cache:
+            # Create a project name based ID (last part of project_path)
+            project_name = os.path.basename(self.project_path.rstrip('/\\'))
+            if not project_name:
+                project_name = "default_project"
+            
+            # Use program directory (next to run.py/executable)
+            app_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+            # Check if frozen (PyInstaller)
+            if getattr(sys, 'frozen', False):
+                app_dir = os.path.dirname(sys.executable)
+            
+            base_cache_dir = os.path.join(app_dir, getattr(self.config.translation_settings, 'cache_path', 'cache'))
+            cache_dir = os.path.join(base_cache_dir, project_name, self.target_language)
+            self.log_message.emit("info", f"Using global portable cache profile: [{project_name}]")
+        else:
+            # Standard path: game/tl/<lang>/translation_cache.json
+            cache_dir = os.path.join(self.project_path, 'game', 'tl', self.target_language)
+            self.log_message.emit("info", "Using local project-specific cache.")
+
         os.makedirs(cache_dir, exist_ok=True)
         cache_file = os.path.join(cache_dir, "translation_cache.json")
         
@@ -2032,13 +2203,13 @@ init 100 python:
                 
                 # Sadece her 50 metinde bir "Checkpoint saved" logu bas (log kirliliğini önlemek için)
                 if current % 50 == 0:
-                    self.log_message.emit("debug", f"Checkpoint saved: {cache_file} (Progress: {current}/{total})")
+                    self.emit_log("debug", f"Checkpoint saved: {cache_file} (Progress: {current}/{total})")
 
                 if stop_quota:
                     self.log_message.emit("error", self.config.get_log_text('error_api_quota'))
                     self.should_stop = True
                     break
-                self.log_message.emit("info", self.config.get_log_text('translated_count', current=current, total=total))
+                self.emit_log("info", self.config.get_log_text('translated_count', current=current, total=total))
 
             if unchanged_count:
                 self.log_message.emit("warning", self.config.get_log_text('unchanged_count_msg', unchanged=unchanged_count, total=len(translations)))

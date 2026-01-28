@@ -21,6 +21,10 @@ google-genai>=0.3.0
 rapidfuzz>=3.0.0
 packaging>=23.0
 
+# Data Management (Excel/CSV)
+pandas>=2.0.0
+openpyxl>=3.1.0
+
 # RPA Extraction
 unrpa>=2.3.0
 PyYAML>=6.0

@@ -10,12 +10,13 @@ Welcome to the official documentation for **RenLocalizer**, the advanced transla
 
 ### 🚀 Getting Started
 *   [[Installation]] — How to set up RenLocalizer on Windows, Linux, and macOS.
+*   [[Interactive-Mode-Guide]] — **(NEW)** A beginner's guide to using the CLI wizard.
 *   [[AI-Engines]] — Configuring OpenAI, Gemini, and Local LLMs.
-*   [[LM-Studio-Guide]] — Specialized guide for offline translation with LM Studio & Qwen.
+*   [[Settings-UI-Reference]] — **(NEW)** Detailed explanation of every option in the Settings menu.
 *   [[Output-Formats]] — Understanding SIMPLE vs OLD_NEW translation files.
-*   [[Performance-Optimization]] — Best settings for Multi-Endpoint, threads, and speed.
 
 ### 🛠️ Advanced Features
+*   [[External-AI-Translation]] — Export strings to JSON for manual AI translation (ChatGPT/Claude).
 *   [[Advanced-Parsing]] — Understanding AST scanning, Deep Scan, and RPYC/RPYMC readers.
 *   [[RPA-Extraction]] — How to use the built-in UnRPA tool to unlock game assets.
 *   [[Glossary-Management]] — How to enforce specific terminology across your game.

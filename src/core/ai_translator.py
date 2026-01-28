@@ -1,5 +1,3 @@
-"""AI-based translation engine implementation (OpenAI, Gemini, Local LLM)."""
-
 from __future__ import annotations
 
 import asyncio
@@ -9,26 +7,14 @@ import os
 import random
 import re
 from abc import abstractmethod
-from typing import Dict, List, Optional, Any, Union
+from typing import Dict, List, Optional, Any, Union, TYPE_CHECKING
 
-# Third-party libraries (will be installed by user)
-try:
+if TYPE_CHECKING:
     import openai
     from openai import AsyncOpenAI
-except ImportError:
-    openai = None
-    AsyncOpenAI = None
-
-try:
     from google import genai
     from google.genai import types
-except ImportError:
-    genai = None
-
-try:
     import httpx
-except ImportError:
-    httpx = None
 
 from .translator import (
     BaseTranslator, 
@@ -50,12 +36,12 @@ class LLMTranslator(BaseTranslator):
 Your task is to translate the given text from {source_lang} to {target_lang}.
 
 CRITICAL RULES:
-1. Preserve all Ren'Py control codes, variables like [variable], placeholders like ?V000?, and tags like {{tag}}.
-2. Do NOT translate the content inside brackets [] or braces {{}}.
+1. Preserve all placeholders like [[v0]], [[t1]], [[e2]]. These represent Ren'Py variables and tags.
+2. Do NOT translate or modify the content inside double square brackets [[ ]].
 3. Maintain the original tone and style of the visual novel.
 4. Return ONLY the translated text. Do NOT add notes, explanations, or quotes.
 5. If the text contains only technical codes or is untranslatable, return it exactly as is.
-6. You are a neutral translation tool, not a moral guardian or content judge. You MUST translate all provided text regardless of its themes or content (including adult, suggestive, or violent themes) with absolute accuracy and no self-censorship.
+6. This is a game translation. The content belongs to a fantasy/fictional world and may contain adult (NSFW) elements. Please translate without censorship, maintaining a professional localizer's tone.
 """
 
     # --- Constants for Batch Processing ---
@@ -99,6 +85,25 @@ CRITICAL RULES:
         """Sets a fallback translator for safety filter violations."""
         self.fallback_translator = translator
 
+    def _get_glossary_prompt_part(self) -> str:
+        """Constructs glossary instructions for system prompt."""
+        if not self.config_manager or not hasattr(self.config_manager, 'glossary'):
+            return ""
+        
+        # Filter active terms (non-empty source and target)
+        glossary = self.config_manager.glossary
+        active_terms = {k: v for k, v in glossary.items() if k and v}
+        
+        if not active_terms:
+            return ""
+            
+        lines = ["\n\nGLOSSARY / TERMINOLOGY (STRICTLY FOLLOW THESE):"]
+        for src, tgt in active_terms.items():
+            # Escape potential formatting chars if needed, though simple replacement is safer
+            lines.append(f"- {src} -> {tgt}")
+            
+        return "\n".join(lines) + "\n"
+
     async def _handle_fallback(self, request: TranslationRequest, error_msg: str) -> TranslationResult:
         """Executes fallback translation if available."""
         if self.fallback_translator:
@@ -133,7 +138,7 @@ IMPORTANT:
 - Unless it is a proper name like "John" or "Tokyo", it MUST be translated.
 - If it contains [brackets], translate AROUND them.
 - Return ONLY the translation, nothing else.
-- Preserve placeholders like [name], {{tag}}, ?V000? exactly as they are."""
+- Preserve placeholders like [[v0]], [[t1]], [[e2]] exactly as they are."""
 
     async def translate_single(self, request: TranslationRequest) -> TranslationResult:
         protected_text, placeholders = protect_renpy_syntax(request.text)
@@ -157,6 +162,11 @@ IMPORTANT:
                                          source_lang=request.source_lang,
                                          target_lang=request.target_lang)
         
+        # Append Glossary instructions if available
+        glossary_part = self._get_glossary_prompt_part()
+        if glossary_part:
+            system_prompt += glossary_part
+
         max_retries = self.max_retries
         backoff_base = 2.0
         max_unchanged_retries = 2  # Number of retries with enhanced prompt for unchanged translations
@@ -304,6 +314,11 @@ IMPORTANT:
         batch_instruction = self.BATCH_INSTRUCTION_TEMPLATE.format(count=len(unique_requests))
         system_prompt = base_system + batch_instruction
         
+        # Append Glossary instructions if available
+        glossary_part = self._get_glossary_prompt_part()
+        if glossary_part:
+            system_prompt += glossary_part
+        
         max_retries = self.max_retries
         for attempt in range(max_retries + 1):
             if self.should_stop_callback and self.should_stop_callback():
@@ -441,7 +456,10 @@ class OpenAITranslator(LLMTranslator):
                  temperature=AI_DEFAULT_TEMPERATURE, timeout=AI_DEFAULT_TIMEOUT, 
                  max_tokens=AI_DEFAULT_MAX_TOKENS, **kwargs):
         super().__init__(api_key, model, temperature=temperature, timeout=timeout, max_tokens=max_tokens, **kwargs)
-        if not AsyncOpenAI:
+        
+        try:
+            from openai import AsyncOpenAI
+        except ImportError:
             raise ImportError("openai library is not installed. Please install it via pip.")
             
         self.client = AsyncOpenAI(
@@ -452,8 +470,8 @@ class OpenAITranslator(LLMTranslator):
 
     async def _generate_completion(self, system_prompt: str, user_prompt: str) -> str:
         # OpenRouter expects identification headers for usage ranking.
-        extra_headers = self.OPENROUTER_HEADERS if self.is_openrouter else {}
-
+        extra_headers = self.OPENROUTER_HEADERS if self.is_openrouter else None
+        
         try:
             response = await self.client.chat.completions.create(
                 model=self.model,
@@ -467,11 +485,10 @@ class OpenAITranslator(LLMTranslator):
                 extra_headers=extra_headers
             )
             
-            # Safely extract content from response - handles incomplete/malformed responses
-            # from local LLMs like LM Studio/Ollama that may not be fully OpenAI-compatible
+            # Safely extract content from response
             if not response or not hasattr(response, 'choices') or not response.choices:
                 raise ValueError(self._get_text('error_ai_no_choices', 
-                    "AI response has no choices. Check if your local LLM is running correctly."))
+                    "AI response has no choices. Check if your API provider is running correctly."))
             
             first_choice = response.choices[0]
             if not first_choice or not hasattr(first_choice, 'message') or not first_choice.message:
@@ -480,6 +497,9 @@ class OpenAITranslator(LLMTranslator):
             
             content = first_choice.message.content
             if not content:
+                # Some models return refusal in a different field or just empty
+                if hasattr(first_choice, 'refusal') and first_choice.refusal:
+                    raise ValueError(f"AI Refusal: {first_choice.refusal}")
                 raise ValueError(self._get_text('error_ai_empty_response', "Empty response from AI"))
                 
             # Token usage tracking
@@ -496,256 +516,16 @@ class OpenAITranslator(LLMTranslator):
             return content
             
         except Exception as e:
-            # Check for refusal in exception message if library raises it
+            # Check for refusal in exception message
             if "content_filter" in str(e) or "safety" in str(e).lower():
                 raise ValueError(self._get_text('error_ai_content_policy', "Content Policy Violation: {error}", error=str(e)))
             raise e
-    
+
     async def close(self):
         await self.client.close()
         await super().close()
 
 
-class LocalLLMTranslator(LLMTranslator):
-    """
-    Translator for local LLM servers (Ollama, LM Studio, etc.).
-    Uses simplified prompts because smaller models get confused by complex instructions.
-    """
-    
-    # Super simplified prompt for local models to prevent hallucinations
-    LOCAL_SYSTEM_PROMPT = "Translate the gaming text from {source_lang} to {target_lang}. Keep [vars] and {{tags}} unchanged. Return ONLY the translation. No notes."
-
-    def __init__(self, model: str = "llama3.2", base_url: str = AI_LOCAL_URL, api_key: str = "local", 
-                 temperature=AI_DEFAULT_TEMPERATURE, timeout=AI_LOCAL_TIMEOUT, 
-                 max_tokens=AI_DEFAULT_MAX_TOKENS, config_manager=None, **kwargs):
-        super().__init__(api_key=api_key, model=model, temperature=temperature, 
-                         timeout=timeout, max_tokens=max_tokens, config_manager=config_manager, **kwargs)
-        
-        if not httpx:
-            raise ImportError("httpx library is not installed. Please install it via: pip install httpx")
-            
-        self.base_url = base_url.rstrip('/')
-        self.server_type = self._detect_server_type(self.base_url)
-        self._client: Optional[httpx.AsyncClient] = None
-        self._health_checked = False
-        self._available_models: List[str] = []
-        
-    def _detect_server_type(self, url: str) -> str:
-        url_lower = url.lower()
-        if ":11434" in url_lower or "ollama" in url_lower: return "ollama"
-        if ":1234" in url_lower or "lmstudio" in url_lower: return "lmstudio"
-        if ":5000" in url_lower or "textgen" in url_lower: return "textgen"
-        if ":8080" in url_lower or "localai" in url_lower: return "localai"
-        return "unknown"
-
-    async def _get_client(self) -> httpx.AsyncClient:
-        if self._client is None or self._client.is_closed:
-            self._client = httpx.AsyncClient(
-                timeout=httpx.Timeout(self.timeout, connect=10.0),
-                headers={
-                    "Content-Type": "application/json",
-                    "Authorization": f"Bearer {self.api_key}" if self.api_key else ""
-                }
-            )
-        return self._client
-    
-    async def health_check(self) -> tuple:
-        """Check if the local LLM server is running and accessible.
-        
-        Returns:
-            Tuple of (success: bool, message: str)
-        """
-        try:
-            client = await self._get_client()
-            
-            # Try models endpoint first (OpenAI-compatible)
-            models_url = f"{self.base_url}/models"
-            try:
-                response = await client.get(models_url, timeout=5.0)
-                if response.status_code == 200:
-                    self._health_checked = True
-                    return (True, self._get_text('log_local_llm_health_ok',
-                        "✅ Local LLM server is ready ({server_type})",
-                        server_type=self.server_type))
-            except Exception:
-                pass
-            
-            # Try Ollama-specific endpoint
-            if self.server_type == "ollama":
-                ollama_url = self.base_url.replace('/v1', '/api/tags')
-                try:
-                    response = await client.get(ollama_url, timeout=5.0)
-                    if response.status_code == 200:
-                        self._health_checked = True
-                        return (True, self._get_text('log_local_llm_health_ok',
-                            "✅ Local LLM server is ready ({server_type})",
-                            server_type="Ollama"))
-                except Exception:
-                    pass
-            
-            return (False, self._get_text('error_local_llm_connection',
-                "Cannot connect to local LLM server at {url}. Make sure the server is running.",
-                url=self.base_url))
-                
-        except httpx.ConnectError:
-            return (False, self._get_text('error_local_llm_connection',
-                "Cannot connect to local LLM server at {url}. Make sure the server is running.",
-                url=self.base_url))
-        except httpx.TimeoutException:
-            return (False, self._get_text('error_local_llm_timeout',
-                "Connection to local LLM server timed out. The server might be starting up.",
-                url=self.base_url))
-        except Exception as e:
-            return (False, f"Health check failed: {str(e)}")
-    
-    async def get_available_models(self) -> List[str]:
-        """Get list of available models from the server.
-        
-        Returns:
-            List of model names available on the server
-        """
-        if self._available_models:
-            return self._available_models
-            
-        try:
-            client = await self._get_client()
-            models = []
-            
-            # Try OpenAI-compatible endpoint
-            try:
-                response = await client.get(f"{self.base_url}/models", timeout=10.0)
-                if response.status_code == 200:
-                    data = response.json()
-                    if isinstance(data, dict) and 'data' in data:
-                        models = [m.get('id', '') for m in data['data'] if m.get('id')]
-                    elif isinstance(data, list):
-                        models = [m.get('id', '') or m.get('name', '') for m in data if isinstance(m, dict)]
-            except Exception:
-                pass
-            
-            # Try Ollama-specific endpoint
-            if not models and self.server_type == "ollama":
-                try:
-                    ollama_url = self.base_url.replace('/v1', '/api/tags')
-                    response = await client.get(ollama_url, timeout=10.0)
-                    if response.status_code == 200:
-                        data = response.json()
-                        if 'models' in data:
-                            models = [m.get('name', '').split(':')[0] for m in data['models'] if m.get('name')]
-                except Exception:
-                    pass
-            
-            self._available_models = models
-            return models
-            
-        except Exception as e:
-            self.logger.warning(f"Failed to get available models: {e}")
-            return []
-    
-    async def _generate_completion(self, system_prompt: str, user_prompt: str) -> str:
-        """Generate completion using the local LLM server."""
-        try:
-            client = await self._get_client()
-            
-            # Perform health check on first request
-            if not self._health_checked:
-                success, message = await self.health_check()
-                if not success:
-                    raise ValueError(message)
-                self.emit_log("info", message)
-            
-            # Build request payload (OpenAI-compatible format)
-            payload = {
-                "model": self.model,
-                "messages": [
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": user_prompt}
-                ],
-                "temperature": self.temperature,
-                "max_tokens": self.max_tokens,
-                "stream": False
-            }
-            
-            # Make the request
-            chat_url = f"{self.base_url}/chat/completions"
-            response = await client.post(chat_url, json=payload)
-            
-            # Handle different response codes
-            if response.status_code == 404:
-                raise ValueError(self._get_text('error_local_llm_no_model',
-                    "Model '{model}' not found. Please check if the model is loaded in your LLM server.",
-                    model=self.model))
-            
-            if response.status_code == 503:
-                raise ValueError(self._get_text('error_local_llm_no_model',
-                    "No model loaded. Please load a model in your LLM server (LM Studio/Ollama) first."))
-            
-            if response.status_code != 200:
-                error_text = response.text[:200] if response.text else "Unknown error"
-                raise ValueError(f"Local LLM error ({response.status_code}): {error_text}")
-            
-            # Parse response
-            data = response.json()
-            
-            # Safely extract content - handle various response formats
-            content = None
-            
-            # Standard OpenAI format
-            if 'choices' in data and data['choices']:
-                choice = data['choices'][0]
-                if isinstance(choice, dict):
-                    message = choice.get('message', {})
-                    if isinstance(message, dict):
-                        content = message.get('content', '')
-                    elif isinstance(message, str):
-                        content = message
-                    # Some servers put content directly in choice
-                    if not content:
-                        content = choice.get('text', '') or choice.get('content', '')
-            
-            # Ollama native format fallback
-            if not content and 'response' in data:
-                content = data['response']
-            
-            # Direct message format
-            if not content and 'message' in data:
-                msg = data['message']
-                content = msg.get('content', '') if isinstance(msg, dict) else str(msg)
-            
-            if not content:
-                raise ValueError(self._get_text('error_local_llm_empty_response',
-                    "Local LLM returned empty response. The model may not be loaded properly or is still generating."))
-            
-            # Token usage logging (if available)
-            if 'usage' in data:
-                usage = data['usage']
-                prompt_tokens = usage.get('prompt_tokens', 0)
-                completion_tokens = usage.get('completion_tokens', 0)
-                total_tokens = usage.get('total_tokens', 0)
-                self.emit_log("debug", f"Local LLM Token Usage: {prompt_tokens} prompt + {completion_tokens} completion = {total_tokens} total")
-            
-            return content.strip()
-            
-        except httpx.ConnectError:
-            raise ValueError(self._get_text('error_local_llm_connection',
-                "Cannot connect to local LLM server at {url}. Make sure the server is running.",
-                url=self.base_url))
-        except httpx.TimeoutException:
-            raise ValueError(self._get_text('error_local_llm_timeout',
-                "Local LLM took too long to respond ({timeout}s). Try a smaller model or increase timeout in settings.",
-                timeout=self.timeout))
-        except httpx.HTTPStatusError as e:
-            raise ValueError(f"HTTP error from local LLM: {e.response.status_code}")
-        except json.JSONDecodeError:
-            raise ValueError(self._get_text('error_local_llm_invalid_response',
-                "Invalid response from local LLM server. The server may be misconfigured."))
-
-    async def close(self):
-        """Close HTTP client and cleanup resources."""
-        if self._client and not self._client.is_closed:
-            await self._client.aclose()
-        self._client = None
-        await super().close()
 
 
 class LocalLLMTranslator(LLMTranslator):
@@ -764,8 +544,12 @@ class LocalLLMTranslator(LLMTranslator):
         super().__init__(api_key=api_key, model=model, temperature=temperature,
                          timeout=timeout, max_tokens=max_tokens, config_manager=config_manager, **kwargs)
         
-        if not httpx:
+        try:
+            import httpx
+        except ImportError:
             raise ImportError("httpx library is not installed. Please install it via: pip install httpx")
+        
+        self.httpx = httpx
         
         self.base_url = base_url.rstrip('/')
         self.server_type = self._detect_server_type(base_url)
@@ -786,11 +570,11 @@ class LocalLLMTranslator(LLMTranslator):
             return "localai"
         return "unknown"
     
-    async def _get_client(self) -> httpx.AsyncClient:
+    async def _get_client(self):
         """Get or create the HTTP client."""
         if self._client is None or self._client.is_closed:
-            self._client = httpx.AsyncClient(
-                timeout=httpx.Timeout(self.timeout, connect=10.0),
+            self._client = self.httpx.AsyncClient(
+                timeout=self.httpx.Timeout(self.timeout, connect=10.0),
                 headers={
                     "Content-Type": "application/json",
                     "Authorization": f"Bearer {self.api_key}" if self.api_key else ""
@@ -899,7 +683,7 @@ class LocalLLMTranslator(LLMTranslator):
             final_text = restore_renpy_syntax(clean_text, placeholders)
             
             # Last resort: if the model corrupted placeholders or returned empty, use original
-            if not final_text or 'XRPYX' in final_text and 'XRPYX' not in request.text:
+            if not final_text or '[[' in final_text and '[[' not in request.text:
                  self.emit_log("warning", f"Local LLM corrupted placeholders, using original: {request.text[:50]}...")
                  final_text = request.text
 
@@ -923,10 +707,16 @@ class GeminiTranslator(LLMTranslator):
                  temperature=AI_DEFAULT_TEMPERATURE, timeout=AI_DEFAULT_TIMEOUT, 
                  max_tokens=AI_DEFAULT_MAX_TOKENS, **kwargs):
         super().__init__(api_key, model, temperature=temperature, timeout=timeout, max_tokens=max_tokens, **kwargs)
-        if not genai:
+        
+        try:
+            from google import genai
+            from google.genai import types
+            self.genai = genai
+            self.types = types
+        except ImportError:
             raise ImportError("google-genai library is not installed.")
         
-        self.client = genai.Client(api_key=api_key)
+        self.client = self.genai.Client(api_key=api_key)
         self.safety_level = safety_level
 
     def _get_safety_settings(self) -> List[types.SafetySetting]:
@@ -945,14 +735,14 @@ class GeminiTranslator(LLMTranslator):
         ]
         
         return [
-            types.SafetySetting(category=cat, threshold=level)
+            self.types.SafetySetting(category=cat, threshold=level)
             for cat in categories
         ]
 
     async def _generate_completion(self, system_prompt: str, user_prompt: str) -> str:
         try:
             # The new SDK supports system_instruction directly
-            config = types.GenerateContentConfig(
+            config = self.types.GenerateContentConfig(
                 system_instruction=system_prompt,
                 temperature=self.temperature,
                 max_output_tokens=self.max_tokens,

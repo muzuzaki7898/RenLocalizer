@@ -45,7 +45,14 @@ RenLocalizer automatically detects file encodings and normalizes them to **UTF-8
 
 ---
 
-## 🔹 7. Force Runtime Translation (Hook)
+## 🔹 7. ID Stability (v3 Engine)
+Introduced in v2.6.0, this technology ensures that translations remain linked to the correct code block even if the script files are modified.
+*   **Deterministic Hashing:** Instead of relying on line numbers (which change when you add/remove code), it generates unique IDs based on Ren'Py's internal `Label ID` mapping and the original text content.
+*   **Advantage:** Perfect for "External AI Translation" (Export/Import) workflow. You can keep developing your game while someone else translates the JSON files.
+
+---
+
+## 🔹 8. Force Runtime Translation (Hook)
 Sometime Ren'Py source code contains dynamic strings that are not wrapped in `_()` or `!t` flags. These strings often appear untranslated in games even after processing.
 
 *   **How it Works:** 

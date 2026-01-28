@@ -28,6 +28,8 @@ hidden_imports += collect_submodules('darkdetect')
 hidden_imports += collect_submodules('fontTools')
 hidden_imports += collect_submodules('pyparsing')
 hidden_imports += collect_submodules('certifi')
+hidden_imports += collect_submodules('pandas')
+hidden_imports += collect_submodules('openpyxl')
 
 # Manual additions for specific edge cases
 if sys.platform == 'win32':
@@ -44,8 +46,8 @@ else:
 datas_list = [
     (os.path.join(project_dir, 'locales'), 'locales'),
     (os.path.join(project_dir, 'icon.ico'), '.'),
-    # fluent resources folder needs to preserve its structure
-    (os.path.join(project_dir, 'src', 'gui', 'fluent', 'resources'), os.path.join('src', 'gui', 'fluent', 'resources')),
+    # Add QML files
+    (os.path.join(project_dir, 'src', 'gui', 'qml'), os.path.join('src', 'gui', 'qml')),
 ]
 
 # Add Linux/Mac shell scripts only when building on those platforms

@@ -29,6 +29,14 @@ Most issues in RenLocalizer can be resolved by checking the logs or the diagnost
 *   **Cause:** The game code uses dynamic variables without translation flags (`!t`).
 *   **Solution:** Enable **Force Runtime Translation** in Settings. This will dynamically translate these strings while the game is running.
 
+### 6. Export/Import "File Not Found" Warning
+*   **Cause:** You exported files from one version of the game but tried to import into another version where files were renamed.
+*   **Solution:** RenLocalizer falls back to `strings.rpy` automatically. Your translations are safe, but they will be stored in that single file instead of their original locations.
+
+### 7. JSON Format Error during Import
+*   **Cause:** The AI tool modified the JSON structure (e.g., added "Here is the translation" text before the JSON).
+*   **Solution:** Open the JSON file in a text editor and make sure it starts with `{` and ends with `}`. Remove any extra text the AI added. Or, use the generated `PROMPT_FOR_AI.txt` to tell the AI not to add intro/outro text.
+
 ---
 
 ## 🔍 How to Debug a Crash

@@ -62,4 +62,4 @@ The tool relies on these main libraries:
 *   **UI:** `PyQt6` & `PyQt6-Fluent-Widgets`
 *   **AI:** `openai`, `google-genai`
 *   **Extraction:** `unrpa`
-*   **Engines:** `requests`, `beautifulsoup4`
+*   **Engines:** `requests`, `httpx`, `beautifulsoup4`

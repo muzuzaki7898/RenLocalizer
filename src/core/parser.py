@@ -708,8 +708,15 @@ class RenPyParser:
             except Exception:
                 return False
 
-        # ONLY Ren'Py related files: .rpy, .rpym, .rpyc, .rpymc
-        extensions = ["**/*.rpy", "**/*.rpym", "**/*.rpyc", "**/*.rpymc"]
+        # Determine extensions based on settings
+        should_scan_rpym = False
+        if self.config and hasattr(self.config, 'translation_settings'):
+            should_scan_rpym = getattr(self.config.translation_settings, 'scan_rpym_files', False)
+
+        if should_scan_rpym:
+            extensions = ["**/*.rpy", "**/*.rpym"] # Exclude .rpyc/.rpymc from text parser
+        else:
+            extensions = ["**/*.rpy"] # Exclude .rpyc from text parser
         files = []
         for ext in extensions:
             files.extend(list(search_root.glob(ext)))
@@ -818,20 +825,27 @@ class RenPyParser:
         full_str = str(file_path).replace('\\', '/').lower()
 
         # SUPER EXCLUSION: Never, ever scan internal engine files
-        # Check both relative and full path for 'renpy/common' or 'renpy/display'
+        # These are ALWAYS skipped regardless of settings to prevent game crashes.
         engine_markers = ['/renpy/common/', '/renpy/display/', '/renpy/library/']
         if any(marker in full_str or rel_str.startswith('renpy/') for marker in engine_markers):
             return True
 
-        # Exclude technical/system folders
-        excluded_folders = {
-            'cache/', 'tmp/', 'saves/', 'python-packages/', 'lib/', 'log/', 'logs/',
-            '.git/', '.vscode/', '.idea/'
-        }
+        # Check for system folder exclusion setting
+        should_exclude_system = True
+        if self.config and hasattr(self.config, 'translation_settings'):
+            should_exclude_system = getattr(self.config.translation_settings, 'exclude_system_folders', True)
+
+        if should_exclude_system:
+            # Exclude technical/system folders
+            excluded_folders = {
+                'cache/', 'tmp/', 'saves/', 'python-packages/', 'lib/', 'log/', 'logs/',
+                '.git/', '.vscode/', '.idea/'
+            }
+            
+            if any(rel_str.startswith(folder) or f'/{folder}' in rel_str for folder in excluded_folders):
+                return True
         
-        if any(rel_str.startswith(folder) or f'/{folder}' in rel_str for folder in excluded_folders):
-            return True
-        
+        # TL folders are always skipped as we are scanning for SOURCE files to generate NEW tl files
         if rel_str.startswith('tl/') or '/tl/' in rel_str:
             return True
 

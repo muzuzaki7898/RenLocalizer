@@ -9,6 +9,7 @@
 *   [[Performance-Optimization]]
 
 ### 🛠️ Advanced Features
+*   [[External-AI-Translation]]
 *   [[Advanced-Parsing]]
 *   [[RPA-Extraction]]
 *   [[Glossary-Management]]

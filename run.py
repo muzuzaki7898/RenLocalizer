@@ -2,6 +2,7 @@
 """
 RenLocalizer V2 Launcher
 Cross-platform launcher for Windows and Unix systems
+Now powered by Qt Quick (QML)
 """
 
 import os
@@ -17,33 +18,70 @@ os.environ["QT_QPA_PLATFORM_THEME"] = ""  # Disable system theme
 os.environ["QT_STYLE_OVERRIDE"] = ""  # Disable style override
 
 # ============================================================
+# QML & MATERIAL STYLE SETTINGS
+# ============================================================
+os.environ["QT_QUICK_CONTROLS_STYLE"] = "Material"
+os.environ["QT_QUICK_CONTROLS_MATERIAL_THEME"] = "Dark"
+os.environ["QT_QUICK_CONTROLS_MATERIAL_ACCENT"] = "Purple"
+
+# ============================================================
 # CRITICAL: Set AppUserModelId for Windows taskbar icon
 # This MUST be done early, before any Qt/GUI initialization
-# Without this, Windows associates the app with Python and shows wrong/no icon
 # ============================================================
 if sys.platform == "win32":
     try:
         import ctypes
-        myappid = "LordOfTurk.RenLocalizer.GUI.2"
+        # Set explicitly for taskbar icon to appear immediately
+        # Changed ID slightly to force Windows Icon Cache refresh
+        myappid = "LordOfTurk.RenLocalizer.V2.QML.Rev1"
         ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(myappid)
     except Exception:
-        pass  # Silent fail - will work without it, just no taskbar icon
+        pass  # Silent fail is acceptable on non-Windows or old Windows versions
 
-# Suppress noisy SyntaxWarning about invalid escape sequences originating from
-# third-party packages or non-raw regex literals. These warnings are harmless
-# for runtime but confuse users when redirecting output. Narrow the filter to
-# the common message to avoid hiding other warnings.
 warnings.filterwarnings("ignore", category=SyntaxWarning, message=r".*invalid escape sequence.*")
 
-# Ensure stdout/stderr use UTF-8 where possible to avoid UnicodeEncodeError
+# Ensure stdout/stderr use UTF-8 where possible
 try:
     if hasattr(sys.stdout, "reconfigure"):
         sys.stdout.reconfigure(encoding="utf-8", errors="replace")
     if hasattr(sys.stderr, "reconfigure"):
         sys.stderr.reconfigure(encoding="utf-8", errors="replace")
 except Exception:
-    # Best-effort only; fall back to environment-based approaches if unavailable
     pass
+
+
+# ============================================================
+# GLOBAL EXCEPTION HANDLER
+# ============================================================
+def global_exception_handler(exc_type, exc_value, exc_traceback):
+    """Catch all unhandled exceptions and show a user-friendly dialog."""
+    import traceback
+    import datetime
+    
+    error_msg = "".join(traceback.format_exception(exc_type, exc_value, exc_traceback))
+    timestamp = datetime.datetime.now(datetime.timezone.utc).isoformat()
+    
+    # Log to file
+    try:
+        with open("crash_report.log", "a", encoding="utf-8") as f:
+            f.write(f"\n{'='*60}\n[{timestamp}]\n{error_msg}\n")
+    except Exception:
+        pass
+    
+    # Show GUI dialog if possible (Use ctypes for independence from Qt crash)
+    if sys.platform == "win32":
+        try:
+            import ctypes
+            ctypes.windll.user32.MessageBoxW(0, f"Bir hata oluştu:\n\n{exc_value}\n\nDetaylar crash_report.log dosyasına kaydedildi.", "RenLocalizer Hatası", 0x10)
+        except:
+            print(error_msg)
+    else:
+        print(error_msg)
+    
+    # Call original handler
+    sys.__excepthook__(exc_type, exc_value, exc_traceback)
+
+sys.excepthook = global_exception_handler
 
 
 def show_error_and_wait(title: str, message: str) -> None:
@@ -58,7 +96,6 @@ def show_error_and_wait(title: str, message: str) -> None:
     if sys.platform == "win32":
         try:
             import ctypes
-
             ctypes.windll.user32.MessageBoxW(None, message, title, 0x10)
         except Exception:
             pass
@@ -69,8 +106,7 @@ def show_error_and_wait(title: str, message: str) -> None:
         input()
     except Exception:
         import time
-
-        time.sleep(10)  # Wait 10 seconds if input fails
+        time.sleep(10)
 
 
 def check_windows_version() -> bool:
@@ -80,26 +116,16 @@ def check_windows_version() -> bool:
 
     try:
         import platform
-
-        version = platform.version()
-        release = platform.release()
         machine = platform.machine()
-
-        print(f"Windows Version: {release} ({version})")
-        print(f"Architecture: {machine}")
-
         # Check for 64-bit
         if machine not in ["AMD64", "x86_64"]:
             show_error_and_wait(
                 "Unsupported Architecture",
-                f"RenLocalizer requires 64-bit Windows.\n\n"
-                f"Your system: {machine}\n\n"
-                "Please use a 64-bit version of Windows.",
+                f"RenLocalizer requires 64-bit Windows.\nYour system: {machine}"
             )
             return False
-
         return True
-    except Exception as e:  # pragma: no cover - defensive only
+    except Exception as e:
         print(f"Warning: Could not check Windows version: {e}")
         return True
 
@@ -110,42 +136,31 @@ def check_vcruntime() -> bool:
         return True
 
     import ctypes
-
-    # Try to load vcruntime140.dll (required by PyQt6)
     required_dlls = ["vcruntime140.dll", "msvcp140.dll"]
     missing_dlls = []
 
     for dll_name in required_dlls:
         try:
             ctypes.WinDLL(dll_name)
-            print(f"[OK] {dll_name} found")
         except OSError:
-            print(f"[MISS] {dll_name} MISSING")
             missing_dlls.append(dll_name)
 
     if missing_dlls:
         show_error_and_wait(
             "RenLocalizer - Missing Runtime",
             f"RenLocalizer requires Microsoft Visual C++ Redistributable.\n\n"
-            f"Missing components: {', '.join(missing_dlls)}\n\n"
-            "Please download and install:\n"
-            "Visual C++ Redistributable 2015-2022 (x64)\n\n"
-            "Download link:\n"
-            "https://aka.ms/vs/17/release/vc_redist.x64.exe\n\n"
-            "After installation, restart RenLocalizer.",
+            f"Missing: {', '.join(missing_dlls)}\n\n"
+            "Please install Visual C++ Redistributable 2015-2022 (x64)."
         )
         return False
-
     return True
 
 
 def get_app_dir() -> Path:
     """Get the application directory - works for both dev and frozen exe."""
     if getattr(sys, "frozen", False):
-        # Running as PyInstaller executable
         return Path(sys.executable).parent
     else:
-        # Running in development
         return Path(__file__).parent
 
 
@@ -157,299 +172,192 @@ def setup_qt_environment() -> None:
             return
 
         meipass_path = Path(meipass)
-        print(f"MEIPASS: {meipass_path}")
-
-        # List contents for debugging
-        try:
-            print("\nContents of MEIPASS root (all):")
-            all_items = sorted(meipass_path.iterdir(), key=lambda x: x.name.lower())
-            for item in all_items:
-                marker = "[DIR]" if item.is_dir() else "[FILE]"
-                print(f"  {marker} {item.name}")
-
-            # Check for PyQt6 directory
-            pyqt6_dir = meipass_path / "PyQt6"
-            if pyqt6_dir.exists():
-                print("\nPyQt6 directory contents:")
-                for item in sorted(pyqt6_dir.iterdir()):
-                    print(f"  {item.name}")
-            else:
-                print(f"\n[WARN] PyQt6 directory NOT FOUND at {pyqt6_dir}")
-
-            # Check for Qt6 DLLs in root
-            qt_dlls = [f for f in meipass_path.glob("Qt6*.dll")]
-            if qt_dlls:
-                print(f"\nQt6 DLLs found in root: {len(qt_dlls)}")
-                for dll in qt_dlls[:10]:
-                    print(f"  {dll.name}")
-            else:
-                print("\n[WARN] No Qt6*.dll files found in root!")
-
-            # Check for qwindows.dll
-            qwindows_locations = list(meipass_path.rglob("qwindows.dll"))
-            if qwindows_locations:
-                print("\nqwindows.dll found at:")
-                for loc in qwindows_locations:
-                    print(f"  {loc}")
-            else:
-                print("\n[WARN] qwindows.dll NOT FOUND anywhere!")
-
-        except Exception as e:  # pragma: no cover - diagnostic only
-            print(f"Error listing contents: {e}")
-
-        # ============================================================
-        # CRITICAL: Use os.add_dll_directory() for Python 3.8+
-        # This is required because Python 3.8+ changed DLL search behavior
-        # ============================================================
-        dll_directories_added = []
-
-        # Collect all possible DLL paths
-        dll_paths = [
-            meipass_path,
-            meipass_path / "PyQt6",
-            meipass_path / "PyQt6" / "Qt6",
-            meipass_path / "PyQt6" / "Qt6" / "bin",
-            meipass_path / "PyQt6" / "Qt6" / "plugins" / "platforms",
-        ]
-
-        # Add DLL directories using the new Python 3.8+ API
+        
+        # Add DLL directories (Python 3.8+)
         if hasattr(os, "add_dll_directory"):
-            print("\nUsing os.add_dll_directory() (Python 3.8+ mode):")
+            dll_paths = [
+                meipass_path,
+                meipass_path / "PyQt6" / "Qt6" / "bin",
+            ]
             for dll_path in dll_paths:
                 if dll_path.exists():
                     try:
                         os.add_dll_directory(str(dll_path))
-                        dll_directories_added.append(str(dll_path))
-                        print(f"  [OK] Added: {dll_path}")
-                    except Exception as e:
-                        print(f"  [WARN] Failed to add {dll_path}: {e}")
-        else:
-            print("\nos.add_dll_directory() not available (Python < 3.8)")
+                    except:
+                        pass
 
-        # Collect all possible plugin paths
+        # Set QT_PLUGIN_PATH
         plugin_paths = [
             meipass_path / "PyQt6" / "Qt6" / "plugins",
-            meipass_path / "PyQt6" / "Qt" / "plugins",
             meipass_path / "PyQt6" / "plugins",
-            meipass_path / "plugins",
-            meipass_path / "Qt6" / "plugins",
-            meipass_path / "qt6_plugins",
         ]
-
-        # Find existing plugin paths
         existing_plugin_paths = [str(p) for p in plugin_paths if p.exists()]
-
         if existing_plugin_paths:
             os.environ["QT_PLUGIN_PATH"] = os.pathsep.join(existing_plugin_paths)
-            print(f"\nSet QT_PLUGIN_PATH: {os.environ['QT_PLUGIN_PATH']}")
-        else:
-            # Fallback: search for platforms directory
-            platforms_dirs = list(meipass_path.rglob("platforms"))
-            if platforms_dirs:
-                for pdir in platforms_dirs:
-                    if (pdir / "qwindows.dll").exists():
-                        parent = pdir.parent
-                        os.environ["QT_PLUGIN_PATH"] = str(parent)
-                        print(f"\nFound plugins via search: {parent}")
-                        break
 
-        # Also set PATH (as fallback for older behavior)
-        lib_paths = [
-            meipass_path / "PyQt6" / "Qt6" / "bin",
-            meipass_path / "PyQt6" / "Qt6",
-            meipass_path / "PyQt6",
-            meipass_path / "Qt6" / "bin",
-            meipass_path,
-        ]
-
-        # Build PATH with existing directories
-        existing_lib_paths = [str(p) for p in lib_paths if p.exists()]
-        current_path = os.environ.get("PATH", "")
-        os.environ["PATH"] = os.pathsep.join(existing_lib_paths) + os.pathsep + current_path
-
-        print(f"\nAdded to PATH: {';'.join(existing_lib_paths[:3])}...")
-
-        # Disable noisy Qt font warnings and debug output
+        # Disable noisy Qt font warnings
         os.environ["QT_LOGGING_RULES"] = "qt.qpa.fonts=false;qt.text.font.db=false;*.debug=false"
 
-        # ============================================================
-        # Try to pre-load critical DLLs manually
-        # ============================================================
-        print("\nPre-loading critical DLLs...")
-        import ctypes
 
-        critical_dlls = ["Qt6Core.dll", "Qt6Gui.dll", "Qt6Widgets.dll"]
-
-        for dll_name in critical_dlls:
-            dll_found = False
-            for dll_path in dll_paths:
-                full_path = dll_path / dll_name
-                if full_path.exists():
-                    try:
-                        ctypes.CDLL(str(full_path))
-                        print(f"  [OK] Loaded: {dll_name} from {dll_path}")
-                        dll_found = True
-                        break
-                    except Exception as e:
-                        print(f"  [WARN] Failed to load {full_path}: {e}")
-
-            if not dll_found:
-                root_dll = meipass_path / dll_name
-                if root_dll.exists():
-                    try:
-                        ctypes.CDLL(str(root_dll))
-                        print(f"  [OK] Loaded: {dll_name} from root")
-                    except Exception as e:
-                        print(f"  [WARN] Failed to load {root_dll}: {e}")
-
-
-# Set working directory to app dir for consistent paths
+# Set working directory to app dir
 APP_DIR = get_app_dir()
 os.chdir(APP_DIR)
 
-# Add project root to Python path BEFORE any src imports
+# Add project root to Python path
 project_root = Path(__file__).parent
 sys.path.insert(0, str(project_root))
 
 
 def check_unix_system() -> bool:
-    """Show Unix system info."""
-    if sys.platform == "win32":
-        return True
-    
-    import platform
-    print(f"OS: {platform.system()} {platform.release()}")
-    print(f"Machine: {platform.machine()}")
+    if sys.platform == "win32": return True
     return True
 
 
 def main() -> int:
     print("=" * 60)
-    print("RenLocalizer V2 Starting...")
+    print("RenLocalizer V2 (Qt Quick Edition) Starting...")
     print("=" * 60)
 
-    # Setup Qt environment FIRST (before any imports)
     setup_qt_environment()
     
-    # Suppress noisy Qt font and debug warnings (Script 20/OpenType issues)
-    if "QT_LOGGING_RULES" not in os.environ:
-        os.environ["QT_LOGGING_RULES"] = "qt.qpa.fonts=false;qt.text.font.db=false;*.debug=false"
-
-    # Check system version and architecture
+    # Check system requirements
     if sys.platform == "win32":
-        if not check_windows_version():
-            return 1
-        # Check Visual C++ Runtime (before any Qt imports)
-        if not check_vcruntime():
-            return 1
+        if not check_windows_version(): return 1
+        if not check_vcruntime(): return 1
     else:
         check_unix_system()
-
 
     print("\nLoading Qt framework...")
 
     try:
-        # Import Qt FIRST to catch DLL errors early (PyQt6 only)
+        # Import Qt
+        from PyQt6.QtCore import QUrl, Qt
         from PyQt6.QtGui import QIcon
         from PyQt6.QtWidgets import QApplication
+        from PyQt6.QtQml import QQmlApplicationEngine
 
-        qt_backend = "PyQt6"
-        print(f"Using Qt backend: {qt_backend}")
-
-        # Now import src modules (they will use the same Qt backend)
-        from src.version import VERSION
-        from PyQt6.QtCore import Qt
-        
-        # Create application
+        # Use QApplication for better desktop integration (Icons, Taskbar, etc.)
         app = QApplication(sys.argv)
-        app.setAttribute(Qt.ApplicationAttribute.AA_DontCreateNativeWidgetSiblings)
         app.setApplicationName("RenLocalizer")
+        app.setOrganizationName("LordOfTurk")
+        
+        # Import Backends (Logic)
+        from src.version import VERSION
+        from src.utils.config import ConfigManager
+        from src.backend.app_backend import AppBackend
+        from src.backend.settings_backend import SettingsBackend
+        
         app.setApplicationVersion(VERSION)
 
-        # Note: AppUserModelId is already set at module load time (line 20+)
-        # This ensures Windows taskbar shows our icon correctly
-
-        # Note: FluentWindow handles its own styling, no need for Fusion style
-        # app.setStyle("Fusion")
-
-        # Set application icon - use APP_DIR for frozen exe
+        # Set application icon
         icon_path = APP_DIR / "icon.ico"
         if icon_path.exists():
-            app.setWindowIcon(QIcon(str(icon_path)))
-
-        # ============================================================
-        # THEME INITIALIZATION (CRITICAL FIX)
-        # Load theme settings BEFORE creating the main window.
-        # Strict rule: Default is ALWAYS DARK if not specified.
-        # New themes (red, turquoise) use Dark as base.
-        # ============================================================
-        try:
-            from src.utils.config import ConfigManager
-            from qfluentwidgets import qconfig, Theme, setTheme
-
-            config = ConfigManager()
-            # Default to 'dark' if key missing or config invalid
-            app_theme = getattr(config.app_settings, 'app_theme', 'dark')
-            
-            # Validate theme name against known themes
-            valid_themes = ["light", "dark", "red", "turquoise", "green", "neon"]
-            if app_theme not in valid_themes:
-                print(f"Invalid theme '{app_theme}' detected. Reverting to 'dark'.")
-                app_theme = "dark"
-
-            print(f"Applying initial theme: {app_theme}")
-
-            if app_theme == "light":
-                qconfig.theme = Theme.LIGHT
-                setTheme(Theme.LIGHT)
+            print(f"[INFO] Loading icon from: {icon_path}")
+            app_icon = QIcon(str(icon_path))
+            if not app_icon.isNull():
+                app.setWindowIcon(app_icon)
+                print("[INFO] Icon loaded successfully.")
             else:
-                # All other themes (dark, red, turquoise, green, neon) use Dark base
-                # This ensures qfluentwidgets internal logic prefers dark icons/styles
-                qconfig.theme = Theme.DARK
-                setTheme(Theme.DARK)
+                print("[WARNING] Icon file exists but QIcon failed to load it.")
+        else:
+             print(f"[WARNING] Icon file not found at: {icon_path}")
 
-        except Exception as e:
-            print(f"Warning: Could not apply initial theme: {e}")
-            print("Fallback: Forcing DARK theme.")
-            try:
-                from qfluentwidgets import qconfig, Theme, setTheme
-                qconfig.theme = Theme.DARK
-                setTheme(Theme.DARK)
-            except:
-                pass
+        # Initialize Logic
+        config_manager = ConfigManager()
+        backend = AppBackend(config_manager)
+        settings_backend = SettingsBackend(config_manager)
+        
+        # Link backends for signal propagation (Localization refresh)
+        settings_backend.languageChanged.connect(backend.refreshUI)
+        settings_backend.themeChanged.connect(backend.refreshUI)
 
-        # Create main window
-        from src.gui.fluent.fluent_main import FluentMainWindow
-        window = FluentMainWindow()
+        # Create QML Engine
+        engine = QQmlApplicationEngine()
 
-        # Handle deep link args if any
-        if len(sys.argv) > 1 and sys.argv[1].startswith("renlocalizer://"):
-            # This part requires handle_deep_link to be implemented in FluentMainWindow
-            # For now, we just pass
+        # Expose Backends to QML
+        engine.rootContext().setContextProperty("backend", backend)
+        engine.rootContext().setContextProperty("settingsBackend", settings_backend)
+
+        # Error Handling for QML
+        def on_object_created(obj, url):
+            if obj is None:
+                print(f"[FATAL ERROR] Failed to load QML: {url}")
+                app.exit(-1)
+
+        engine.objectCreated.connect(on_object_created)
+
+        # Load MAIN QML
+        qml_path = project_root / "src" / "gui" / "qml" / "main.qml"
+        print(f"Loading UI: {qml_path}")
+        
+        if not qml_path.exists():
+            # Fallback for frozen exe if path covers structured inside meipass differently
+            # But usually project_root is correct for dev.
+            # For frozen, resources should be handled via QRC or similar, but local file load works if bundled.
             pass
 
-        window.show()
+        engine.load(QUrl.fromLocalFile(str(qml_path)))
 
+        if not engine.rootObjects():
+            print("[ERROR] No root objects created.")
+            return 1
+
+        # Force icon on the root window (Fix for Windows taskbar)
+        if engine.rootObjects():
+            root_window = engine.rootObjects()[0]
+            if icon_path.exists() and not app_icon.isNull():
+                root_window.setIcon(app_icon)
+                app.setWindowIcon(app_icon) # Set app icon again
+            
+            # Explicitly show window after setting properties
+            root_window.show()
+            
+            # Additional force for Windows Taskbar refresh using Win32 API
+            if sys.platform == "win32" and icon_path.exists():
+                try:
+                    import ctypes
+                    from ctypes import wintypes
+                    
+                    # Get Window Handle (HWND)
+                    hwnd = root_window.winId()
+                    
+                    # Load Icon via Windows API (Large and Small) - bypassing Qt
+                    h_icon = QIcon(str(icon_path)).pixmap(32, 32).toImage() # 32x32 for Taskbar
+                    # Note: Getting HICON from Qt is tricky without heavy boilerplate. 
+                    # Simpler approach: Rely on Qt's setWindowIcon but force refresh via AppID or just wait.
+                    # Alternatively, use LoadImageW if we want to be pure native.
+                    
+                    user32 = ctypes.windll.user32
+                    ICON_SMALL = 0
+                    ICON_BIG = 1
+                    WM_SETICON = 0x80
+                    
+                    # Load from file directly using LoadImageW
+                    # LR_LOADFROMFILE = 0x10, IMAGE_ICON = 1
+                    h_icon_big = user32.LoadImageW(None, str(icon_path), 1, 0, 0, 0x10)
+                    h_icon_small = user32.LoadImageW(None, str(icon_path), 1, 0, 0, 0x10)
+                    
+                    if h_icon_big:
+                        user32.SendMessageW(hwnd, WM_SETICON, ICON_BIG, h_icon_big)
+                    if h_icon_small:
+                        user32.SendMessageW(hwnd, WM_SETICON, ICON_SMALL, h_icon_small)
+                        
+                except Exception as e:
+                    print(f"Warning: Failed to set native Windows icon: {e}")
+
+        print("[OK] UI loaded successfully. Entering event loop.")
         return app.exec()
 
     except Exception as e:
         error_msg = f"Error starting RenLocalizer V2: {e}"
         print(error_msg)
         import traceback
-
-        tb = traceback.format_exc()
-        print(tb)
+        traceback.print_exc()
 
         show_error_and_wait(
             "RenLocalizer - Startup Error",
-            f"{error_msg}\n\n{tb}\n\n"
-            "Possible solutions:\n"
-            "1. Install Visual C++ Redistributable 2015-2022 (x64)\n"
-            "2. Disable antivirus temporarily\n"
-            "3. Run as Administrator\n"
-            "4. Check if Windows is 64-bit",
+            f"{error_msg}\n\nCheck logs for details."
         )
-
         return 1
 
 
