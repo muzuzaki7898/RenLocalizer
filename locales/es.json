@@ -448,6 +448,8 @@
   "stage_translating": "🌐 Traduciendo...",
   "stage_unren": "📦 Descompilando (UnRen)...",
   "stage_validating": "🔍 Validando...",
+  "error_integrity_check_failed": "Integrity check failed: Missing variables {missing_vars}",
+  "log_integrity_check_failed": "Integrity check failed (Critical). Reverting to original text.",
   "start_translation": "Iniciar traducción",
   "starting_translation": "Iniciando traducción...",
   "stats_total": "📊 Total",
@@ -802,5 +804,9 @@
   "use_cache_desc": "Ahorre tiempo y dinero reutilizando textos traducidos anteriormente.",
   "msg_loading_ai": "Cargando módulo de IA y bibliotecas...",
   "error_api_key_missing": "¡Falta la clave API de {engine}! Por favor, añádala en Configuración.",
-  "msg_error_init": "Error de inicialización: {error}"
+  "msg_error_init": "Error de inicialización: {error}",
+  "rpymc_entry_count": "Se extrajeron {count} entradas de archivos .rpymc.",
+  "log_deepseek_mode": "Modo API DeepSeek: Usando clave DeepSeek personalizada.",
+  "log_deepseek_fallback": "Modo API DeepSeek: Usando clave del campo OpenAI.",
+  "enable_fuzzy_match": "Reparación Inteligente (Fuzzy Match)"
 }

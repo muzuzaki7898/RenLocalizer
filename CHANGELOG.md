@@ -1,5 +1,24 @@
 # Changelog
 
+## [2.6.1] - 2026-01-29
+### 🛡️ Advanced Integrity Protection (3-Layer)
+- **3-Layer Syntax Restoration:** Implemented a new, robust system to repair Ren'Py syntax (e.g. `[variable]`) corrupted by translation engines:
+    1.  **Exact Match:** Perfect preservation.
+    2.  **Flexible Regex:** Fixes common typos like `[ variable ]` (spaces), `(variable)` (wrong brackets), or `[variable]'s` (added suffixes).
+    3.  **Fuzzy Match (RapidFuzz):** Uses advanced string similarity to rescue heavily corrupted tags (e.g. `[vo]` instead of `[v0]`).
+- **Strict Validation:** Added a final "Integrity Check" step. If a translation is still missing critical variables after repair, it is **rejected** and reverted to original text to prevent game crashes.
+- **Safety Hard Limit:** Fuzzy matching is now **disabled** for short placeholders (total length < 6) to prevent dangerous false positives (e.g. `[v1]` vs `[v7]`).
+- **Applied Globally:** This protection now covers ALL engines (Google, OpenAI, Gemini, LocalLLM).
+
+### 🛠️ Fixes & Improvements
+- **Fuzzy Match Toggle:** Added a new setting in "Translation Filters" to enable/disable the Fuzzy Match feature. This gives users full control over the "autocorrect" behavior.
+- **DeepL API Fix:** Resolved "Legacy authentication" error by migrating to header-based authentication for DeepL API.
+- **LLM Placeholder Stability:** Improved prompt templates for `OpenAI`, `Gemini`, and `LocalLLM` engines to strictly prevent placeholder corruption (e.g. `[player_name]`).
+- **Build Icon Fix:** Resolved an issue where application icons and UI assets were missing in the PyInstaller-built executable. The app now correctly resolves asset paths in both dev and frozen modes.
+- **UI Language List:** Language dropdowns now display English names in parentheses for better readability (e.g., `Türkçe (Turkish)`, `中文 (Chinese Simplified)`).
+- **QML Component Loading:** Fixed component loading issues in the frozen build by explicitly adding import paths.
+- **Dependency Optimization:** Cleaned up build dependencies by removing heavy libraries (pandas heavy collection, PyQt5, tkinter, matplotlib) from the executable, resulting in a cleaner and potentially smaller build.
+
 ## [2.6.0] - 2026-01-27
 ### 🧠 Smart Language Detection (Google Translate)
 - **Intelligent Source Language Detection:** When source language is set to "Auto Detect", the system now analyzes 15 random text samples at the start of translation to determine the actual source language with high confidence.

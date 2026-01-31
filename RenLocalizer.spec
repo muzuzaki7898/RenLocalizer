@@ -28,8 +28,10 @@ hidden_imports += collect_submodules('darkdetect')
 hidden_imports += collect_submodules('fontTools')
 hidden_imports += collect_submodules('pyparsing')
 hidden_imports += collect_submodules('certifi')
-hidden_imports += collect_submodules('pandas')
-hidden_imports += collect_submodules('openpyxl')
+# Pandas submodules are too heavy (includes tests, matplotlib, etc). 
+# Basic pandas import is usually enough or handled by auto-analysis.
+# If needed, add only specific submodules manually.
+
 
 # Manual additions for specific edge cases
 if sys.platform == 'win32':
@@ -42,13 +44,16 @@ else:
         'PIL._tkinter_finder',
     ])
 
+# Collect data files for libraries that need them (e.g. QFluentWidgets icons)
+qfluent_datas = collect_data_files('qfluentwidgets')
+
 # Define datas with absolute paths to avoid not found errors
 datas_list = [
     (os.path.join(project_dir, 'locales'), 'locales'),
     (os.path.join(project_dir, 'icon.ico'), '.'),
     # Add QML files
     (os.path.join(project_dir, 'src', 'gui', 'qml'), os.path.join('src', 'gui', 'qml')),
-]
+] + qfluent_datas
 
 # Add Linux/Mac shell scripts only when building on those platforms
 # These are for source-based execution assistance, not required for bundled apps
@@ -75,7 +80,7 @@ a = Analysis(
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
-    excludes=[],
+    excludes=['PyQt5', 'tkinter', 'matplotlib', 'IPython', 'notebook', 'scipy.stats.tests'],
     win_no_prefer_redirects=False,
     win_private_assemblies=False,
     cipher=block_cipher,
@@ -114,7 +119,7 @@ b = Analysis(
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
-    excludes=[],
+    excludes=['PyQt5', 'tkinter', 'matplotlib', 'IPython', 'notebook', 'scipy.stats.tests'],
     win_no_prefer_redirects=False,
     win_private_assemblies=False,
     cipher=block_cipher,

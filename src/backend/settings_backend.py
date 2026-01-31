@@ -343,6 +343,7 @@ class SettingsBackend(QObject):
             {"name": "DeepSeek", "url": "https://api.deepseek.com/v1", "model": "deepseek-chat"},
             {"name": "DeepSeek Reasoner", "url": "https://api.deepseek.com/v1", "model": "deepseek-reasoner"},
             {"name": "Grok (xAI)", "url": "https://api.x.ai/v1", "model": "grok-2-latest"},
+            {"name": "Qwen 2.5 (OpenRouter)", "url": "https://openrouter.ai/api/v1", "model": "qwen/qwen-2.5-72b-instruct"},
             {"name": "Together AI", "url": "https://api.together.xyz/v1", "model": "meta-llama/Llama-3.3-70B-Instruct-Turbo"},
             {"name": "Groq", "url": "https://api.groq.com/openai/v1", "model": "llama-3.3-70b-versatile"},
             {"name": "Mistral", "url": "https://api.mistral.ai/v1", "model": "mistral-large-latest"},
@@ -622,6 +623,17 @@ class SettingsBackend(QObject):
         self.config.save_config()
 
     @pyqtSlot(result=bool)
+    def getEnableFuzzyMatch(self) -> bool:
+        """Get enable_fuzzy_match setting."""
+        return getattr(self.config.translation_settings, 'enable_fuzzy_match', True)
+
+    @pyqtSlot(bool)
+    def setEnableFuzzyMatch(self, enabled: bool):
+        """Set enable_fuzzy_match setting."""
+        self.config.translation_settings.enable_fuzzy_match = enabled
+        self.config.save_config()
+
+    @pyqtSlot(result=bool)
     def getEnableRpycReader(self) -> bool:
         return self.config.translation_settings.enable_rpyc_reader
 
@@ -661,10 +673,16 @@ class SettingsBackend(QObject):
 
     @pyqtSlot(str, result=bool)
     def getFilter(self, key: str) -> bool:
+        if key == "fuzzy_match":
+            return getattr(self.config.translation_settings, 'enable_fuzzy_match', True)
         return getattr(self.config.translation_settings, f"translate_{key}", True)
 
     @pyqtSlot(str, bool)
     def setFilter(self, key: str, value: bool):
+        if key == "fuzzy_match":
+            self.config.translation_settings.enable_fuzzy_match = value
+            self.config.save_config()
+            return
         setattr(self.config.translation_settings, f"translate_{key}", value)
         self.config.save_config()
     

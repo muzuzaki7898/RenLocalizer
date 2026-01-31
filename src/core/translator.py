@@ -77,38 +77,143 @@ def protect_renpy_syntax(text: str) -> Tuple[str, Dict[str, str]]:
     return protected, placeholders
 
 
-def restore_renpy_syntax(text: str, placeholders: Dict[str, str]) -> str:
-    """Placeholder'ları orijinal değerleriyle değiştirir. Case-insensitive support for AI stability."""
+
+
+
+def restore_renpy_syntax(text: str, placeholders: Dict[str, str], config_manager=None) -> str:
+    """
+    Placeholder'ları orijinal değerleriyle değiştirir.
+    
+    Aşamalar:
+    1. Tam Eşleşme (Exact Match)
+    2. Esnek Regex (Flexible Regex) - Boşluk, tek parantez vb.
+    3. Bulanık Eşleşme (Fuzzy Match) - rapidfuzz ile %85+ benzerlik (YENİ)
+    """
     if not text or not placeholders:
         return text
-    result = text
-    # Sort placeholders by length descending to avoid partial replacement of similar keys
-    sorted_placeholders = sorted(placeholders.items(), key=lambda x: len(x[0]), reverse=True)
     
-    for placeholder, original in sorted_placeholders:
-        # 1. Tam eşleşme (Hızlı)
-        if placeholder in result:
-            result = result.replace(placeholder, original)
-            continue
-
-        # 2. Case-insensitive ve boşluk temizliği (Daha yavaş ama güvenli)
-        # Motorlar bazen "[[ v0 ]]" veya "[[V0]]" döndürebiliyor.
-        # CLEANUP_RE zaten tüm varyasyonları standart [[v0]] haline getirmeye odaklı.
-        core_match = re.search(r'\[\[([vteg]\d+)\]\]', placeholder)
-        if core_match:
-            core = core_match.group(1) # v0, t1 vb.
-            # Boşlukları ve büyük/küçük harf farklarını temizleyen regex
-            # [[ v 0 ]], [ [v0] ], [[V0]] vb. her şeyi yakalar
-            pattern = re.compile(
-                r'\[\s*\[\s*' + re.escape(core[0]) + r'\s*' + re.escape(core[1:]) + r'\s*\]\s*\]',
-                re.IGNORECASE
-            )
-            result = pattern.sub(original, result)
-            
-    # Eğer hala temizlenmemiş "[[...]]" kalıntıları varsa (farklı bir ID kalmışsa vb.)
-    # onları da en son bir kez daha temizlemeyi deneyebiliriz ama placeholders içindekiler öncelikli.
+    result = text
+    
+    # Kalan (henüz restore edilmemiş) placeholder'ları takip et
+    # Başlangıçta hepsi restore edilmeyi bekliyor
+    remaining_placeholders = placeholders.copy()
+    
+    # --- AŞAMA 1: Tam Eşleşme ---
+    # Sort by length to process v10 before v1
+    sorted_ph = sorted(remaining_placeholders.items(), key=lambda x: len(x[0]), reverse=True)
+    
+    for ph, original in sorted_ph:
+        if ph in result:
+            result = result.replace(ph, original)
+            if ph in remaining_placeholders:
+                del remaining_placeholders[ph]
                 
+    if not remaining_placeholders:
+        return result
+
+    # --- AŞAMA 2: Esnek Regex ---
+    # Hala bulunamayanlar için
+    sorted_remaining = sorted(remaining_placeholders.items(), key=lambda x: len(x[0]), reverse=True)
+    
+    for ph, original in sorted_remaining:
+        match = re.search(r'([vteg]\d+)', ph)
+        if not match: continue
+        core_id = match.group(1)
+        
+        # Regex: [ v0 ], (v0), [v0]'dan
+        pattern_str = (
+            r'(?:\[|\()+[\s]*' + re.escape(core_id) + r'[\s]*(?:\]|\))+' +
+            r"(?:'[\w]+)?" + r"[\s\]]*"
+        )
+        pattern = re.compile(pattern_str, re.IGNORECASE)
+        
+        if pattern.search(result):
+            # Regex ile bulduk ve değiştirdik
+            result = pattern.sub(original, result)
+            if ph in remaining_placeholders:
+                del remaining_placeholders[ph]
+
+    if not remaining_placeholders:
+        return result
+
+    # --- AŞAMA 3: Bulanık Eşleşme (Fuzzy Recovery) ---
+    # Bu aşama ağır olabilir, kullanıcı isteğine bağlı (varsayılan: True)
+    enable_fuzzy = True
+    if config_manager:
+        enable_fuzzy = getattr(config_manager.translation_settings, 'enable_fuzzy_match', True)
+    
+    if not enable_fuzzy:
+        return result
+    
+    # GÜVENLİK: Kısa değişkenlerde (örn: v0, v1, x) fuzzy eşleşme yapma! Çok riskli.
+
+    try:
+        from rapidfuzz import process, fuzz
+        
+        # Metindeki potansiyel "bozuk" etiketleri bul
+        # Köşeli parantez veya süslü parantez içindeki kısa metinler
+        candidates = re.findall(r'(?:\[|\{)[^\[\]\{\}]+(?:\]|\})', result)
+        
+        if candidates:
+            for ph, original in list(remaining_placeholders.items()):
+                # Placeholder'ın özü (örn: "v0") çok kısaysa fuzzy yapma
+                # "[v0]" -> uzunluk 4. İçi "v0" -> uzunluk 2.
+                # En az 3 karakterli içerik veya toplam 5 karakter gerekli.
+                if len(ph) < 6: # "[val1]" gibi şeyler en az 6 char eder
+                     continue
+
+                # En iyi eşleşmeyi bul
+                match_result = process.extractOne(
+                    ph, candidates, scorer=fuzz.ratio, score_cutoff=85
+                )
+                
+                if match_result:
+                    best_match, score, _ = match_result
+                    # Eğer yeterince benziyorsa (örn %85), değiştir
+                    # Ancak best_match'in zaten restore edilmiş bir şey olmadığından emin olmalıyız
+                    # (Gerçi original değerler genellikle uzun/farklıdır ama kontrol edelim)
+                    
+                    # Güvenlik kontrolü: best_match gerçekten bir placeholder mı?
+                    # "b" vs "v" karışıklığı, "0" vs "o" karışıklığı vb.
+                    
+                    # Değiştir
+                    result = result.replace(best_match, original)
+                    # Aday listesinden çıkar ki tekrar kullanılmasın
+                    if best_match in candidates:
+                        candidates.remove(best_match)
+                        
+    except ImportError:
+        pass # rapidfuzz yoksa bu aşamayı atla
+    except Exception as e:
+        # Fuzzy sırasında hata olursa (nadir), sessizce devam et, log basılabilir
+        pass
+
     return result
+
+
+def validate_translation_integrity(restored_text: str, placeholders: Dict[str, str]) -> List[str]:
+    """
+    2. AŞAMA KORUMA: Çeviri sonrası bütünlük doğrulaması.
+    
+    Restore edilen metinde, orijinal değişkenlerin (placeholder value'larının)
+    eksiksiz bulunup bulunmadığını kontrol eder.
+    
+    Returns:
+        List[str]: Eksik veya bozuk olan orijinal değişkenlerin listesi. Liste boşsa doğrulama BAŞARILI.
+    """
+    missing_items = []
+    
+    # Basit kontrol: Her unique orijinal değer çeviride en az bir kez geçmeli.
+    for _, original_tag in placeholders.items():
+        if original_tag not in restored_text:
+            # Toleranslı kontrol (boşluksuz)
+            clean_tag = original_tag.replace(" ", "")
+            clean_text = restored_text.replace(" ", "")
+            
+            if clean_tag not in clean_text:
+                missing_items.append(original_tag)
+    
+    return missing_items
 
 
 class TranslationEngine(Enum):
@@ -427,7 +532,13 @@ class GoogleTranslator(BaseTranslator):
                             t.cancel()
                     
                     # Check if translation is unchanged (same as original)
-                    final_text = restore_renpy_syntax(result, placeholders)
+                    final_text = restore_renpy_syntax(result, placeholders, self.config_manager)
+                    
+                    # 2. AŞAMA KORUMA (Validation - Global)
+                    missing_vars = validate_translation_integrity(final_text, placeholders)
+                    if missing_vars:
+                         self.logger.warning(f"Integrity check failed (Google Multi): Missing {missing_vars}. Reverting to original.")
+                         final_text = request.text
                     
                     # If translation equals original and aggressive_retry is enabled, try alternative methods
                     if self.aggressive_retry and final_text.strip() == request.text.strip():
@@ -440,7 +551,12 @@ class GoogleTranslator(BaseTranslator):
                                     protected_text, request.source_lang, request.target_lang
                                 )
                                 if lingva_result:
-                                    lingva_final = restore_renpy_syntax(lingva_result, placeholders)
+                                    lingva_final = restore_renpy_syntax(lingva_result, placeholders, self.config_manager)
+                                    
+                                    # Validation for Lingva
+                                    if validate_translation_integrity(lingva_final, placeholders):
+                                        continue # Skip if broken
+
                                     if lingva_final.strip() != request.text.strip():
                                         return TranslationResult(
                                             request.text, lingva_final, request.source_lang, request.target_lang,
@@ -453,12 +569,12 @@ class GoogleTranslator(BaseTranslator):
                             alt_endpoint = self._get_next_endpoint()
                             alt_result = await try_endpoint(alt_endpoint)
                             if alt_result:
-                                alt_final = restore_renpy_syntax(alt_result, placeholders)
+                                alt_final = restore_renpy_syntax(alt_result, placeholders, self.config_manager)
                                 
                                 # INTEGRITY CHECK
-                                if placeholders and not self._check_integrity(alt_final, placeholders):
-                                     self.logger.warning("Integrity check failed (Retry): Placeholders missing. Using original.")
-                                     alt_final = request.text
+                                if validate_translation_integrity(alt_final, placeholders):
+                                     self.logger.warning("Integrity check failed (Retry): Placeholders missing.")
+                                     continue
                                 
                                 if alt_final.strip() != request.text.strip():
                                     return TranslationResult(
@@ -470,11 +586,6 @@ class GoogleTranslator(BaseTranslator):
                         # All retries failed, return the unchanged text with lower confidence
                         self.logger.warning(f"Translation unchanged after retries: {request.text[:50]}")
                     
-                    # INTEGRITY CHECK
-                    if placeholders and not self._check_integrity(final_text, placeholders):
-                         self.logger.warning("Integrity check failed (Google Multi): Placeholders missing. Using original.")
-                         final_text = request.text
-                    
                     return TranslationResult(
                         request.text, final_text, request.source_lang, request.target_lang,
                         TranslationEngine.GOOGLE, True, confidence=0.9, metadata=request.metadata
@@ -483,7 +594,13 @@ class GoogleTranslator(BaseTranslator):
             # Single endpoint mode
             result = await try_endpoint(self._get_next_endpoint())
             if result:
-                final_text = restore_renpy_syntax(result, placeholders)
+                final_text = restore_renpy_syntax(result, placeholders, self.config_manager)
+                
+                # 2. AŞAMA KORUMA (Validation - Global)
+                missing_vars = validate_translation_integrity(final_text, placeholders)
+                if missing_vars:
+                     self.logger.warning(f"Integrity check failed (Google Single): Missing {missing_vars}. Reverting.")
+                     final_text = request.text
                 
                 # Retry if unchanged and aggressive_retry is enabled
                 if self.aggressive_retry and final_text.strip() == request.text.strip():
@@ -495,29 +612,32 @@ class GoogleTranslator(BaseTranslator):
                             protected_text, request.source_lang, request.target_lang
                         )
                         if lingva_result:
-                            lingva_final = restore_renpy_syntax(lingva_result, placeholders)
-                            if lingva_final.strip() != request.text.strip():
-                                return TranslationResult(
-                                    request.text, lingva_final, request.source_lang, request.target_lang,
-                                    TranslationEngine.GOOGLE, True, confidence=0.85, metadata=request.metadata
-                                )
+                            lingva_final = restore_renpy_syntax(lingva_result, placeholders, self.config_manager)
+                            
+                            # Validation
+                            if not validate_translation_integrity(lingva_final, placeholders):
+                                if lingva_final.strip() != request.text.strip():
+                                    return TranslationResult(
+                                        request.text, lingva_final, request.source_lang, request.target_lang,
+                                        TranslationEngine.GOOGLE, True, confidence=0.85, metadata=request.metadata
+                                    )
                     
                     # Try alternative endpoints
                     for _ in range(max_unchanged_retries):
                         alt_result = await try_endpoint(self._get_next_endpoint())
                         if alt_result:
-                            alt_final = restore_renpy_syntax(alt_result, placeholders)
+                            alt_final = restore_renpy_syntax(alt_result, placeholders, self.config_manager)
+                            
+                            # Validation
+                            if validate_translation_integrity(alt_final, placeholders):
+                                continue
+
                             if alt_final.strip() != request.text.strip():
                                 return TranslationResult(
                                     request.text, alt_final, request.source_lang, request.target_lang,
                                     TranslationEngine.GOOGLE, True, confidence=0.85, metadata=request.metadata
                                 )
                         await asyncio.sleep(0.3)
-                
-                # INTEGRITY CHECK
-                if placeholders and not self._check_integrity(final_text, placeholders):
-                     self.logger.warning("Integrity check failed (Google Single): Placeholders missing. Using original.")
-                     final_text = request.text
                 
                 return TranslationResult(
                     request.text, final_text, request.source_lang, request.target_lang,
@@ -533,7 +653,7 @@ class GoogleTranslator(BaseTranslator):
             
             if lingva_result:
                 # Ren'Py değişkenlerini geri koy
-                final_text = restore_renpy_syntax(lingva_result, placeholders)
+                final_text = restore_renpy_syntax(lingva_result, placeholders, self.config_manager)
                 
                 # BÜTÜNLÜK KONTROLÜ
                 if placeholders and not self._check_integrity(final_text, placeholders):
@@ -561,8 +681,7 @@ class GoogleTranslator(BaseTranslator):
                 if data2 and isinstance(data2, list) and data2[0]:
                     text = ''.join(part[0] for part in data2[0] if part and part[0])
                     # Ren'Py değişkenlerini geri koy
-                    # Ren'Py değişkenlerini geri koy
-                    final_text = restore_renpy_syntax(text, placeholders)
+                    final_text = restore_renpy_syntax(text, placeholders, self.config_manager)
                     
                     # BÜTÜNLÜK KONTROLÜ
                     if placeholders and not self._check_integrity(final_text, placeholders):
@@ -1270,8 +1389,13 @@ class DeepLTranslator(BaseTranslator):
             xml_protected_texts.append(temp_text)
             all_placeholders.append(p_holders)
 
+        # Move auth_key to Header as per new DeepL requirements
+        headers = {
+            "Authorization": f"DeepL-Auth-Key {self.api_key}",
+            "User-Agent": f"RenLocalizer/{self.config_manager.config.get('version', '2.0.0')}" if self.config_manager else "RenLocalizer/2.0.0"
+        }
+        
         data = {
-            "auth_key": self.api_key,
             "target_lang": target_lang,
             "text": xml_protected_texts,
             "tag_handling": "xml",
@@ -1297,7 +1421,7 @@ class DeepLTranslator(BaseTranslator):
                 session = await self._get_session()
                 proxy = self.proxy_manager.get_next_proxy().url if self.use_proxy and self.proxy_manager else None
 
-                async with session.post(base_url, data=data, proxy=proxy, timeout=aiohttp.ClientTimeout(total=45)) as resp:
+                async with session.post(base_url, data=data, headers=headers, proxy=proxy, timeout=aiohttp.ClientTimeout(total=45)) as resp:
                     if resp.status != 200:
                         try:
                             err_data = await resp.json()

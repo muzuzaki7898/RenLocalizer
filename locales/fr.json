@@ -107,6 +107,8 @@
   "error": "Erreur",
   "stage_idle": "Prêt",
   "stage_validating": "🔍 Validation...",
+  "error_integrity_check_failed": "Integrity check failed: Missing variables {missing_vars}",
+  "log_integrity_check_failed": "Integrity check failed (Critical). Reverting to original text.",
   "stage_unren": "📦 Extraction RPA en cours...",
   "stage_generating": "📝 Génération des fichiers de traduction...",
   "stage_parsing": "📖 Lecture des fichiers...",
@@ -806,5 +808,9 @@
   "use_cache_desc": "Gagnez du temps et de l'argent en réutilisant les textes déjà traduits.",
   "msg_loading_ai": "Chargement du module IA et des bibliothèques...",
   "error_api_key_missing": "Clé API {engine} manquante ! Veuillez l'ajouter dans les paramètres.",
-  "msg_error_init": "Erreur d'initialisation : {error}"
+  "msg_error_init": "Erreur d'initialisation : {error}",
+  "rpymc_entry_count": "{count} entrées extraites des fichiers .rpymc.",
+  "log_deepseek_mode": "Mode API DeepSeek : Utilisation de la clé DeepSeek personnalisée.",
+  "log_deepseek_fallback": "Mode API DeepSeek : Utilisation de la clé du champ OpenAI.",
+  "enable_fuzzy_match": "Réparation Intelligente (Fuzzy Match)"
 }

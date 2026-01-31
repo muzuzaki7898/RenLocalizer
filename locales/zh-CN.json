@@ -106,7 +106,9 @@
   "completed": "已完成",
   "error": "错误",
   "stage_idle": "就绪",
-  "stage_validating": "🔍 正在验证...",
+  "stage_validating": "🔍 验证中...",
+  "error_integrity_check_failed": "Integrity check failed: Missing variables {missing_vars}",
+  "log_integrity_check_failed": "Integrity check failed (Critical). Reverting to original text.",
   "stage_unren": "📦 正在提取 RPA...",
   "stage_generating": "📝 正在生成翻译文件...",
   "stage_parsing": "📖 正在读取文件...",
@@ -817,5 +819,8 @@
   "msg_loading_ai": "正在加载 AI 模块和库...",
   "error_api_key_missing": "缺少 {engine} API 密钥！请在设置中添加。",
   "msg_error_init": "初始化错误: {error}",
-  "rpymc_entry_count": "从 .rpymc 文件中提取了 {count} 个条目。"
+  "rpymc_entry_count": "从 .rpymc 文件中提取了 {count} 个条目。",
+  "log_deepseek_mode": "DeepSeek API 模式：使用自定义 DeepSeek 密钥。",
+  "log_deepseek_fallback": "DeepSeek API 模式：使用 OpenAI 字段中的密钥。",
+  "enable_fuzzy_match": "智能修复 (Fuzzy Match)"
 }

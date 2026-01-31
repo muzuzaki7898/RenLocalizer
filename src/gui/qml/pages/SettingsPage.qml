@@ -113,6 +113,8 @@ Rectangle {
                     FilterCheck { key: "renpy_functions"; label: (backend.uiTrigger, backend.getTextWithDefault("translate_renpy_func_label", "Ren'Py Fonksiyonları")) }
                     FilterCheck { key: "config_strings"; label: (backend.uiTrigger, backend.getTextWithDefault("translate_config_label", "Config Stringleri")) }
                     FilterCheck { key: "define_strings"; label: (backend.uiTrigger, backend.getTextWithDefault("translate_define_label", "Define Stringleri")) }
+                    // 2.6.1 New Safety Toggle
+                    FilterCheck { key: "fuzzy_match"; label: (backend.uiTrigger, backend.getTextWithDefault("enable_fuzzy_match", "Akıllı Onarım (Fuzzy Match)")) }
                 }
             }
 

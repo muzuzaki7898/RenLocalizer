@@ -156,12 +156,34 @@ def check_vcruntime() -> bool:
     return True
 
 
-def get_app_dir() -> Path:
-    """Get the application directory - works for both dev and frozen exe."""
+def get_base_dir() -> Path:
+    """Get the base directory where the executable/script resides (for config/logs)."""
     if getattr(sys, "frozen", False):
         return Path(sys.executable).parent
     else:
         return Path(__file__).parent
+
+def resolve_asset_path(path: str | Path) -> Path:
+    """Resolve an asset path, checking _MEIPASS for PyInstaller bundles."""
+    if getattr(sys, "frozen", False):
+        if hasattr(sys, "_MEIPASS"):
+            # OneFile mode: Use temp folder
+            base = Path(sys._MEIPASS)
+        else:
+            # OneDir mode: Use executable directory
+            base = Path(sys.executable).parent
+    else:
+        # Development mode
+        base = Path(__file__).parent
+        
+    return base / path
+
+# Set working directory to where the executable is (for relative config/output paths)
+WORK_DIR = get_base_dir()
+os.chdir(WORK_DIR)
+
+# Add project root to Python path (for imports)
+sys.path.insert(0, str(WORK_DIR))
 
 
 def setup_qt_environment() -> None:
@@ -197,15 +219,6 @@ def setup_qt_environment() -> None:
 
         # Disable noisy Qt font warnings
         os.environ["QT_LOGGING_RULES"] = "qt.qpa.fonts=false;qt.text.font.db=false;*.debug=false"
-
-
-# Set working directory to app dir
-APP_DIR = get_app_dir()
-os.chdir(APP_DIR)
-
-# Add project root to Python path
-project_root = Path(__file__).parent
-sys.path.insert(0, str(project_root))
 
 
 def check_unix_system() -> bool:
@@ -250,7 +263,9 @@ def main() -> int:
         app.setApplicationVersion(VERSION)
 
         # Set application icon
-        icon_path = APP_DIR / "icon.ico"
+        icon_path = resolve_asset_path("icon.ico")
+        app_icon = QIcon()
+        
         if icon_path.exists():
             print(f"[INFO] Loading icon from: {icon_path}")
             app_icon = QIcon(str(icon_path))
@@ -258,7 +273,7 @@ def main() -> int:
                 app.setWindowIcon(app_icon)
                 print("[INFO] Icon loaded successfully.")
             else:
-                print("[WARNING] Icon file exists but QIcon failed to load it.")
+                 print("[WARNING] Icon file exists but QIcon failed to load it.")
         else:
              print(f"[WARNING] Icon file not found at: {icon_path}")
 
@@ -287,14 +302,17 @@ def main() -> int:
         engine.objectCreated.connect(on_object_created)
 
         # Load MAIN QML
-        qml_path = project_root / "src" / "gui" / "qml" / "main.qml"
+        # Use resolve_asset_path so it works inside PyInstaller bundle
+        qml_path = resolve_asset_path("src/gui/qml/main.qml")
         print(f"Loading UI: {qml_path}")
         
         if not qml_path.exists():
-            # Fallback for frozen exe if path covers structured inside meipass differently
-            # But usually project_root is correct for dev.
-            # For frozen, resources should be handled via QRC or similar, but local file load works if bundled.
-            pass
+            print(f"[ERROR] QML file not found: {qml_path}")
+            # Do not exit here, let engine.load fail gracefully or handled below
+        
+        # Important: Add QML root to import paths so imports work in frozen exe
+        qml_root = resolve_asset_path("src/gui/qml")
+        engine.addImportPath(str(qml_root))
 
         engine.load(QUrl.fromLocalFile(str(qml_path)))
 

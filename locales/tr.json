@@ -105,6 +105,8 @@
   "error_http": "HTTP {status}",
   "error_init_failed": "Başlatma Hatası",
   "error_init_failed_detail": "Çeviri motoru hazırlanamadı: {error}",
+  "error_integrity_check_failed": "Bütünlük doğrulaması başarısız: Eksik değişkenler {missing_vars}",
+  "error_invalid_game_dir": "Geçersiz oyun dizini",
   "error_library_missing": "Kütüphane Hatası",
   "error_library_missing_detail": "Gerekli AI kütüphanesi eksik.\nLütfen pip install ile yükleyin.\nHata: {error}",
   "error_no_translations": "Yanıt içinde çeviri bulunamadı",
@@ -378,6 +380,7 @@
   "stage_unren": "📦 RPA Çıkarılıyor...",
   "stage_validating": "🔍 Doğrulanıyor...",
   "start_translation": "Çeviriyi Başlat",
+  "log_integrity_check_failed": "Bütünlük doğrulaması başarısız (Onarım İmkansız). Orijinal metne dönülüyor.",
   "starting_translation": "Çeviri başlatılıyor...",
   "stats_total": "📊 Toplam",
   "stats_total_info": "📊 Toplam: {count}",
@@ -701,5 +704,8 @@
   "msg_loading_ai": "Yapay zeka modülü ve kütüphaneler yükleniyor...",
   "error_api_key_missing": "{engine} API anahtarı eksik! Lütfen Ayarlar menüsünden ekleyin.",
   "msg_error_init": "Başlatma hatası: {error}",
-  "rpymc_entry_count": ".rpymc dosyalarından {count} giriş çıkarıldı."
+  "rpymc_entry_count": ".rpymc dosyalarından {count} giriş çıkarıldı.",
+  "log_deepseek_mode": "DeepSeek API modu: Özel DeepSeek anahtarı kullanılıyor.",
+  "log_deepseek_fallback": "DeepSeek API modu: OpenAI alanındaki anahtar kullanılıyor.",
+  "enable_fuzzy_match": "Akıllı Onarım (Fuzzy Match)"
 }

@@ -42,7 +42,7 @@ Rectangle {
 
                         Image {
                             anchors.centerIn: parent
-                            source: "file:///" + backend.get_app_path() + "/icon.ico"
+                            source: backend.get_asset_url("icon.ico")
                             width: 80
                             height: 80
                             fillMode: Image.PreserveAspectFit

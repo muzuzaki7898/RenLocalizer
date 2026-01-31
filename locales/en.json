@@ -120,6 +120,8 @@
   "error": "Error",
   "stage_idle": "Ready",
   "stage_validating": "🔍 Validating...",
+  "error_integrity_check_failed": "Integrity check failed: Missing variables {missing_vars}",
+  "log_integrity_check_failed": "Integrity check failed (Critical). Reverting to original text.",
   "stage_unren": "📦 Decompiling (UnRen)...",
   "stage_generating": "📝 Generating Translation Files...",
   "stage_parsing": "📖 Reading Files...",
@@ -815,5 +817,8 @@
   "msg_loading_ai": "Loading AI module and libraries...",
   "error_api_key_missing": "{engine} API key is missing! Please add it in Settings.",
   "msg_error_init": "Initialization error: {error}",
-  "rpymc_entry_count": "Extracted {count} entries from .rpymc files."
+  "rpymc_entry_count": "Extracted {count} entries from .rpymc files.",
+  "log_deepseek_mode": "DeepSeek API mode: Using custom DeepSeek key.",
+  "log_deepseek_fallback": "DeepSeek API mode: Using key from OpenAI field.",
+  "enable_fuzzy_match": "Smart Repair (Fuzzy Match)"
 }

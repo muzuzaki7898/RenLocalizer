@@ -284,6 +284,8 @@
     "stage_parsing": "🔍 Анализ...",
     "stage_unren": "🔓 Запуск UnRen...",
     "stage_validating": "✅ Проверка...",
+    "error_integrity_check_failed": "Integrity check failed: Missing variables {missing_vars}",
+    "log_integrity_check_failed": "Integrity check failed (Critical). Reverting to original text.",
     "stage_completed": "🎉 Завершено",
     "stage_error": "❌ Ошибка",
     "unren_downloading": "Скачивание UnRen...",
@@ -794,5 +796,9 @@
   "glossary_import_no_change": "Изменений нет. Файл может быть идентичным или пустым.",
   "msg_loading_ai": "Загрузка модуля ИИ и библиотек...",
   "error_api_key_missing": "Отсутствует API-ключ {engine}! Пожалуйста, добавьте его в настройках.",
-  "msg_error_init": "Ошибка инициализации: {error}"
+  "msg_error_init": "Ошибка инициализации: {error}",
+  "rpymc_entry_count": "Извлечено {count} записей из файлов .rpymc.",
+  "log_deepseek_mode": "Режим DeepSeek API: Используется пользовательский ключ DeepSeek.",
+  "log_deepseek_fallback": "Режим DeepSeek API: Используется ключ из поля OpenAI.",
+  "enable_fuzzy_match": "Умное восстановление (Fuzzy Match)"
 }

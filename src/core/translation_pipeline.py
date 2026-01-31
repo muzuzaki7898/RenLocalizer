@@ -2036,11 +2036,25 @@ init 1501 python:
             self.translation_manager.add_translator(TranslationEngine.DEEPL, dt)
 
         # AI Translators Lazy Init
+        # AI Translators Lazy Init
         if self.engine == TranslationEngine.OPENAI and self.engine not in self.translation_manager.translators:
+            # Determine correct API key based on Base URL
+            # Users might enter DeepSeek key in its own field but run it via OpenAI engine (compatible mode)
+            base_url = self.config.translation_settings.openai_base_url
+            api_key_to_use = self.config.api_keys.openai_api_key
+
+            if base_url and "deepseek" in base_url.lower():
+                ds_key = getattr(self.config.api_keys, "deepseek_api_key", "")
+                if ds_key:
+                    self.log_message.emit("info", self.config.get_log_text('log_deepseek_mode'))
+                    api_key_to_use = ds_key
+                else:
+                    self.log_message.emit("info", self.config.get_log_text('log_deepseek_fallback'))
+
             t = OpenAITranslator(
-                api_key=self.config.api_keys.openai_api_key,
+                api_key=api_key_to_use,
                 model=self.config.translation_settings.openai_model,
-                base_url=self.config.translation_settings.openai_base_url,
+                base_url=base_url,
                 proxy_manager=getattr(self.translation_manager, "proxy_manager", None),
                 config_manager=self.config,
                 temperature=self.config.translation_settings.ai_temperature,

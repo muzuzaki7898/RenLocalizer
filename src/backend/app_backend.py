@@ -177,6 +177,19 @@ class AppBackend(QObject):
     def get_app_path(self) -> str:
         """Uygulamanın çalıştığı dizini döndür (Dosya yolları için)."""
         return os.getcwd().replace("\\", "/")
+
+    @pyqtSlot(str, result=str)
+    def get_asset_url(self, relative_path: str) -> str:
+        """Returns a valid file URL for the asset, handling frozen state."""
+        if getattr(sys, "frozen", False) and hasattr(sys, "_MEIPASS"):
+            base = Path(sys._MEIPASS)
+        else:
+            # Development mode: assume running from project root
+            base = Path(os.getcwd())
+        
+        full_path = base / relative_path
+        # Convert to forward slashes for QML
+        return QUrl.fromLocalFile(str(full_path)).toString()
     
     # ========== PROPERTIES ==========
     

@@ -22,7 +22,9 @@ from .translator import (
     TranslationResult, 
     TranslationEngine,
     protect_renpy_syntax,
-    restore_renpy_syntax
+    protect_renpy_syntax,
+    restore_renpy_syntax,
+    validate_translation_integrity
 )
 from src.utils.constants import (
     AI_DEFAULT_TEMPERATURE, AI_DEFAULT_TIMEOUT, AI_DEFAULT_MAX_TOKENS,
@@ -175,6 +177,12 @@ IMPORTANT:
             try:
                 translated_content = await self._generate_completion(system_prompt, protected_text)
                 final_text = restore_renpy_syntax(translated_content, placeholders)
+                
+                # 2. AŞAMA KORUMA (Validation)
+                missing_vars = validate_translation_integrity(final_text, placeholders)
+                if missing_vars:
+                   self.emit_log("warning", f"syntax integrity check failed: Missing variables {missing_vars}. Text: {request.text[:30]}...")
+                   raise ValueError(f"Integrity check failed. Missing variables: {missing_vars}")
                 
                 # Aggressive Retry: If translation equals original, retry with enhanced prompt
                 if aggressive_retry and final_text.strip() == request.text.strip() and len(request.text.strip()) > 3:
@@ -337,6 +345,13 @@ IMPORTANT:
                     translated_protected = m.group(2).strip()
                     if 0 <= u_idx < len(unique_requests):
                         final_text = restore_renpy_syntax(translated_protected, all_placeholders[u_idx])
+                        
+                        # 2. AŞAMA KORUMA (Validation)
+                        missing_vars = validate_translation_integrity(final_text, all_placeholders[u_idx])
+                        if missing_vars:
+                             self.emit_log("warning", f"Batch item {u_idx} failed integrity check: Missing {missing_vars}. Dropping for single retry.")
+                             continue
+
                         req = unique_requests[u_idx]
                         
                         unique_results_map[u_idx] = TranslationResult(

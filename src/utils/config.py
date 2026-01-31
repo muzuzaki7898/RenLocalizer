@@ -140,6 +140,8 @@ class TranslationSettings:
     # Deep Scan: Normal pattern'lerin kaçırdığı gizli stringleri bul
     # init python bloklarındaki dictionary'ler, değişken atamaları vb.
     enable_deep_scan: bool = True  # Varsayılan artık açık (gizli string taraması)
+    # Fuzzy Matching: Bozuk placeholder'ları benzerlik ile kurtar
+    enable_fuzzy_match: bool = True  # Varsayılan açık
     # RPYC Reader: Derlenmiş .rpyc dosyalarını AST ile doğrudan oku
     enable_rpyc_reader: bool = True  # Varsayılan artık açık (derlenmiş .rpyc okuma)
     # Include renpy/common from installed Ren'Py SDKs (optional)
@@ -649,8 +651,15 @@ class ConfigManager:
         return {item['renpy']: item['api'] for item in self.get_all_languages()}
     
     def get_target_languages_for_ui(self) -> list:
-        """Get languages for UI dropdowns as list of (renpy_code, native_name) tuples."""
-        return [(item['renpy'], item['native']) for item in self.get_all_languages()]
+        """Get languages for UI dropdowns as list of (renpy_code, display_name) tuples."""
+        result = []
+        for item in self.get_all_languages():
+            name = item['native']
+            # Add English name in parens if it differs from native
+            if item['english'].lower() != item['native'].lower():
+                name = f"{item['native']} ({item['english']})"
+            result.append((item['renpy'], name))
+        return result
     
     def get_ui_translations(self) -> Dict[str, Dict[str, Any]]:
         """Get UI translations for supported languages from JSON files."""
