@@ -34,6 +34,8 @@ hidden_imports += collect_submodules('certifi')
 
 
 # Manual additions for specific edge cases
+hidden_imports.append('src.version')  # Ensure version module is bundled
+
 if sys.platform == 'win32':
     hidden_imports.extend([
         'PIL._tkinter_finder', 

@@ -10,6 +10,7 @@ import sys
 import warnings
 from pathlib import Path
 from src.utils.logger import setup_logger
+
 from src.version import VERSION
 
 # ============================================================

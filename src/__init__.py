@@ -9,6 +9,7 @@ Qt import issues during PyInstaller bundling. Import them directly:
 
 from . import core
 from . import utils
+from .version import VERSION
 # gui module is imported lazily to avoid Qt import at package level
 
-__all__ = ['core', 'utils']
+__all__ = ['core', 'utils', 'VERSION']
