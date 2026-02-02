@@ -11,7 +11,21 @@ import warnings
 from pathlib import Path
 from src.utils.logger import setup_logger
 
-from src.version import VERSION
+# Default version fallback
+VERSION = "2.6.2"
+
+try:
+    from src.version import VERSION as _v
+    VERSION = _v
+except ImportError:
+    # Fallback: if src is not in path (some IDEs/environments)
+    import sys
+    sys.path.append(os.path.dirname(__file__))
+    try:
+        from src.version import VERSION as _v
+        VERSION = _v
+    except ImportError:
+        pass  # Keep default value
 
 # ============================================================
 # CRITICAL: Disable Qt system theme detection BEFORE any Qt imports
@@ -276,7 +290,6 @@ def main() -> int:
         app.setOrganizationName("LordOfTurk")
         
         # Import Backends (Logic)
-        from src.version import VERSION
         from src.utils.config import ConfigManager
         from src.backend.app_backend import AppBackend
         from src.backend.settings_backend import SettingsBackend

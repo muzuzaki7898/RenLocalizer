@@ -55,6 +55,8 @@ datas_list = [
     (os.path.join(project_dir, 'icon.ico'), '.'),
     # Add QML files
     (os.path.join(project_dir, 'src', 'gui', 'qml'), os.path.join('src', 'gui', 'qml')),
+    # Add version.py for runtime reading
+    (os.path.join(project_dir, 'src', 'version.py'), 'src'),
 ] + qfluent_datas
 
 # Add Linux/Mac shell scripts only when building on those platforms
