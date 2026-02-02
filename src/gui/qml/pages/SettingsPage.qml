@@ -239,7 +239,7 @@ Rectangle {
                         TextField {
                             Layout.fillWidth: true
                             Layout.preferredHeight: 40
-                            placeholderText: text.length > 0 ? "" : (backend.uiTrigger, backend.getTextWithDefault("placeholder_gemini_model", "Model (örn: gemini-2.0-flash)"))
+                            placeholderText: text.length > 0 ? "" : (backend.uiTrigger, backend.getTextWithDefault("placeholder_gemini_model", "Model (örn: gemini-2.5-flash)"))
                             text: settingsBackend.getGeminiModel()
                             onEditingFinished: settingsBackend.setGeminiModel(text)
                             leftPadding: 12

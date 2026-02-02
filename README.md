@@ -35,7 +35,7 @@ RenLocalizer is a sophisticated, cross-platform tool designed to automate the tr
 - **Dictionary & Glossary:** Enforce specific terminology across the entire game.
 
 ### 🖥️ Modern UI & CLI
-- **Fluent Design:** A beautiful, responsive dark-mode GUI built with `PyQt6-Fluent-Widgets`.
+- **Material Design:** A beautiful, responsive dark-mode GUI built with `Qt Quick Controls 2` (Material).
 - **Command Line Interface:** Full-featured CLI for headless servers, automation scripts, or power users.
 - **Project Health Check:** Automated diagnostics to find potential issues in your project structure.
 
@@ -75,7 +75,6 @@ Download the latest release for your platform from the [Releases Page](https://g
    python run.py       # GUI Mode
    python run_cli.py   # CLI Mode
    ```
-Warning: If the source language, i.e., the original language of the game, is not English, select the original language of the game from the interface, not the automatic option. Otherwise, some texts may not be automatically detected by Google and may remain untranslated.
 
 ---
 

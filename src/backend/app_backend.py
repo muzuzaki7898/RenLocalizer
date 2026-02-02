@@ -56,6 +56,7 @@ class AppBackend(QObject):
     # Initialization Signals (For UI BusyIndicator)
     initializationChanged = pyqtSignal()
     initMessageChanged = pyqtSignal()
+    busyChanged = pyqtSignal() # New signal for general busy state
     
     def __init__(self, config_manager: ConfigManager, parent=None):
         super().__init__(parent)
@@ -71,6 +72,7 @@ class AppBackend(QObject):
         self._selected_engine = getattr(self.config.translation_settings, 'selected_engine', "google")
         self._is_translating = False
         self._is_initializing = False
+        self._is_busy = False # General busy state for tools
         self._init_message = ""
         
         # Pipeline
@@ -81,13 +83,24 @@ class AppBackend(QObject):
         self.proxy_manager = ProxyManager()
         self.translation_manager = TranslationManager(self.proxy_manager, self.config)
 
-        self._setup_translation_engines()
+        self._start_async_setup() # Heavy setup to thread
         
-        # Initial Cache Load
-        try:
-            self._update_cache_path()
-        except Exception as e:
-            self.logger.error(f"Failed to load initial cache: {e}")
+        # Initial Cache Load (Async call)
+        self._update_cache_path_async()
+
+    def _start_async_setup(self):
+        """Move heavy engine setup to background thread."""
+        threading.Thread(target=self._setup_translation_engines, daemon=True).start()
+
+    @pyqtProperty(bool, notify=busyChanged)
+    def isBusy(self):
+        """Returns True if any background tool is running."""
+        return self._is_busy
+
+    def _set_busy(self, busy: bool):
+        if self._is_busy != busy:
+            self._is_busy = busy
+            self.busyChanged.emit()
 
     @pyqtProperty(bool, notify=initializationChanged)
     def isInitializing(self):
@@ -279,13 +292,22 @@ class AppBackend(QObject):
     @pyqtSlot(str, result=str)
     def cleanupSDK(self, path: str) -> str:
         """SDK temizliği yap (UnRen mod dosyalarını sil)."""
-        if path.startswith("file:///"):
-            if sys.platform == "win32":
-                path = path[8:]
-            else:
-                path = path[7:]
-            
+        if self._is_busy:
+            return self.config.get_ui_text("app_busy", "Başka bir işlem sürüyor...")
+
+        self._set_busy(True)
+        # We must run this in a thread to avoid main thread blocking
+        threading.Thread(target=self._run_cleanup_thread, args=(path,), daemon=True).start()
+        return self.config.get_ui_text("msg_task_started", "İşlem arka planda başlatıldı...")
+
+    def _run_cleanup_thread(self, path):
         try:
+            if path.startswith("file:///"):
+                if sys.platform == "win32":
+                    path = path[8:]
+                else:
+                    path = path[7:]
+            
             project_dir = os.path.dirname(path) if os.path.isfile(path) else path
             game_dir = os.path.join(project_dir, 'game') if os.path.isdir(os.path.join(project_dir, 'game')) else project_dir
             
@@ -304,9 +326,12 @@ class AppBackend(QObject):
                     os.remove(filepath)
                     deleted_count += 1
             
-            return self.config.get_ui_text("msg_sdk_cleanup_success", f"Temizlik tamamlandı. {deleted_count} dosya silindi.").replace("{count}", str(deleted_count))
+            msg = self.config.get_ui_text("msg_sdk_cleanup_success", f"Temizlik tamamlandı. {deleted_count} dosya silindi.").replace("{count}", str(deleted_count))
+            self.logMessage.emit("success", msg)
         except Exception as e:
-            return f"{self.config.get_ui_text('error', 'Hata')}: {str(e)}"
+            self.logMessage.emit("error", f"{self.config.get_ui_text('error', 'Hata')}: {str(e)}")
+        finally:
+            self._set_busy(False)
 
     @pyqtSlot()
     def runUnRen(self):
@@ -315,12 +340,20 @@ class AppBackend(QObject):
             self.warningMessage.emit(self.config.get_ui_text("warning", "Uyarı"), self.config.get_ui_text("select_game_folder", "Lütfen önce oyun klasörünü seçin."))
             return
         
+        if self._is_busy:
+            self.warningMessage.emit(self.config.get_ui_text("warning", "Uyarı"), self.config.get_ui_text("app_busy", "Başka bir işlem sürüyor..."))
+            return
+
         self.logMessage.emit("info", self.config.get_ui_text("msg_unren_requested", "UnRPA extraction requested..."))
+        self._set_busy(True)
         threading.Thread(target=self._run_unren_thread, daemon=True).start()
 
     def _run_unren_thread(self):
-        result = self.extractRPA(self._project_path)
-        self.logMessage.emit("info", result)
+        try:
+            result = self.extractRPA(self._project_path)
+            self.logMessage.emit("info", result)
+        finally:
+            self._set_busy(False)
 
     @pyqtSlot()
     def runHealthCheck(self):
@@ -328,8 +361,11 @@ class AppBackend(QObject):
         if not self._project_path:
             self.warningMessage.emit(self.config.get_ui_text("warning", "Uyarı"), self.config.get_ui_text("select_game_folder", "Lütfen önce oyun klasörünü seçin."))
             return
-            
+        
+        if self._is_busy: return
+
         self.logMessage.emit("info", self.config.get_ui_text("log_health_check_analyzing", "Starting Health Check..."))
+        self._set_busy(True)
         threading.Thread(target=self._run_health_check_thread, daemon=True).start()
         
     def _run_health_check_thread(self):
@@ -347,6 +383,8 @@ class AppBackend(QObject):
             self.logMessage.emit("success", self.config.get_log_text("log_health_check_success", report=report))
         except Exception as e:
             self.logMessage.emit("error", self.config.get_ui_text("msg_error_health_check", "Health check error: {error}").replace("{error}", str(e)))
+        finally:
+            self._set_busy(False)
         
     @pyqtSlot()
     def runFontCheck(self):
@@ -355,10 +393,13 @@ class AppBackend(QObject):
             self.warningMessage.emit(self.config.get_ui_text("warning", "Uyarı"), self.config.get_ui_text("select_game_folder", "Lütfen önce oyun klasörünü seçin."))
             return
             
+        if self._is_busy: return
+
         target_lang = self.config.translation_settings.target_language
         self.logMessage.emit("info", self.config.get_log_text("log_font_check_testing", lang=target_lang.upper()))
         
         # Simüle edilmiş aşamalı kontrol
+        self._set_busy(True)
         threading.Thread(target=self._run_font_check_thread, args=(target_lang,), daemon=True).start()
 
     def _run_font_check_thread(self, lang):
@@ -380,9 +421,10 @@ class AppBackend(QObject):
             else:
                 self.logMessage.emit("success", self.config.get_log_text("log_font_check_success", lang=lang.upper()))
             
-            # Final mesajını gönderMİyoruz ki sonuç mesajı ekranda kalsın, ezilmesin.
         except Exception as e:
             self.logMessage.emit("error", self.config.get_ui_text("msg_error_font_check", "Font check error: {error}").replace("{error}", str(e)))
+        finally:
+            self._set_busy(False)
 
     @pyqtSlot(str, result=str)
     def healthCheck(self, path: str) -> str:
@@ -442,8 +484,8 @@ class AppBackend(QObject):
         else:
             self.logMessage.emit("warning", "⚠️ " + self.config.get_ui_text("game_folder_not_found", "game/ klasörü bulunamadı"))
 
-        # Reload cache for the new project
-        self._update_cache_path()
+        # Reload cache for the new project (Async)
+        self._update_cache_path_async()
     
     @pyqtSlot(str)
     def setEngine(self, engine: str):
@@ -513,11 +555,15 @@ class AppBackend(QObject):
     def setTargetLanguage(self, lang: str):
         """Hedef dili ayarla."""
         self._target_language = lang
-        # Reload cache for the new language
-        self._update_cache_path()
+        # Reload cache for the new language (Async to avoid UI freeze)
+        self._update_cache_path_async()
+
+    def _update_cache_path_async(self):
+        """Starts async cache update."""
+        threading.Thread(target=self._update_cache_path, daemon=True).start()
 
     def _update_cache_path(self):
-        """Proje veya dil değiştiğinde cache dosyasını yeniden yükle."""
+        """Proje veya dil değiştiğinde cache dosyasını yeniden yükle (Background Thread)."""
         if not self._project_path or not self._target_language:
             return
 

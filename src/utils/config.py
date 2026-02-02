@@ -10,6 +10,7 @@ import logging
 import locale
 import os
 import sys
+import threading
 from pathlib import Path
 from typing import Dict, Any, Optional
 from dataclasses import dataclass, asdict, fields
@@ -137,11 +138,12 @@ class TranslationSettings:
     translate_notifications: bool = True  # Notify() ve renpy.notify() metinleri
     translate_confirmations: bool = True  # Confirm() ve renpy.confirm() metinleri
     translate_define_strings: bool = False  # define statements ile tanımlanan stringler
+    
+    # Advanced Syntax Guard Settings
+    enable_fuzzy_match: bool = True  # Enable/Disable RapidFuzz logic
     # Deep Scan: Normal pattern'lerin kaçırdığı gizli stringleri bul
     # init python bloklarındaki dictionary'ler, değişken atamaları vb.
     enable_deep_scan: bool = True  # Varsayılan artık açık (gizli string taraması)
-    # Fuzzy Matching: Bozuk placeholder'ları benzerlik ile kurtar
-    enable_fuzzy_match: bool = True  # Varsayılan açık
     # RPYC Reader: Derlenmiş .rpyc dosyalarını AST ile doğrudan oku
     enable_rpyc_reader: bool = True  # Varsayılan artık açık (derlenmiş .rpyc okuma)
     # Include renpy/common from installed Ren'Py SDKs (optional)
@@ -151,7 +153,7 @@ class TranslationSettings:
     openai_model: str = "gpt-3.5-turbo"
     openai_base_url: str = ""  # For OpenRouter or Local
     deepseek_model: str = "deepseek-chat"
-    gemini_model: str = "gemini-pro"
+    gemini_model: str = "gemini-2.5-flash"
     gemini_safety_settings: str = "BLOCK_NONE"  # BLOCK_NONE, BLOCK_ONLY_HIGH, STANDARD
     local_llm_model: str = "llama3.2"
     local_llm_url: str = "http://localhost:11434/v1"
@@ -221,6 +223,7 @@ class ConfigManager:
     def __init__(self, config_file: str = "config.json"):
         self.logger = logging.getLogger(__name__)
         self.config_file = Path(config_file)
+        self._lock = threading.Lock() # Thread-safety for configuration
         
         # Get the correct locales directory for both dev and executable
         if getattr(sys, 'frozen', False) and hasattr(sys, '_MEIPASS'):
@@ -249,6 +252,48 @@ class ConfigManager:
         
         # Load existing configuration
         self.load_config()
+
+    def save_config(self, app_settings: Optional[AppSettings] = None) -> bool:
+        """Save configuration to file safely (Atomic & Thread-Safe)."""
+        with self._lock: # Ensure thread safety
+            try:
+                # If specific settings provided, update our instance
+                if app_settings is not None:
+                    self.app_settings = app_settings
+                
+                config_data = {
+                    'translation_settings': asdict(self.translation_settings),
+                    'api_keys': asdict(self.api_keys),
+                    'app_settings': asdict(self.app_settings),
+                    'proxy_settings': asdict(self.proxy_settings)
+                }
+                
+                # Atomic Write Strategy: Write to temp -> Rename
+                # This prevents file corruption if write fails or power is lost
+                import tempfile
+                import shutil
+                
+                dir_name = self.config_file.parent.absolute()
+                # Create temp file in same directory to ensure atomic move works
+                with tempfile.NamedTemporaryFile('w', dir=str(dir_name), delete=False, encoding='utf-8') as tf:
+                    json.dump(config_data, tf, indent=4, ensure_ascii=False)
+                    temp_name = tf.name
+                
+                # Atomic replace
+                try:
+                    shutil.move(temp_name, str(self.config_file))
+                    self.logger.info("Configuration saved successfully (Atomic)")
+                    return True
+                except Exception as move_err:
+                    self.logger.error(f"Atomic move failed, trying direct write: {move_err}")
+                    # Fallback to unsecured write if rename fails (e.g. permissions)
+                    with open(self.config_file, 'w', encoding='utf-8') as f:
+                        json.dump(config_data, f, indent=4, ensure_ascii=False)
+                    return True
+                    
+            except Exception as e:
+                self.logger.error(f"Error saving configuration: {e}")
+                return False
     
     def _filter_config_data(self, dataclass_type, data):
         """Filter dictionary keys to match dataclass fields to avoid __init__ errors."""
@@ -438,45 +483,7 @@ class ConfigManager:
             self.logger.info(f"Config failed, using auto-detected language: {detected_lang}")
             return False
     
-    def save_config(self, app_settings: Optional[AppSettings] = None) -> bool:
-        """Save configuration to file."""
-        try:
-            # If specific settings provided, update our instance
-            if app_settings is not None:
-                self.app_settings = app_settings
-            
-            config_data = {
-                'translation_settings': asdict(self.translation_settings),
-                'api_keys': asdict(self.api_keys),
-                'app_settings': asdict(self.app_settings),
-                'proxy_settings': asdict(self.proxy_settings)
-            }
-            
-            # Create backup if file exists
-            if self.config_file.exists():
-                backup_file = self.config_file.with_suffix('.json.bak')
-                # Remove existing backup if it exists
-                if backup_file.exists():
-                    try:
-                        backup_file.unlink()
-                    except OSError as e:
-                        self.logger.warning(f"Could not remove existing backup: {e}")
-                # Create new backup
-                try:
-                    self.config_file.rename(backup_file)
-                except OSError as e:
-                    self.logger.warning(f"Could not create backup: {e}")
-                    # If backup fails, continue without backup
-            
-            with open(self.config_file, 'w', encoding='utf-8') as f:
-                json.dump(config_data, f, indent=4, ensure_ascii=False)
-            
-            self.logger.info("Configuration saved successfully")
-            return True
-            
-        except Exception as e:
-            self.logger.error(f"Error saving configuration: {e}")
-            return False
+
     
     def save_glossary(self) -> bool:
         """Save glossary to file."""

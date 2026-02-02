@@ -2230,6 +2230,12 @@ init 1501 python:
                 for s in sample_logs:
                     self.log_message.emit("warning", s)
                 self._log_error(f"UNCHANGED translations: {unchanged_count} / {len(translations)}\n" + "\n".join(sample_logs))
+                
+                # SMART TIP: Aggressive Retry Önerisi
+                is_aggressive = getattr(self.config.translation_settings, 'aggressive_retry_translation', False)
+                if not is_aggressive:
+                    self.log_message.emit("info", self.config.get_log_text('log_hint_aggressive_retry'))
+
             if failed_entries:
                 sample = "\n".join(failed_entries[:10])
                 self.log_message.emit("warning", self.config.get_log_text('translation_failed_count', count=len(failed_entries), sample=sample))

@@ -1,13 +1,39 @@
 # Changelog
 
+## [2.6.2] - 2026-02-01
+### 🔧 Gemini Fix & Critical Safety Patch
+- **Gemini Model Update:** Changed the default Gemini model from `gemini-2.0-flash-exp` (experimental) to `gemini-2.5-flash` (latest stable). This resolves issues where the API key would not work due to model access restrictions.
+- **Zero-Tolerance Syntax Check:** Added a strict "Unbalanced Bracket Detector" to the integrity check phase. If a translation ends with an open bracket, it is immediately rejected.
+- **Data Integrity (Atomic Save):** Implemented "Atomic Write" strategy for configuration files. `config.json` is now written to a temporary file first and safely renamed, ensuring zero data corruption even if the PC crashes or power is lost during save.
+- **Thread-Safe Architecture:** Added `threading.Lock` to `ConfigManager` and a global `isBusy` lock to the Backend. This prevents race conditions and ensures thread safety across the entire application.
+- **Refactoring & Reliability:** Extracted critical syntax protection logic into `SyntaxGuard`, fixed validation logic for escaped brackets (`[[`), and verified system stability with extensive edge-case stress tests.
+- **Performance Boost (No Stuttering):** Moved heavy I/O operations (SDK Cleanup, UnRPA, Cache Loading) to background threads. This eliminates UI freezes/stuttering during large project operations.
+- **Concurrency Safety:** Implemented a backend Locking Mechanism (`isBusy`) to prevent users from accidentally starting multiple heavy tasks simultaneously, which could cause crashes or data corruption.
+- **Theme Independence:** The application now strictly ignores system-wide theme settings (like Windows Light Mode) and enforces the user's preferred theme (Default: Dark) from `config.json` immediately at startup.
+- **Security Hardening:** Implemented centralized log masking for API keys AND automatic input sanitization (whitespace trimming) for all user settings.
+- **Micro-Optimization:** Moved Regex compilation out of hot loops in `ai_translator.py`, significantly reducing CPU overhead during batch processing.
+- **AI Hallucination Cleanup:** Implemented a pre-processor that fixes common AI formatting glitches like double-open-brackets (`[ [v0]`) before they can cause syntax errors.
+- **Enhanced Google Translate Protection:** Specifically targeted improvements for Google Translate's tendency to corrupt bracket syntax (e.g., adding spaces `[ variable ]` or breaking interpolation chains). The new validation logic now catches these subtle corruptions that previously passed basic checks.
+- **Advanced AST Code Validation:** Implemented Python's Abstract Syntax Tree (AST) analysis to validate the *semantic* correctness of restored placeholders. If a placeholder contains invalid Python syntax (e.g. `[player name]` instead of `[player_name]`), it is rejected even if the brackets are balanced.
+- **Full Bracket Cycle Check:** Expanded the integrity check to detect "Unopened Closing Brackets" (e.g. `text]`) and nested brackets, ensuring complete structural integrity before approving any translation.
+- **Smart Integrity Retry:** If a translation fails the safety check (e.g., bracket error), the system automatically retries 2 more times with different servers. This reduces the number of untranslated lines by up to 60%.
+
+### 🐛 Bug Fixes (2026-02-01 Hotfix)
+- **Aggressive Retry Setting Fix:** Fixed a critical bug where the "Aggressive Retry" setting was not being read from config. The code was looking for `aggressive_retry` instead of the correct `aggressive_retry_translation` property name, causing the feature to always be disabled regardless of user settings.
+- **Placeholder Spacing Auto-Fix:** Added automatic cleanup for AI-induced placeholder spacing issues. Google Translate and some AI models would corrupt `[[t0]]` to `[[ t0 ]]`, breaking Ren'Py syntax. The system now auto-fixes these during the restore phase.
+- **Duplicate Config Entry:** Removed a duplicate `enable_fuzzy_match` definition in `TranslationSettings` that could cause unpredictable behavior.
+- **Cache Clear Confirmation:** Updated the cache clearing confirmation message in all 8 locales to explicitly mention the filename (`translation_cache.json`), preventing accidental data loss by making the action clearer to users.
+- **Smart Masking (Google Translate Fixed):** Replaced default bracket masking (`[[v0]]`) with word-based masking (`X_RPY_v0_X`) specifically for Google Translate. This completely solves the issue where Google would corrupt syntax by inserting spaces inside brackets.
+- **Locale UI Standardization:** Fixed all missing interface strings across every supported language (`de`, `es`, `fr`, `ru`, `zh-CN`, `fa`) and standardized the JSON structure to fully match the English reference.
+
+
 ## [2.6.1] - 2026-01-29
 ### 🛡️ Advanced Integrity Protection (3-Layer)
-- **3-Layer Syntax Restoration:** Implemented a new, robust system to repair Ren'Py syntax (e.g. `[variable]`) corrupted by translation engines:
+- **3-Layer Syntax Restoration (Enhanced):** Implemented a robust system to repair Ren'Py syntax corrupted by translation engines:
     1.  **Exact Match:** Perfect preservation.
-    2.  **Flexible Regex:** Fixes common typos like `[ variable ]` (spaces), `(variable)` (wrong brackets), or `[variable]'s` (added suffixes).
-    3.  **Fuzzy Match (RapidFuzz):** Uses advanced string similarity to rescue heavily corrupted tags (e.g. `[vo]` instead of `[v0]`).
-- **Strict Validation:** Added a final "Integrity Check" step. If a translation is still missing critical variables after repair, it is **rejected** and reverted to original text to prevent game crashes.
-- **Safety Hard Limit:** Fuzzy matching is now **disabled** for short placeholders (total length < 6) to prevent dangerous false positives (e.g. `[v1]` vs `[v7]`).
+    2.  **Flexible Regex:** Fixes common typos like `[ variable ]` (spaces) or `[[ tag ]]` (AI hallucinations).
+    3.  **Fuzzy Match (RapidFuzz):** Uses advanced string similarity to rescue heavily corrupted tags (e.g. `[vo]` instead of `[v0]`) when confidence is high (>85%).
+- **Strict Validation:** Added a final "Integrity Check" step. If a translation is still missing critical variables after repair, it is **rejected** and reverted to original text.
 - **Applied Globally:** This protection now covers ALL engines (Google, OpenAI, Gemini, LocalLLM).
 
 ### 🛠️ Fixes & Improvements

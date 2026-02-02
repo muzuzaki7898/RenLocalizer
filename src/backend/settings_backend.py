@@ -308,7 +308,7 @@ class SettingsBackend(QObject):
     
     @pyqtSlot(result=str)
     def getGeminiModel(self) -> str:
-        return self.config.translation_settings.gemini_model or "gemini-pro"
+        return self.config.translation_settings.gemini_model or "gemini-2.5-flash"
     
     @pyqtSlot(str)
     def setGeminiModel(self, model: str):

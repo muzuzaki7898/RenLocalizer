@@ -17,205 +17,14 @@ from collections import OrderedDict, deque, Counter
 import random
 
 
-# Ren'Py değişken ve tag koruma regex'leri
-# [variable], [player], [lang_lady] gibi interpolation değişkenleri
-RENPY_VAR_PATTERN = re.compile(r'\[([^\[\]]+)\]')
-# {tag}, {i}, {b}, {color=#fff} gibi text tag'leri
-RENPY_TAG_PATTERN = re.compile(r'\{([^\{\}]+)\}')
-# {{escaped}} çift parantez
-RENPY_ESCAPED_PATTERN = re.compile(r'\{\{|\}\}')
-# ?V000? / ?T000? / ?F000? gibi runtime placeholder'lar
-RENPY_QMARK_PLACEHOLDER_RE = re.compile(r'\?[A-Za-z]\d{3}\?')
-# ⟦V000⟧ gibi açılı parantez placeholder'lar
-RENPY_ANGLE_PLACEHOLDER_RE = re.compile(r'\u27e6[^\u27e7]+\u27e7')
-
-# Ren'Py syntax protection regexes
-PROTECT_RE = re.compile(
-    r'(\{\{|\}\}|\{[^\}]+\}|\[[^\[\]]+\]|'
-    r'\?[A-Za-z]\d{3}\?|'
-    r'\u27e6[^\u27e7]+\u27e7)'
+from .syntax_guard import (
+    protect_renpy_syntax,
+    restore_renpy_syntax,
+    validate_translation_integrity,
+    RENPY_VAR_PATTERN,
+    RENPY_TAG_PATTERN
 )
-
-# Agresif bozulma temizliği için şablon
-# [ [ v 0 ] ], [[V 0]], [[ v0]] gibi durumları yakalamak için
-CLEANUP_RE = re.compile(r'\[\s*\[\s*([vteg])\s*(\d+)\s*\]\s*\]', re.IGNORECASE)
-
-
-def protect_renpy_syntax(text: str) -> Tuple[str, Dict[str, str]]:
-    """
-    Ren'Py değişkenlerini ve tag'lerini çeviriden korur.
-    Placeholder'larla değiştirir ve geri dönüşüm sözlüğü döner.
-    """
-    # Single-pass scanning to avoid nested replacement collisions.
-    placeholders: Dict[str, str] = {}
-    counter = 0
-
-    out_parts: List[str] = []
-    last = 0
-    for m in PROTECT_RE.finditer(text):
-        start, end = m.start(), m.end()
-        # Append text between matches
-        out_parts.append(text[last:start])
-        token = m.group(0)
-        if token in ('{{', '}}'):
-            prefix = 'e'  # escaped
-        elif token.startswith('{') and token.endswith('}'):
-            prefix = 't'  # tag
-        else:
-            prefix = 'v'  # variable
-        key = f" [[{prefix}{counter}]] "  # Etrafına boşluk ekle (Tampon)
-        placeholders[key.strip()] = token
-        out_parts.append(key)
-        counter += 1
-        last = end
-    out_parts.append(text[last:])
-    protected = ''.join(out_parts)
     
-    # Fazla boşlukları temizle (isteğe bağlı ama temizlik iyidir)
-    # protected = re.sub(r'\s{2,}', ' ', protected)
-
-    return protected, placeholders
-
-
-
-
-
-def restore_renpy_syntax(text: str, placeholders: Dict[str, str], config_manager=None) -> str:
-    """
-    Placeholder'ları orijinal değerleriyle değiştirir.
-    
-    Aşamalar:
-    1. Tam Eşleşme (Exact Match)
-    2. Esnek Regex (Flexible Regex) - Boşluk, tek parantez vb.
-    3. Bulanık Eşleşme (Fuzzy Match) - rapidfuzz ile %85+ benzerlik (YENİ)
-    """
-    if not text or not placeholders:
-        return text
-    
-    result = text
-    
-    # Kalan (henüz restore edilmemiş) placeholder'ları takip et
-    # Başlangıçta hepsi restore edilmeyi bekliyor
-    remaining_placeholders = placeholders.copy()
-    
-    # --- AŞAMA 1: Tam Eşleşme ---
-    # Sort by length to process v10 before v1
-    sorted_ph = sorted(remaining_placeholders.items(), key=lambda x: len(x[0]), reverse=True)
-    
-    for ph, original in sorted_ph:
-        if ph in result:
-            result = result.replace(ph, original)
-            if ph in remaining_placeholders:
-                del remaining_placeholders[ph]
-                
-    if not remaining_placeholders:
-        return result
-
-    # --- AŞAMA 2: Esnek Regex ---
-    # Hala bulunamayanlar için
-    sorted_remaining = sorted(remaining_placeholders.items(), key=lambda x: len(x[0]), reverse=True)
-    
-    for ph, original in sorted_remaining:
-        match = re.search(r'([vteg]\d+)', ph)
-        if not match: continue
-        core_id = match.group(1)
-        
-        # Regex: [ v0 ], (v0), [v0]'dan
-        pattern_str = (
-            r'(?:\[|\()+[\s]*' + re.escape(core_id) + r'[\s]*(?:\]|\))+' +
-            r"(?:'[\w]+)?" + r"[\s\]]*"
-        )
-        pattern = re.compile(pattern_str, re.IGNORECASE)
-        
-        if pattern.search(result):
-            # Regex ile bulduk ve değiştirdik
-            result = pattern.sub(original, result)
-            if ph in remaining_placeholders:
-                del remaining_placeholders[ph]
-
-    if not remaining_placeholders:
-        return result
-
-    # --- AŞAMA 3: Bulanık Eşleşme (Fuzzy Recovery) ---
-    # Bu aşama ağır olabilir, kullanıcı isteğine bağlı (varsayılan: True)
-    enable_fuzzy = True
-    if config_manager:
-        enable_fuzzy = getattr(config_manager.translation_settings, 'enable_fuzzy_match', True)
-    
-    if not enable_fuzzy:
-        return result
-    
-    # GÜVENLİK: Kısa değişkenlerde (örn: v0, v1, x) fuzzy eşleşme yapma! Çok riskli.
-
-    try:
-        from rapidfuzz import process, fuzz
-        
-        # Metindeki potansiyel "bozuk" etiketleri bul
-        # Köşeli parantez veya süslü parantez içindeki kısa metinler
-        candidates = re.findall(r'(?:\[|\{)[^\[\]\{\}]+(?:\]|\})', result)
-        
-        if candidates:
-            for ph, original in list(remaining_placeholders.items()):
-                # Placeholder'ın özü (örn: "v0") çok kısaysa fuzzy yapma
-                # "[v0]" -> uzunluk 4. İçi "v0" -> uzunluk 2.
-                # En az 3 karakterli içerik veya toplam 5 karakter gerekli.
-                if len(ph) < 6: # "[val1]" gibi şeyler en az 6 char eder
-                     continue
-
-                # En iyi eşleşmeyi bul
-                match_result = process.extractOne(
-                    ph, candidates, scorer=fuzz.ratio, score_cutoff=85
-                )
-                
-                if match_result:
-                    best_match, score, _ = match_result
-                    # Eğer yeterince benziyorsa (örn %85), değiştir
-                    # Ancak best_match'in zaten restore edilmiş bir şey olmadığından emin olmalıyız
-                    # (Gerçi original değerler genellikle uzun/farklıdır ama kontrol edelim)
-                    
-                    # Güvenlik kontrolü: best_match gerçekten bir placeholder mı?
-                    # "b" vs "v" karışıklığı, "0" vs "o" karışıklığı vb.
-                    
-                    # Değiştir
-                    result = result.replace(best_match, original)
-                    # Aday listesinden çıkar ki tekrar kullanılmasın
-                    if best_match in candidates:
-                        candidates.remove(best_match)
-                        
-    except ImportError:
-        pass # rapidfuzz yoksa bu aşamayı atla
-    except Exception as e:
-        # Fuzzy sırasında hata olursa (nadir), sessizce devam et, log basılabilir
-        pass
-
-    return result
-
-
-def validate_translation_integrity(restored_text: str, placeholders: Dict[str, str]) -> List[str]:
-    """
-    2. AŞAMA KORUMA: Çeviri sonrası bütünlük doğrulaması.
-    
-    Restore edilen metinde, orijinal değişkenlerin (placeholder value'larının)
-    eksiksiz bulunup bulunmadığını kontrol eder.
-    
-    Returns:
-        List[str]: Eksik veya bozuk olan orijinal değişkenlerin listesi. Liste boşsa doğrulama BAŞARILI.
-    """
-    missing_items = []
-    
-    # Basit kontrol: Her unique orijinal değer çeviride en az bir kez geçmeli.
-    for _, original_tag in placeholders.items():
-        if original_tag not in restored_text:
-            # Toleranslı kontrol (boşluksuz)
-            clean_tag = original_tag.replace(" ", "")
-            clean_text = restored_text.replace(" ", "")
-            
-            if clean_tag not in clean_text:
-                missing_items.append(original_tag)
-    
-    return missing_items
-
-
 class TranslationEngine(Enum):
     GOOGLE = "google"
     DEEPL = "deepl"
@@ -471,7 +280,9 @@ class GoogleTranslator(BaseTranslator):
         """Translate single text with multi-endpoint + Lingva fallback."""
         
         # Ren'Py değişkenlerini ve tag'lerini koru
-        protected_text, placeholders = protect_renpy_syntax(request.text)
+        # Google Translate için 'Kelime Bazlı' (Safe Mode) maskeleme kullanıyoruz
+        # Çünkü parantezli yapıyı ([[v0]]) bozabiliyor.
+        protected_text, placeholders = protect_renpy_syntax(request.text, use_safe_tag=True)
         
         params = {'client':'gtx','sl':request.source_lang,'tl':request.target_lang,'dt':'t','q':protected_text}
         
@@ -532,15 +343,48 @@ class GoogleTranslator(BaseTranslator):
                             t.cancel()
                     
                     # Check if translation is unchanged (same as original)
-                    final_text = restore_renpy_syntax(result, placeholders, self.config_manager)
+                    fuzzy_enabled = self.config_manager.translation_settings.enable_fuzzy_match if self.config_manager else True
+                    final_text = restore_renpy_syntax(result, placeholders, fuzzy_enabled)
                     
                     # 2. AŞAMA KORUMA (Validation - Global)
                     missing_vars = validate_translation_integrity(final_text, placeholders)
                     if missing_vars:
-                         self.logger.warning(f"Integrity check failed (Google Multi): Missing {missing_vars}. Reverting to original.")
-                         final_text = request.text
-                    
-                    # If translation equals original and aggressive_retry is enabled, try alternative methods
+                         self.logger.warning(f"Integrity check failed (Google Multi): {missing_vars}. Retrying (2 attempts)...")
+                         retry_success = False
+                         for _ in range(2):
+                             await asyncio.sleep(0.2)
+                             retry_res = await try_endpoint(self._get_next_endpoint())
+                             if retry_res:
+                                 retry_text = restore_renpy_syntax(retry_res, placeholders, fuzzy_enabled)
+                                 if not validate_translation_integrity(retry_text, placeholders):
+                                     final_text = retry_text
+                                     retry_success = True
+                                     break
+                         
+                         if not retry_success:
+                             self.logger.warning("Integrity retries failed (Multi). Trying Lingva fallback as last resort...")
+                             # FORCE LINGVA FALLBACK
+                             lingva_success = False
+                             if self.enable_lingva_fallback:
+                                 try:
+                                     lingva_result = await self._translate_via_lingva(
+                                         protected_text, request.source_lang, request.target_lang
+                                     )
+                                     if lingva_result:
+                                         lingva_final = restore_renpy_syntax(lingva_result, placeholders, fuzzy_enabled)
+                                         if not validate_translation_integrity(lingva_final, placeholders):
+                                             final_text = lingva_final
+                                             retry_success = True
+                                             lingva_success = True
+                                             self.logger.info("Lingva rescued the translation!")
+                                 except Exception:
+                                     pass
+                             
+                             if not lingva_success:
+                                 self.logger.warning("All recovery attempts failed. Reverting to original.")
+                                 final_text = request.text
+
+                    # If translation equals original and aggressive_retry is enabled
                     if self.aggressive_retry and final_text.strip() == request.text.strip():
                         self.logger.debug(f"Translation unchanged, retrying with Lingva: {request.text[:50]}")
                         
@@ -551,7 +395,7 @@ class GoogleTranslator(BaseTranslator):
                                     protected_text, request.source_lang, request.target_lang
                                 )
                                 if lingva_result:
-                                    lingva_final = restore_renpy_syntax(lingva_result, placeholders, self.config_manager)
+                                    lingva_final = restore_renpy_syntax(lingva_result, placeholders, fuzzy_enabled)
                                     
                                     # Validation for Lingva
                                     if validate_translation_integrity(lingva_final, placeholders):
@@ -569,7 +413,7 @@ class GoogleTranslator(BaseTranslator):
                             alt_endpoint = self._get_next_endpoint()
                             alt_result = await try_endpoint(alt_endpoint)
                             if alt_result:
-                                alt_final = restore_renpy_syntax(alt_result, placeholders, self.config_manager)
+                                alt_final = restore_renpy_syntax(alt_result, placeholders, fuzzy_enabled)
                                 
                                 # INTEGRITY CHECK
                                 if validate_translation_integrity(alt_final, placeholders):
@@ -584,7 +428,8 @@ class GoogleTranslator(BaseTranslator):
                             await asyncio.sleep(0.3)
                         
                         # All retries failed, return the unchanged text with lower confidence
-                        self.logger.warning(f"Translation unchanged after retries: {request.text[:50]}")
+                        # This is often expected for names, interjections, etc. - use DEBUG level
+                        self.logger.debug(f"Translation unchanged after retries: {request.text[:50]}")
                     
                     return TranslationResult(
                         request.text, final_text, request.source_lang, request.target_lang,
@@ -594,13 +439,46 @@ class GoogleTranslator(BaseTranslator):
             # Single endpoint mode
             result = await try_endpoint(self._get_next_endpoint())
             if result:
-                final_text = restore_renpy_syntax(result, placeholders, self.config_manager)
+                fuzzy_enabled = self.config_manager.translation_settings.enable_fuzzy_match if self.config_manager else True
+                final_text = restore_renpy_syntax(result, placeholders, fuzzy_enabled)
                 
                 # 2. AŞAMA KORUMA (Validation - Global)
                 missing_vars = validate_translation_integrity(final_text, placeholders)
                 if missing_vars:
-                     self.logger.warning(f"Integrity check failed (Google Single): Missing {missing_vars}. Reverting.")
-                     final_text = request.text
+                     self.logger.warning(f"Integrity check failed (Google Single): {missing_vars}. Retrying (2 attempts)...")
+                     retry_success = False
+                     for _ in range(2):
+                         await asyncio.sleep(0.2)
+                         retry_res = await try_endpoint(self._get_next_endpoint())
+                         if retry_res:
+                             retry_text = restore_renpy_syntax(retry_res, placeholders, fuzzy_enabled)
+                             if not validate_translation_integrity(retry_text, placeholders):
+                                 final_text = retry_text
+                                 retry_success = True
+                                 break
+                     
+                     if not retry_success:
+                         self.logger.warning("Integrity retries failed (Single). Trying Lingva fallback as last resort...")
+                         # FORCE LINGVA FALLBACK
+                         lingva_success = False
+                         if self.enable_lingva_fallback:
+                             try:
+                                 lingva_result = await self._translate_via_lingva(
+                                     protected_text, request.source_lang, request.target_lang
+                                 )
+                                 if lingva_result:
+                                     lingva_final = restore_renpy_syntax(lingva_result, placeholders, fuzzy_enabled)
+                                     if not validate_translation_integrity(lingva_final, placeholders):
+                                         final_text = lingva_final
+                                         retry_success = True
+                                         lingva_success = True
+                                         self.logger.info("Lingva rescued the translation (Single Mode)!")
+                             except Exception:
+                                 pass
+                         
+                         if not lingva_success:
+                             self.logger.warning("Integrity retries failed (Single). Reverting to original.")
+                             final_text = request.text
                 
                 # Retry if unchanged and aggressive_retry is enabled
                 if self.aggressive_retry and final_text.strip() == request.text.strip():
@@ -612,7 +490,7 @@ class GoogleTranslator(BaseTranslator):
                             protected_text, request.source_lang, request.target_lang
                         )
                         if lingva_result:
-                            lingva_final = restore_renpy_syntax(lingva_result, placeholders, self.config_manager)
+                            lingva_final = restore_renpy_syntax(lingva_result, placeholders, fuzzy_enabled)
                             
                             # Validation
                             if not validate_translation_integrity(lingva_final, placeholders):
@@ -626,7 +504,7 @@ class GoogleTranslator(BaseTranslator):
                     for _ in range(max_unchanged_retries):
                         alt_result = await try_endpoint(self._get_next_endpoint())
                         if alt_result:
-                            alt_final = restore_renpy_syntax(alt_result, placeholders, self.config_manager)
+                            alt_final = restore_renpy_syntax(alt_result, placeholders, fuzzy_enabled)
                             
                             # Validation
                             if validate_translation_integrity(alt_final, placeholders):
@@ -653,10 +531,12 @@ class GoogleTranslator(BaseTranslator):
             
             if lingva_result:
                 # Ren'Py değişkenlerini geri koy
-                final_text = restore_renpy_syntax(lingva_result, placeholders, self.config_manager)
+                fuzzy_enabled = self.config_manager.translation_settings.enable_fuzzy_match if self.config_manager else True
+                final_text = restore_renpy_syntax(lingva_result, placeholders, fuzzy_enabled)
                 
                 # BÜTÜNLÜK KONTROLÜ
-                if placeholders and not self._check_integrity(final_text, placeholders):
+                # validate_translation_integrity returns list of missing vars. If list is not empty, integrity failed.
+                if placeholders and validate_translation_integrity(final_text, placeholders):
                         self.logger.warning(f"Integrity check failed (Lingva): Placeholders missing in translation. Using original text.")
                         final_text = request.text
 
@@ -681,10 +561,11 @@ class GoogleTranslator(BaseTranslator):
                 if data2 and isinstance(data2, list) and data2[0]:
                     text = ''.join(part[0] for part in data2[0] if part and part[0])
                     # Ren'Py değişkenlerini geri koy
-                    final_text = restore_renpy_syntax(text, placeholders, self.config_manager)
+                    fuzzy_enabled = self.config_manager.translation_settings.enable_fuzzy_match if self.config_manager else True
+                    final_text = restore_renpy_syntax(text, placeholders, fuzzy_enabled)
                     
                     # BÜTÜNLÜK KONTROLÜ
-                    if placeholders and not self._check_integrity(final_text, placeholders):
+                    if placeholders and validate_translation_integrity(final_text, placeholders):
                         self.logger.warning(f"Integrity check failed (Fallback): Placeholders missing. Using original text.")
                         final_text = request.text
 
@@ -1640,9 +1521,24 @@ class TranslationManager:
         
         # Cache'den kontrol et
         remaining_indices: List[int] = []
+        
+        # Aggressive Retry Check
+        is_aggressive = False
+        if self.config_manager and hasattr(self.config_manager, 'translation_settings'):
+            is_aggressive = getattr(self.config_manager.translation_settings, 'aggressive_retry_translation', False)
+
         for key, indices in unique_req_map.items():
             cached = await self._cache_get(key)
+            
+            # Check if cache is valid considering Aggressive Retry
+            is_valid_cache = False
             if cached:
+                is_valid_cache = True
+                # If aggressive retry is ON and translation equals original, consider it a miss
+                if is_aggressive and cached.translated_text.strip() == cached.original_text.strip():
+                    is_valid_cache = False
+            
+            if is_valid_cache:
                 self.cache_hits += 1
                 for idx in indices:
                     # Kopyala ki metadata bozulmasın

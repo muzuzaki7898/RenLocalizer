@@ -1,7 +1,5 @@
 # Core GUI Framework
 PyQt6>=6.4.0
-PyQt6-Fluent-Widgets[full]>=1.4.0
-darkdetect>=0.8.0
 
 # HTTP and async support
 aiohttp>=3.8.0
@@ -17,9 +15,12 @@ charset-normalizer>=3.0.0
 openai>=1.0.0
 google-genai>=0.3.0
 
+
+# Packaging
+# packaging>=23.0 (Removed: Used custom parser instead)
+
 # Performance and Matching
 rapidfuzz>=3.0.0
-packaging>=23.0
 
 # Data Management (Excel/CSV)
 pandas>=2.0.0

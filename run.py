@@ -9,6 +9,8 @@ import os
 import sys
 import warnings
 from pathlib import Path
+from src.utils.logger import setup_logger
+from src.version import VERSION
 
 # ============================================================
 # CRITICAL: Disable Qt system theme detection BEFORE any Qt imports
@@ -19,9 +21,23 @@ os.environ["QT_STYLE_OVERRIDE"] = ""  # Disable style override
 
 # ============================================================
 # QML & MATERIAL STYLE SETTINGS
+# Load theme from config if available, otherwise default to Dark
 # ============================================================
+def _get_configured_theme():
+    try:
+        import json
+        config_path = os.path.join(os.getcwd(), "config.json")
+        if os.path.exists(config_path):
+            with open(config_path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+                # app_settings -> theme
+                return data.get("app_settings", {}).get("theme", "Dark")
+    except:
+        pass
+    return "Dark"
+
 os.environ["QT_QUICK_CONTROLS_STYLE"] = "Material"
-os.environ["QT_QUICK_CONTROLS_MATERIAL_THEME"] = "Dark"
+os.environ["QT_QUICK_CONTROLS_MATERIAL_THEME"] = _get_configured_theme()
 os.environ["QT_QUICK_CONTROLS_MATERIAL_ACCENT"] = "Purple"
 
 # ============================================================
@@ -230,6 +246,10 @@ def main() -> int:
     print("=" * 60)
     print("RenLocalizer V2 (Qt Quick Edition) Starting...")
     print("=" * 60)
+
+    # Initialize Secure Logger
+    logger = setup_logger()
+    logger.info(f"RenLocalizer V2 Starting... Version: {VERSION}")
 
     setup_qt_environment()
     

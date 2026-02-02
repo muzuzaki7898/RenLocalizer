@@ -20,8 +20,9 @@ from .translator import (
     BaseTranslator, 
     TranslationRequest, 
     TranslationResult, 
-    TranslationEngine,
-    protect_renpy_syntax,
+    TranslationEngine
+)
+from .syntax_guard import (
     protect_renpy_syntax,
     restore_renpy_syntax,
     validate_translation_integrity
@@ -48,7 +49,17 @@ CRITICAL RULES:
 
     # --- Constants for Batch Processing ---
     BATCH_ITEM_WRAPPER = '<r id="{index}">{text}</r>'
-    BATCH_PARSE_PATTERN = r'<r id="(\d+)">(.*?)</r>'
+    # --- Compiled Regex for Performance ---
+    BATCH_PARSE_RE = re.compile(r'<r id="(\d+)">(.*?)</r>', re.DOTALL)
+    
+    # Common model headers/intros cleanup patterns
+    LOCAL_LLM_CLEANUP_PATTERNS = [
+        re.compile(r'^(Turkish|English|Translation|Çeviri|Output|Result|Here is|Sure|Translated):\s*', re.IGNORECASE | re.MULTILINE),
+        re.compile(r'^.*?çeviriyorum:?\s*', re.IGNORECASE | re.MULTILINE),
+        re.compile(r'^.*?translated text is:?\s*', re.IGNORECASE | re.MULTILINE),
+        re.compile(r'^Text to translate:\s*', re.IGNORECASE | re.MULTILINE)
+    ]
+    
     BATCH_INSTRUCTION_TEMPLATE = (
         "\n\nIMPORTANT: You are processing a BATCH of {count} items.\n"
         "Each item is wrapped in <r id=\"N\"> tags.\n"
@@ -176,7 +187,8 @@ IMPORTANT:
         for attempt in range(max_retries + 1):
             try:
                 translated_content = await self._generate_completion(system_prompt, protected_text)
-                final_text = restore_renpy_syntax(translated_content, placeholders)
+                fuzzy_enabled = self.config_manager.translation_settings.enable_fuzzy_match if self.config_manager else True
+                final_text = restore_renpy_syntax(translated_content, placeholders, fuzzy_enabled)
                 
                 # 2. AŞAMA KORUMA (Validation)
                 missing_vars = validate_translation_integrity(final_text, placeholders)
@@ -198,7 +210,8 @@ IMPORTANT:
                         
                         try:
                             retry_content = await self._generate_completion(aggressive_prompt, protected_text)
-                            retry_final = restore_renpy_syntax(retry_content, placeholders)
+                            fuzzy_enabled = self.config_manager.translation_settings.enable_fuzzy_match if self.config_manager else True
+                            retry_final = restore_renpy_syntax(retry_content, placeholders, fuzzy_enabled)
                             
                             if retry_final.strip() != request.text.strip():
                                 self.emit_log("info", f"Aggressive retry successful after {retry_attempt + 1} attempts")
@@ -335,16 +348,16 @@ IMPORTANT:
                 response_text = await self._generate_completion(system_prompt, user_prompt)
                 
                 # Parse the response (simple regex or tag lookup)
-                import re
                 unique_results_map: Dict[int, TranslationResult] = {}
-                matches = re.finditer(self.BATCH_PARSE_PATTERN, response_text, re.DOTALL)
+                matches = self.BATCH_PARSE_RE.finditer(response_text)
                 
                 found_count = 0
                 for m in matches:
                     u_idx = int(m.group(1)) # This is unique index
                     translated_protected = m.group(2).strip()
                     if 0 <= u_idx < len(unique_requests):
-                        final_text = restore_renpy_syntax(translated_protected, all_placeholders[u_idx])
+                        fuzzy_enabled = self.config_manager.translation_settings.enable_fuzzy_match if self.config_manager else True
+                        final_text = restore_renpy_syntax(translated_protected, all_placeholders[u_idx], fuzzy_enabled)
                         
                         # 2. AŞAMA KORUMA (Validation)
                         missing_vars = validate_translation_integrity(final_text, all_placeholders[u_idx])
@@ -682,20 +695,16 @@ class LocalLLMTranslator(LLMTranslator):
             clean_text = raw_text.strip()
             
             # Remove common model headers/intros (Case insensitive & multiline)
-            patterns = [
-                r'^(Turkish|English|Translation|Çeviri|Output|Result|Here is|Sure|Translated):\s*', 
-                r'^.*?çeviriyorum:?\s*', 
-                r'^.*?translated text is:?\s*',
-                r'^Text to translate:\s*'
-            ]
-            for p in patterns:
-                clean_text = re.sub(p, '', clean_text, flags=re.IGNORECASE | re.MULTILINE)
+            # Remove common model headers/intros (Case insensitive & multiline)
+            for pattern in self.LOCAL_LLM_CLEANUP_PATTERNS:
+                clean_text = pattern.sub('', clean_text)
             
             clean_text = clean_text.split('\n')[0] # Only take the first line (common for single translations)
             clean_text = clean_text.strip(' "«»\'') # Strip quotes and brackets
             
             # Restore
-            final_text = restore_renpy_syntax(clean_text, placeholders)
+            fuzzy_enabled = self.config_manager.translation_settings.enable_fuzzy_match if self.config_manager else True
+            final_text = restore_renpy_syntax(clean_text, placeholders, fuzzy_enabled)
             
             # Last resort: if the model corrupted placeholders or returned empty, use original
             if not final_text or '[[' in final_text and '[[' not in request.text:
@@ -718,7 +727,7 @@ class LocalLLMTranslator(LLMTranslator):
 class GeminiTranslator(LLMTranslator):
     """Translator using Google Gemini API (via new google-genai SDK)."""
 
-    def __init__(self, api_key: str, model: str = "gemini-2.0-flash-exp", safety_level: str = "BLOCK_NONE", 
+    def __init__(self, api_key: str, model: str = "gemini-2.5-flash", safety_level: str = "BLOCK_NONE", 
                  temperature=AI_DEFAULT_TEMPERATURE, timeout=AI_DEFAULT_TIMEOUT, 
                  max_tokens=AI_DEFAULT_MAX_TOKENS, **kwargs):
         super().__init__(api_key, model, temperature=temperature, timeout=timeout, max_tokens=max_tokens, **kwargs)

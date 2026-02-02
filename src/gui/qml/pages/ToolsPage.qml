@@ -197,8 +197,9 @@ Rectangle {
             // Buton (En altta)
             Button {
                 id: actionButton
-                text: busyTimer.running ? "..." : btnText
-                enabled: !busyTimer.running
+                // Use backend.isBusy to disable ALL tools when one is running + local visual timer
+                text: (busyTimer.running || backend.isBusy) ? "..." : btnText
+                enabled: !busyTimer.running && !backend.isBusy
                 Layout.fillWidth: true
                 Layout.alignment: Qt.AlignBottom
                 onClicked: {
@@ -210,7 +211,7 @@ Rectangle {
                 
                 Timer {
                     id: busyTimer
-                    interval: 1500 // 1.5 saniye kilitli kal (görsel tepki için)
+                    interval: 1000 // Short visual feedback only
                     running: false
                 }
                 
