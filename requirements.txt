@@ -35,3 +35,4 @@ fonttools>=4.40.0  # Required for Font Compatibility tool
 
 # Optional/Platform Specific
 uvloop>=0.17.0; sys_platform != "win32"
+Pillow>=10.0.0  # Required for PyInstaller icon processing

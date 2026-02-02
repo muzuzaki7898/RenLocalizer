@@ -104,7 +104,7 @@ exe = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
-    icon='icon.ico'
+    icon=os.path.join(project_dir, 'icon.ico')
 )
 
 # =========================================================
@@ -143,7 +143,7 @@ exe_cli = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
-    icon='icon.ico'
+    icon=os.path.join(project_dir, 'icon.ico')
 )
 
 # =========================================================
