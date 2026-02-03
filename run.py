@@ -12,7 +12,7 @@ from pathlib import Path
 from src.utils.logger import setup_logger
 
 # Default version fallback
-VERSION = "2.6.2"
+VERSION = "2.6.3"
 
 try:
     from src.version import VERSION as _v

@@ -426,6 +426,92 @@ class AppBackend(QObject):
         finally:
             self._set_busy(False)
 
+    @pyqtSlot()
+    def autoInjectFont(self):
+        """Uyumlu fontu otomatik indir ve enjekte et."""
+        if not self._project_path:
+            self.warningMessage.emit(self.config.get_ui_text("warn_title", "Uyarı"), self.config.get_ui_text("select_game_folder", "Lütfen önce oyun klasörünü seçin."))
+            return
+            
+        if self._is_busy: return
+
+        target_lang = self.config.translation_settings.target_language or "turkish"
+        
+        # Kullanıcı onayı gerekebilir ama şimdilik direkt işlem yapılıyor çünkü araçlar menüsünden çağrılacak
+        self.logMessage.emit("info", self.config.get_ui_text("log_font_inject_start", "Auto font injection started for {lang}...").replace("{lang}", target_lang))
+        
+        self._set_busy(True)
+        threading.Thread(target=self._run_font_inject_thread, args=(target_lang, None), daemon=True).start()
+
+    @pyqtSlot(str)
+    def manualInjectFont(self, font_name: str):
+        """Kullanıcının seçtiği fontu indir ve enjekte et."""
+        if not self._project_path:
+            self.warningMessage.emit(self.config.get_ui_text("warn_title", "Uyarı"), self.config.get_ui_text("select_game_folder", "Lütfen önce oyun klasörünü seçin."))
+            return
+            
+        if self._is_busy: return
+        
+        if not font_name:
+            return
+
+        target_lang = self.config.translation_settings.target_language or "turkish"
+        
+        self.logMessage.emit("info", self.config.get_ui_text("log_font_inject_start", "Starting font injection...").replace("{lang}", f"{target_lang} ({font_name})"))
+        
+        self._set_busy(True)
+        threading.Thread(target=self._run_font_inject_thread, args=(target_lang, font_name), daemon=True).start()
+
+    @pyqtSlot(result=list)
+    def getGoogleFontsList(self) -> list:
+        """Kullanılabilir Google fontlarını döndür."""
+        try:
+            from src.utils.font_injector import FontInjector
+            injector = FontInjector()
+            return injector.get_available_fonts()
+        except Exception:
+            return ["Roboto", "Noto Sans", "Open Sans"] # Fallback
+
+    def _run_font_inject_thread(self, lang, force_font=None):
+        try:
+            from src.utils.font_injector import FontInjector
+            injector = FontInjector()
+            
+            # Proje yolunu al (eğer dosya ise klasöre çevir)
+            base_dir = self._project_path
+            if os.path.isfile(base_dir):
+                base_dir = os.path.dirname(base_dir)
+            
+            # İşlemi yap (force_font parametresiyle)
+            result = injector.inject_font(base_dir, lang, force_font_family=force_font)
+            
+            # Localization logic
+            # result['ui_key'] is the translation key
+            # result['ui_args'] are the parameters for python .format()
+            ui_key = result.get("ui_key", "log_font_inject_error")
+            ui_args = result.get("ui_args", {})
+            fallback_msg = result.get("message", "An error occurred")
+            
+            # Get template from config using the key
+            msg_template = self.config.get_ui_text(ui_key, fallback_msg)
+            
+            # Format the message (safely)
+            try:
+                final_msg = msg_template.format(**ui_args)
+            except Exception as e:
+                # Fallback if format fails (missing keys in json or args)
+                final_msg = fallback_msg + f" (Loc err: {e})"
+
+            if result["success"]:
+                self.logMessage.emit("success", final_msg)
+            else:
+                self.logMessage.emit("error", final_msg)
+                
+        except Exception as e:
+            self.logMessage.emit("error", f"Font injection critical error: {str(e)}")
+        finally:
+            self._set_busy(False)
+
     @pyqtSlot(str, result=str)
     def healthCheck(self, path: str) -> str:
         """Oyun sağlığını kontrol et."""
@@ -473,7 +559,7 @@ class AppBackend(QObject):
         self.config.app_settings.last_input_directory = path
         self._project_path = path  # Update internal state
         self.config.save_config()
-        self.logMessage.emit("info", f"Project path set to: {path}")
+        self.logMessage.emit("info", self.config.get_log_text("log_project_path_set", path=path))
 
         # Validate
         project_dir = os.path.dirname(path) if os.path.isfile(path) else path
@@ -493,7 +579,7 @@ class AppBackend(QObject):
         self._selected_engine = engine
         self.config.translation_settings.selected_engine = engine
         self.config.save_config()
-        self.logMessage.emit("info", f"Engine selected: {engine}")
+        self.logMessage.emit("info", self.config.get_log_text("log_engine_selected", engine=engine))
         
         # Trigger async initialization
         self.update_translation_engine()
@@ -531,12 +617,12 @@ class AppBackend(QObject):
                 self._setup_engine(engine_enum, use_proxy)
                 
                 # Success
-                self.logMessage.emit("info", f"Engine initialized: {engine_str}")
+                self.logMessage.emit("info", self.config.get_log_text("log_engine_initialized", engine=engine_str))
             except Exception as e:
                 self.logger.error(f"Error initializing engine {engine_str}: {e}")
                 import traceback
                 traceback.print_exc()
-                self.logMessage.emit("error", f"Engine initialization failed: {str(e)}")
+                self.logMessage.emit("error", self.config.get_log_text("log_engine_init_failed", error=str(e)))
             finally:
                 # Reset state on main thread
                 # Since we are in a thread, we should ideally use QMetaObject.invokeMethod, 
@@ -550,11 +636,15 @@ class AppBackend(QObject):
     def setSourceLanguage(self, lang: str):
         """Kaynak dili ayarla."""
         self._source_language = lang
+        self.config.translation_settings.source_language = lang
+        self.config.save_config()
     
     @pyqtSlot(str)
     def setTargetLanguage(self, lang: str):
         """Hedef dili ayarla."""
         self._target_language = lang
+        self.config.translation_settings.target_language = lang
+        self.config.save_config()
         # Reload cache for the new language (Async to avoid UI freeze)
         self._update_cache_path_async()
 
@@ -727,16 +817,67 @@ class AppBackend(QObject):
                 return
 
             self.logMessage.emit("info", self.config.get_ui_text("log_hook_configuring"))
-            hook_content = """# RenLocalizer Runtime Hook
-# Generated automatically to ensure translations are loaded correctly.
-# This file forces Ren'Py to prioritize your custom translations.
+            
+            # Hedef dili al
+            target_lang = self.config.translation_settings.target_language or "turkish"
+            # ISO -> Ren'Py native (örn: "tr" -> "turkish")
+            from src.core.translation_pipeline import RENPY_TO_API_LANG
+            reverse_lang_map = {v.lower(): k for k, v in RENPY_TO_API_LANG.items()}
+            renpy_lang = reverse_lang_map.get(target_lang.lower(), target_lang)
+            
+            # Ren'Py dokümantasyonuna uygun Runtime Hook içeriği
+            hook_content = f'''# RenLocalizer Runtime Translation Hook
+# This script forces translation lookup for all text displayed by Ren'Py,
+# solving issues where developers missed the !t flag on interpolated strings.
+# Press Shift+L to manually switch to the translated language.
+# Generated by RenLocalizer.
 
-init -999 python:
-    # Force language if not set
-    if _preferences.language is None:
-        _preferences.language = "english"
-"""
-            hook_path = os.path.join(game_dir, "zzz_renlocalizer_hook.rpy")
+# Set default language at first run (before init blocks)
+define config.default_language = "{renpy_lang}"
+
+init 1501 python:
+    # =========================================================================
+    # LANGUAGE HOTKEY: Shift+L
+    # =========================================================================
+    def _renlocalizer_switch_lang():
+        target = "{renpy_lang}"
+        renpy.change_language(target)
+        persistent.renlocalizer_target_lang = target
+        renpy.notify("RenLocalizer: Language → {renpy_lang.title()}")
+        renpy.restart_interaction()
+
+    # Register Shift+L as language toggle
+    config.underlay.append(renpy.Keymap(shift_K_l=_renlocalizer_switch_lang))
+
+    # =========================================================================
+    # RUNTIME TEXT TRANSLATION HOOK
+    # =========================================================================
+    # IMPORTANT: Only use config.replace_text, NOT config.say_menu_text_filter
+    # say_menu_text_filter runs BEFORE translation, so translate_string won't work.
+    # replace_text runs AFTER substitutions, which is the correct place.
+    
+    # Save original replacer if it exists and hasn't been wrapped yet
+    if not hasattr(store, '_renlocalizer_old_replace_text'):
+        if hasattr(config, 'replace_text') and config.replace_text:
+            store._renlocalizer_old_replace_text = config.replace_text
+        else:
+            store._renlocalizer_old_replace_text = lambda s: s
+
+    def _renlocalizer_force_translate(s):
+        # 1. Run original game filters first
+        s = store._renlocalizer_old_replace_text(s)
+        # 2. Force Ren'Py translation lookup (only if string exists)
+        if s:
+            translated = renpy.translate_string(s)
+            # Only use translated version if it's actually different
+            if translated and translated != s:
+                return translated
+        return s
+
+    # Install ONLY the replace_text hook (runs AFTER native translation)
+    config.replace_text = _renlocalizer_force_translate
+'''
+            hook_path = os.path.join(game_dir, "zzz_renlocalizer_runtime.rpy")
             self.logMessage.emit("info", self.config.get_log_text("log_hook_writing", filename=os.path.basename(hook_path)))
             
             with open(hook_path, "w", encoding="utf-8") as f:
@@ -937,7 +1078,7 @@ init -999 python:
         if not manual and not self.config.app_settings.check_for_updates:
             return
 
-        self.logMessage.emit("info", "Checking for updates...")
+        self.logMessage.emit("info", self.config.get_ui_text("update_checking", "Checking for updates..."))
         threading.Thread(target=self._check_updates_thread, args=(manual,), daemon=True).start()
 
     def _check_updates_thread(self, manual: bool):
@@ -946,7 +1087,7 @@ init -999 python:
             result = check_for_updates(self._version)
             
             if result.update_available:
-                self.logMessage.emit("success", f"Update available: {result.latest_version}")
+                self.logMessage.emit("success", self.config.get_log_text("log_update_available", version=result.latest_version))
                 # Emit update signal: current, latest, url
                 self.updateAvailable.emit(
                     result.current_version,

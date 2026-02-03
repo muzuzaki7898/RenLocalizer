@@ -111,7 +111,7 @@ class TranslationSettings:
     target_language: str = "tr"
     max_concurrent_threads: int = 32
     request_delay: float = 0.1
-    max_batch_size: int = 200  # Balanced batch size for most projects
+    max_batch_size: int = 100  # Default batch size (user adjustable, lower = more stable)
     enable_proxy: bool = False  # Disabled by default
     max_retries: int = 3
     timeout: int = 30
@@ -140,7 +140,10 @@ class TranslationSettings:
     translate_define_strings: bool = False  # define statements ile tanımlanan stringler
     
     # Advanced Syntax Guard Settings
-    enable_fuzzy_match: bool = True  # Enable/Disable RapidFuzz logic
+    # DEPRECATED: Fuzzy match özelliği v2.5.1+ sürümlerinde kaldırıldı
+    # XRPYX placeholder formatı fuzzy matching'e ihtiyaç duymuyor
+    # Bu ayar sadece geriye dönük uyumluluk için tutuluyor, UI'da gösterilmiyor
+    enable_fuzzy_match: bool = False
     # Deep Scan: Normal pattern'lerin kaçırdığı gizli stringleri bul
     # init python bloklarındaki dictionary'ler, değişken atamaları vb.
     enable_deep_scan: bool = True  # Varsayılan artık açık (gizli string taraması)
@@ -182,6 +185,10 @@ class TranslationSettings:
     force_runtime_translation: bool = False  # Oyun içi metinleri zorla çevir (eksik !t flagleri için)
     # Debug/Development settings
     show_debug_engines: bool = False  # Pseudo-Localization gibi debug motorlarını ana listede göster
+    # NEW: HTML Wrap Protection (v2.6.3) - translate="no" attribute protection
+    # Default: False - Ücretsiz Google endpoint'leri HTML modunu tam desteklemiyor
+    # Kullanıcı ayarlardan açabilir (experimental)
+    use_html_protection: bool = False
 
 @dataclass
 class ApiKeys:

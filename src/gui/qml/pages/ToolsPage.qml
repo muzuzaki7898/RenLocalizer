@@ -60,6 +60,24 @@ Rectangle {
                     onClicked: backend.runFontCheck()
                 }
 
+                // --- Otomatik Font Enjeksiyonu ---
+                ToolCard {
+                    title: "🅰️ " + (backend.uiTrigger, backend.getTextWithDefault("font_injector_title", "Otomatik Font Düzeltici"))
+                    desc: (backend.uiTrigger, backend.getTextWithDefault("font_injector_desc", "Seçilen dil için uyumlu fontu indir ve oyuna entegre et (Kare karakterleri çözümler)."))
+                    icon: "🪄"
+                    btnText: (backend.uiTrigger, backend.getTextWithDefault("btn_fix_now", "Onar"))
+                    onClicked: backend.autoInjectFont()
+                }
+
+                // --- Manuel Font Seçimi (YENİ) ---
+                ToolCard {
+                    title: "🔠 " + (backend.uiTrigger, backend.getTextWithDefault("font_manual_title", "Manuel Font Seçimi"))
+                    desc: (backend.uiTrigger, backend.getTextWithDefault("font_manual_desc", "Otomatik eşleşme yerine listeden istediğiniz bir Google Fontunu seçip indirebilirsiniz."))
+                    icon: "📑"
+                    btnText: (backend.uiTrigger, backend.getTextWithDefault("btn_open", "Seç"))
+                    onClicked: manualFontDialog.open()
+                }
+
                 // --- Runtime Hook Oluşturucu ---
                 ToolCard {
                     title: "🪝 " + (backend.uiTrigger, backend.getTextWithDefault("tool_runtime_hook_title", "Runtime Hook Oluşturucu"))
@@ -74,7 +92,7 @@ Rectangle {
                     title: (backend.uiTrigger, backend.getTextWithDefault("pseudo_engine_name", "Sözde Çeviri (Test)"))
                     desc: (backend.uiTrigger, backend.getTextWithDefault("pseudo_desc", "Test amaçlı rastgele karakterlerle çeviri yap (UI taşmalarını görmek için)."))
                     icon: "🧪"
-                     btnText: (backend.uiTrigger, backend.getTextWithDefault("start", "Başlat"))
+                    btnText: (backend.uiTrigger, backend.getTextWithDefault("start", "Başlat"))
                     onClicked: {
                         backend.setEngine("pseudo")
                         backend.startTranslation()
@@ -88,6 +106,49 @@ Rectangle {
                     icon: "🌐"
                     btnText: (backend.uiTrigger, backend.getTextWithDefault("btn_select_and_start", "Klasör Seç ve Başlat"))
                     onClicked: tlDialog.open()
+                }
+            }
+        }
+    }
+
+    // Manuel Font Diyaloğu
+    Dialog {
+        id: manualFontDialog
+        title: (backend.uiTrigger, backend.getTextWithDefault("font_manual_title", "Manuel Font Seçimi"))
+        anchors.centerIn: parent
+        modal: true
+        width: 400
+        
+        background: Rectangle { color: root.cardBackground; radius: 12; border.color: root.borderColor }
+        header: Label { text: (backend.uiTrigger, backend.getTextWithDefault("font_manual_title", "Manuel Font Seçimi")); padding: 20; font.bold: true; color: root.mainTextColor; font.pixelSize: 18 }
+        
+        contentItem: ColumnLayout {
+            spacing: 15
+            Label { 
+                text: (backend.uiTrigger, backend.getTextWithDefault("font_manual_desc", "Listeden bir font seçin:")); 
+                color: root.secondaryTextColor; 
+                wrapMode: Text.Wrap; 
+                Layout.fillWidth: true 
+            }
+            
+            ComboBox {
+                id: manualFontCombo
+                Layout.fillWidth: true
+                model: backend.getGoogleFontsList()
+                editable: true // Kullanıcı yazarak arayabilsin
+            }
+        }
+        
+        footer: DialogButtonBox {
+            background: Rectangle { color: "transparent" }
+            Button { text: (backend.uiTrigger, backend.getTextWithDefault("btn_cancel", "İptal")); DialogButtonBox.buttonRole: DialogButtonBox.RejectRole; flat: true }
+            Button { 
+                text: (backend.uiTrigger, backend.getTextWithDefault("btn_download_inject", "İndir ve Uygula")); 
+                DialogButtonBox.buttonRole: DialogButtonBox.AcceptRole; 
+                highlighted: true
+                onClicked: {
+                    backend.manualInjectFont(manualFontCombo.currentText)
+                    manualFontDialog.close()
                 }
             }
         }

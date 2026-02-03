@@ -447,6 +447,15 @@ class SettingsBackend(QObject):
         self.config.translation_settings.ai_timeout = value
         self.config.save_config()
 
+    @pyqtSlot(result=bool)
+    def getUseHtmlProtection(self) -> bool:
+        return self.config.translation_settings.use_html_protection
+
+    @pyqtSlot(bool)
+    def setUseHtmlProtection(self, value: bool):
+        self.config.translation_settings.use_html_protection = value
+        self.config.save_config()
+
     @pyqtSlot(result=int)
     def getAIMaxTokens(self) -> int:
         return self.config.translation_settings.ai_max_tokens
@@ -622,16 +631,17 @@ class SettingsBackend(QObject):
         self.config.translation_settings.enable_deep_scan = enabled
         self.config.save_config()
 
+    # DEPRECATED: Fuzzy match no longer used in v2.5.1+ (XRPYX format)
+    # Kept for backward compatibility with old config files
     @pyqtSlot(result=bool)
     def getEnableFuzzyMatch(self) -> bool:
-        """Get enable_fuzzy_match setting."""
-        return getattr(self.config.translation_settings, 'enable_fuzzy_match', True)
+        """Deprecated: Fuzzy match is no longer used."""
+        return False  # Always return False
 
     @pyqtSlot(bool)
     def setEnableFuzzyMatch(self, enabled: bool):
-        """Set enable_fuzzy_match setting."""
-        self.config.translation_settings.enable_fuzzy_match = enabled
-        self.config.save_config()
+        """Deprecated: Fuzzy match is no longer used."""
+        pass  # No-op
 
     @pyqtSlot(result=bool)
     def getEnableRpycReader(self) -> bool:
@@ -673,15 +683,15 @@ class SettingsBackend(QObject):
 
     @pyqtSlot(str, result=bool)
     def getFilter(self, key: str) -> bool:
+        # Fuzzy match is deprecated, always return False
         if key == "fuzzy_match":
-            return getattr(self.config.translation_settings, 'enable_fuzzy_match', True)
+            return False
         return getattr(self.config.translation_settings, f"translate_{key}", True)
 
     @pyqtSlot(str, bool)
     def setFilter(self, key: str, value: bool):
+        # Fuzzy match is deprecated, ignore
         if key == "fuzzy_match":
-            self.config.translation_settings.enable_fuzzy_match = value
-            self.config.save_config()
             return
         setattr(self.config.translation_settings, f"translate_{key}", value)
         self.config.save_config()

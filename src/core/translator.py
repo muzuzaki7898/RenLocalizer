@@ -21,6 +21,8 @@ from .syntax_guard import (
     protect_renpy_syntax,
     restore_renpy_syntax,
     validate_translation_integrity,
+    protect_renpy_syntax_html,
+    restore_renpy_syntax_html,
     RENPY_VAR_PATTERN,
     RENPY_TAG_PATTERN
 )
@@ -219,8 +221,11 @@ class GoogleTranslator(BaseTranslator):
             self.max_slice_chars = getattr(ts, 'max_chars_per_request', 5000)
             self.max_texts_per_slice = getattr(ts, 'max_batch_size', 200)  # Use general batch size for Google
             self.aggressive_retry = getattr(ts, 'aggressive_retry_translation', False)
+            self.use_html_protection = getattr(ts, 'use_html_protection', False)
         else:
             self.aggressive_retry = False
+            self.use_html_protection = False
+            
         # Keep a baseline to restore when proxy adaptasyonu devre dışı
         self._base_multi_q_concurrency = self.multi_q_concurrency
     
@@ -279,12 +284,30 @@ class GoogleTranslator(BaseTranslator):
     async def translate_single(self, request: TranslationRequest) -> TranslationResult:
         """Translate single text with multi-endpoint + Lingva fallback."""
         
-        # Ren'Py değişkenlerini ve tag'lerini koru
-        # Google Translate için 'Kelime Bazlı' (Safe Mode) maskeleme kullanıyoruz
-        # Çünkü parantezli yapıyı ([[v0]]) bozabiliyor.
-        protected_text, placeholders = protect_renpy_syntax(request.text, use_safe_tag=True)
-        
-        params = {'client':'gtx','sl':request.source_lang,'tl':request.target_lang,'dt':'t','q':protected_text}
+        # Ren'Py değişkenlerini koru
+        placeholders = {}
+        if self.use_html_protection:
+            # HTML wrap protection (Zenpy style)
+            protected_text = protect_renpy_syntax_html(request.text)
+            # Add format=html to preserve tags
+            params = {
+                'client':'gtx',
+                'sl':request.source_lang,
+                'tl':request.target_lang,
+                'dt':'t',
+                'q':protected_text,
+                'format':'html'  # IMPORTANT!
+            }
+        else:
+            # Traditional placeholder replacement
+            protected_text, placeholders = protect_renpy_syntax(request.text)
+            params = {
+                'client':'gtx',
+                'sl':request.source_lang,
+                'tl':request.target_lang,
+                'dt':'t',
+                'q':protected_text
+            }
         
         # Try Google endpoints first (parallel race)
         async def try_endpoint(endpoint: str) -> Optional[str]:
@@ -342,12 +365,21 @@ class GoogleTranslator(BaseTranslator):
                         if not t.done():
                             t.cancel()
                     
-                    # Check if translation is unchanged (same as original)
-                    fuzzy_enabled = self.config_manager.translation_settings.enable_fuzzy_match if self.config_manager else True
-                    final_text = restore_renpy_syntax(result, placeholders, fuzzy_enabled)
-                    
+                    # Restore logic based on protection mode
+                    if self.use_html_protection:
+                        final_text = restore_renpy_syntax_html(result)
+                        # HTML modundaysa truncation check yap, integrity zaten HTML ile korunuyor
+                        original_len = len(request.text)
+                        if original_len > 20 and len(final_text) < (original_len * 0.1):
+                             self.logger.warning(f"Potential truncation detected (HTML mode). Original: {original_len}, Final: {len(final_text)}")
+                             # Do NOT revert, let the user see the result.
+                             # final_text = request.text
+                        missing_vars = [] # HTML mode is safe by default
+                    else:
+                        final_text = restore_renpy_syntax(result, placeholders)
+                        missing_vars = validate_translation_integrity(final_text, placeholders)
+
                     # 2. AŞAMA KORUMA (Validation - Global)
-                    missing_vars = validate_translation_integrity(final_text, placeholders)
                     if missing_vars:
                          self.logger.warning(f"Integrity check failed (Google Multi): {missing_vars}. Retrying (2 attempts)...")
                          retry_success = False
@@ -355,7 +387,7 @@ class GoogleTranslator(BaseTranslator):
                              await asyncio.sleep(0.2)
                              retry_res = await try_endpoint(self._get_next_endpoint())
                              if retry_res:
-                                 retry_text = restore_renpy_syntax(retry_res, placeholders, fuzzy_enabled)
+                                 retry_text = restore_renpy_syntax(retry_res, placeholders)
                                  if not validate_translation_integrity(retry_text, placeholders):
                                      final_text = retry_text
                                      retry_success = True
@@ -367,12 +399,18 @@ class GoogleTranslator(BaseTranslator):
                              lingva_success = False
                              if self.enable_lingva_fallback:
                                  try:
+                                     # Lingva may not support HTML format well via URL, so fallback to legacy protection
+                                     if self.use_html_protection:
+                                         lingva_input, lingva_map = protect_renpy_syntax(request.text)
+                                     else:
+                                         lingva_input, lingva_map = protected_text, placeholders
+
                                      lingva_result = await self._translate_via_lingva(
-                                         protected_text, request.source_lang, request.target_lang
+                                         lingva_input, request.source_lang, request.target_lang
                                      )
                                      if lingva_result:
-                                         lingva_final = restore_renpy_syntax(lingva_result, placeholders, fuzzy_enabled)
-                                         if not validate_translation_integrity(lingva_final, placeholders):
+                                         lingva_final = restore_renpy_syntax(lingva_result, lingva_map)
+                                         if not validate_translation_integrity(lingva_final, lingva_map):
                                              final_text = lingva_final
                                              retry_success = True
                                              lingva_success = True
@@ -390,15 +428,21 @@ class GoogleTranslator(BaseTranslator):
                         
                         # Try Lingva fallback for unchanged translations
                         if self.enable_lingva_fallback:
+                            # Prepare Lingva input
+                            if self.use_html_protection:
+                                lingva_input, lingva_map = protect_renpy_syntax(request.text)
+                            else:
+                                lingva_input, lingva_map = protected_text, placeholders
+
                             for retry in range(max_unchanged_retries):
                                 lingva_result = await self._translate_via_lingva(
-                                    protected_text, request.source_lang, request.target_lang
+                                    lingva_input, request.source_lang, request.target_lang
                                 )
                                 if lingva_result:
-                                    lingva_final = restore_renpy_syntax(lingva_result, placeholders, fuzzy_enabled)
+                                    lingva_final = restore_renpy_syntax(lingva_result, lingva_map)
                                     
                                     # Validation for Lingva
-                                    if validate_translation_integrity(lingva_final, placeholders):
+                                    if validate_translation_integrity(lingva_final, lingva_map):
                                         continue # Skip if broken
 
                                     if lingva_final.strip() != request.text.strip():
@@ -413,12 +457,15 @@ class GoogleTranslator(BaseTranslator):
                             alt_endpoint = self._get_next_endpoint()
                             alt_result = await try_endpoint(alt_endpoint)
                             if alt_result:
-                                alt_final = restore_renpy_syntax(alt_result, placeholders, fuzzy_enabled)
-                                
-                                # INTEGRITY CHECK
-                                if validate_translation_integrity(alt_final, placeholders):
-                                     self.logger.warning("Integrity check failed (Retry): Placeholders missing.")
-                                     continue
+                                if self.use_html_protection:
+                                    alt_final = restore_renpy_syntax_html(alt_result)
+                                    # HTML mode is safe implicitly
+                                else:
+                                    alt_final = restore_renpy_syntax(alt_result, placeholders)
+                                    # INTEGRITY CHECK
+                                    if validate_translation_integrity(alt_final, placeholders):
+                                         self.logger.warning("Integrity check failed (Retry): Placeholders missing.")
+                                         continue
                                 
                                 if alt_final.strip() != request.text.strip():
                                     return TranslationResult(
@@ -439,8 +486,7 @@ class GoogleTranslator(BaseTranslator):
             # Single endpoint mode
             result = await try_endpoint(self._get_next_endpoint())
             if result:
-                fuzzy_enabled = self.config_manager.translation_settings.enable_fuzzy_match if self.config_manager else True
-                final_text = restore_renpy_syntax(result, placeholders, fuzzy_enabled)
+                final_text = restore_renpy_syntax(result, placeholders)
                 
                 # 2. AŞAMA KORUMA (Validation - Global)
                 missing_vars = validate_translation_integrity(final_text, placeholders)
@@ -451,7 +497,7 @@ class GoogleTranslator(BaseTranslator):
                          await asyncio.sleep(0.2)
                          retry_res = await try_endpoint(self._get_next_endpoint())
                          if retry_res:
-                             retry_text = restore_renpy_syntax(retry_res, placeholders, fuzzy_enabled)
+                             retry_text = restore_renpy_syntax(retry_res, placeholders)
                              if not validate_translation_integrity(retry_text, placeholders):
                                  final_text = retry_text
                                  retry_success = True
@@ -467,7 +513,7 @@ class GoogleTranslator(BaseTranslator):
                                      protected_text, request.source_lang, request.target_lang
                                  )
                                  if lingva_result:
-                                     lingva_final = restore_renpy_syntax(lingva_result, placeholders, fuzzy_enabled)
+                                     lingva_final = restore_renpy_syntax(lingva_result, placeholders)
                                      if not validate_translation_integrity(lingva_final, placeholders):
                                          final_text = lingva_final
                                          retry_success = True
@@ -490,7 +536,7 @@ class GoogleTranslator(BaseTranslator):
                             protected_text, request.source_lang, request.target_lang
                         )
                         if lingva_result:
-                            lingva_final = restore_renpy_syntax(lingva_result, placeholders, fuzzy_enabled)
+                            lingva_final = restore_renpy_syntax(lingva_result, placeholders)
                             
                             # Validation
                             if not validate_translation_integrity(lingva_final, placeholders):
@@ -504,7 +550,7 @@ class GoogleTranslator(BaseTranslator):
                     for _ in range(max_unchanged_retries):
                         alt_result = await try_endpoint(self._get_next_endpoint())
                         if alt_result:
-                            alt_final = restore_renpy_syntax(alt_result, placeholders, fuzzy_enabled)
+                            alt_final = restore_renpy_syntax(alt_result, placeholders)
                             
                             # Validation
                             if validate_translation_integrity(alt_final, placeholders):
@@ -531,8 +577,7 @@ class GoogleTranslator(BaseTranslator):
             
             if lingva_result:
                 # Ren'Py değişkenlerini geri koy
-                fuzzy_enabled = self.config_manager.translation_settings.enable_fuzzy_match if self.config_manager else True
-                final_text = restore_renpy_syntax(lingva_result, placeholders, fuzzy_enabled)
+                final_text = restore_renpy_syntax(lingva_result, placeholders)
                 
                 # BÜTÜNLÜK KONTROLÜ
                 # validate_translation_integrity returns list of missing vars. If list is not empty, integrity failed.
@@ -561,8 +606,7 @@ class GoogleTranslator(BaseTranslator):
                 if data2 and isinstance(data2, list) and data2[0]:
                     text = ''.join(part[0] for part in data2[0] if part and part[0])
                     # Ren'Py değişkenlerini geri koy
-                    fuzzy_enabled = self.config_manager.translation_settings.enable_fuzzy_match if self.config_manager else True
-                    final_text = restore_renpy_syntax(text, placeholders, fuzzy_enabled)
+                    final_text = restore_renpy_syntax(text, placeholders)
                     
                     # BÜTÜNLÜK KONTROLÜ
                     if placeholders and validate_translation_integrity(final_text, placeholders):
@@ -879,19 +923,37 @@ class GoogleTranslator(BaseTranslator):
 
         total_chars = sum(len(r.text) for r in batch)
 
-        # Küçük batch'ler için separator dene (daha hızlı)
-        if len(batch) <= 25 and total_chars <= 4000:
+        # Separator method dene (daha büyük batch'ler için de)
+        # Limit artırıldı: 50 metin, 8000 karakter
+        if len(batch) <= 50 and total_chars <= 8000:
             result = await self._try_batch_separator(batch)
             if result:
                 return result
+            self.logger.debug(f"Batch separator failed for {len(batch)} texts ({total_chars} chars), falling back to parallel")
 
-        # Separator başarısız veya batch büyük - paralel çeviri
+        # Separator başarısız veya batch çok büyük - paralel çeviri
         self.logger.debug(f"Using parallel translation for {len(batch)} texts")
         return await self._translate_parallel(batch)
     
     async def _try_batch_separator(self, batch: List[TranslationRequest]) -> Optional[List[TranslationResult]]:
         """Try batch translation with separator. Returns None if fails."""
-        combined_text = self.BATCH_SEPARATOR.join(r.text for r in batch)
+        
+        protected_texts = []
+        all_placeholders = []  # Her metin için placeholder sözlüğü
+        
+        use_html = self.use_html_protection
+        
+        for req in batch:
+            if use_html:
+                protected = protect_renpy_syntax_html(req.text)
+                placeholders = {}
+            else:
+                protected, placeholders = protect_renpy_syntax(req.text)
+                
+            protected_texts.append(protected)
+            all_placeholders.append(placeholders)
+        
+        combined_text = self.BATCH_SEPARATOR.join(protected_texts)
         
         params = {
             'client': 'gtx',
@@ -900,6 +962,8 @@ class GoogleTranslator(BaseTranslator):
             'dt': 't',
             'q': combined_text
         }
+        if use_html:
+            params['format'] = 'html'
         query = urllib.parse.urlencode(params)
         
         async def try_endpoint(endpoint: str) -> Optional[List[str]]:
@@ -976,19 +1040,45 @@ class GoogleTranslator(BaseTranslator):
                                 if not t.done():
                                     t.cancel()
                             self.logger.debug(f"Batch-sep success: {len(batch)} texts translated")
-                            return [
-                                TranslationResult(
-                                    original_text=r.text,
-                                    translated_text=t.strip(),
-                                    source_lang=r.source_lang,
-                                    target_lang=r.target_lang,
+                            
+                            # Restore placeholders and validate integrity
+                            final_results = []
+                            for i, (req, translated) in enumerate(zip(batch, result)):
+                                
+                                # Restore logic
+                                if use_html:
+                                    restored = restore_renpy_syntax_html(translated.strip())
+                                    missing = []
+                                else:
+                                    placeholders = all_placeholders[i]
+                                    restored = restore_renpy_syntax(translated.strip(), placeholders)
+                                    missing = validate_translation_integrity(restored, placeholders)
+                                
+                                # Truncation check - çeviri orijinalin %30'undan kısa mı?
+                                # Bu, Google'ın metni kestiğini gösterir
+                                original_len = len(req.text)
+                                restored_len = len(restored)
+                                is_truncated = original_len > 20 and restored_len < (original_len * 0.3)
+                                
+                                # Integrity check (HTML modunda missing zaten boş)
+                                
+                                if missing or is_truncated:
+                                    # Placeholder kayıp veya metin kesilmiş - orijinali kullan
+                                    reason = "truncated" if is_truncated else "integrity"
+                                    self.logger.warning(f"Batch {reason} fail, reverting: {req.text[:40]}...")
+                                    restored = req.text  # Fallback to original
+                                
+                                final_results.append(TranslationResult(
+                                    original_text=req.text,
+                                    translated_text=restored,
+                                    source_lang=req.source_lang,
+                                    target_lang=req.target_lang,
                                     engine=TranslationEngine.GOOGLE,
                                     success=True,
-                                    confidence=0.9,
-                                    metadata=r.metadata
-                                )
-                                for r, t in zip(batch, result)
-                            ]
+                                    confidence=0.9 if not (missing or is_truncated) else 0.0,
+                                    metadata=req.metadata
+                                ))
+                            return final_results
                     except asyncio.CancelledError:
                         raise
                 # Avoid spamming user console; keep detailed info in debug logs only
@@ -1004,34 +1094,38 @@ class GoogleTranslator(BaseTranslator):
             for _ in range(3):
                 result = await try_endpoint(self._get_next_endpoint())
                 if result:
-                    return [
-                        TranslationResult(
-                            original_text=r.text,
-                            translated_text=t.strip(),
-                            source_lang=r.source_lang,
-                            target_lang=r.target_lang,
+                    # Restore placeholders and validate integrity (same as multi-endpoint)
+                    final_results = []
+                    for i, (req, translated) in enumerate(zip(batch, result)):
+                        if use_html:
+                            restored = restore_renpy_syntax_html(translated.strip())
+                            missing = []
+                        else:
+                            placeholders = all_placeholders[i]
+                            restored = restore_renpy_syntax(translated.strip(), placeholders)
+                            missing = validate_translation_integrity(restored, placeholders)
+                        
+                        # Truncation check
+                        original_len = len(req.text)
+                        restored_len = len(restored)
+                        is_truncated = original_len > 20 and restored_len < (original_len * 0.3)
+                        
+                        # missing check (empty in HTML mode)
+                        if missing or is_truncated:
+                            reason = "truncated" if is_truncated else "integrity"
+                            self.logger.warning(f"Batch {reason} fail, reverting: {req.text[:40]}...")
+                            restored = req.text
+                        final_results.append(TranslationResult(
+                            original_text=req.text,
+                            translated_text=restored,
+                            source_lang=req.source_lang,
+                            target_lang=req.target_lang,
                             engine=TranslationEngine.GOOGLE,
                             success=True,
-                            confidence=0.9,
-                            metadata=r.metadata
-                        )
-                        for r, t in zip(batch, result)
-                    ]
-                result = await try_endpoint(self._get_next_endpoint())
-                if result:
-                    return [
-                        TranslationResult(
-                            original_text=r.text,
-                            translated_text=t,
-                            source_lang=r.source_lang,
-                            target_lang=r.target_lang,
-                            engine=TranslationEngine.GOOGLE,
-                            success=True,
-                            confidence=0.9,
-                            metadata=r.metadata
-                        )
-                        for r, t in zip(batch, result)
-                    ]
+                            confidence=0.9 if not (missing or is_truncated) else 0.0,
+                            metadata=req.metadata
+                        ))
+                    return final_results
         
         # Batch separator failed
         return None

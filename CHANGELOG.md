@@ -1,5 +1,54 @@
 # Changelog
 
+## [2.6.3] - 2026-02-03
+### 🛡️ Enhanced Placeholder Recovery & Hook System Fix
+- **Advanced Fuzzy Recovery:** Strengthened the placeholder restoration system to catch more corruption patterns from Google Translate:
+  - `XRPYXXTAG0` (double X) → Now recovered correctly
+  - `XRPYCTAG0` (X→C character swap) → Now recovered correctly
+  - `XRPYXTAG0XRPY` (missing trailing X) → Now recovered correctly
+  - `XRPYXT AG0XRPY` (spaces inserted) → Now recovered correctly
+  - Spaced character patterns like `X R P Y X T A G 0` → Now recovered
+- **Runtime Hook Fix (Ren'Py Compliance):** Fixed critical issue with the runtime translation hook:
+  - Removed `config.say_menu_text_filter` hook (runs BEFORE translation, so `translate_string()` was ineffective)
+  - Now uses ONLY `config.replace_text` (runs AFTER substitutions, correct timing)
+  - Added `define config.default_language` at file-level for proper first-run language setting
+  - Added safety check to only apply translation if actually different from original
+  - **Tools Hook Generator Updated:** The "Runtime Hook Generator" tool now creates the correct `zzz_renlocalizer_runtime.rpy` with proper Ren'Py-compliant hook code
+- **Batch Translation Optimization:** Increased batch separator limits from 25→50 texts and 4000→8000 characters for better throughput
+
+### 🅰️ Font Injection Revolution (Auto & Manual)
+- **Manual Font Selection:** Added a powerful new tool in "Tools & Utils" that allows users to manually select and inject fonts from a curated list of over 80+ popular Google Fonts.
+  - Categories include: Sans Serif, Serif, Display, Handwriting, and Monospace.
+  - Perfect for matching the game's original atmosphere (e.g., using a "Horror" font for horror games).
+- **Runtime Hooking (Bulletproof Font Replacement):** Implemented a "Nuclear Option" using Ren'Py Runtime Hooking. This intercepts the game's internal `get_font` calls, guaranteeing that your selected font is used even if the game developer has hardcoded specific fonts in Python scripts.
+  - Solves the "font didn't change" issue in 99.9% of games.
+  - Zero-crash architecture: Safely handles missing styles.
+- **Smart Google Fonts API:** Switched from the unstable Google Fonts download page to the robust `google-webfonts-helper` API. This solves "Invalid ZIP" errors and ensures reliable downloads every time.
+- **Automatic Language Normalization:** The system now intelligently maps language codes (e.g., `turkish` -> `tr`, `zh-CN` -> `zh`) to find the correct font family automatically.
+- **Full Localization:** All font injection messages and UI elements are now fully localized in 8 languages (`tr`, `en`, `de`, `es`, `fr`, `ru`, `fa`, `zh-CN`).
+
+- **🚨 CRITICAL: Batch Separator Placeholder Protection:** Fixed a major bug where the batch separator method was **not applying placeholder protection at all**. This was the root cause of placeholder corruption in long translations. Now all batch translations go through `protect_renpy_syntax` → translate → `restore_renpy_syntax` → `validate_translation_integrity`. If integrity check fails, the original text is preserved instead of corrupted translation.
+- **Default Batch Size Reduced:** Changed default `max_batch_size` from 200 to 100 for better stability during long translations
+- **Double Percent Protection:** Added `%%` (literal percent sign) to the protected syntax list. This prevents Ren'Py format specifier conflicts when translating strings containing `100%%`
+- **Truncation Detection:** Added a check to detect when Google Translate truncates long text (translation < 30% of original length). Truncated translations are automatically reverted to original text instead of saving incomplete content.
+- **Debug Logging:** Added detailed fallback logs to help diagnose when batch separator method fails
+- **🛡️ HTML Wrap Protection (Experimental):** Implemented an alternative placeholder protection system using `<span translate="no" class="notranslate">` tags. This instructs Google Translate to ignore the content within the tags. **Note:** This feature is marked as experimental because free Google Translate endpoints don't fully support HTML mode. Default: OFF (placeholder system is more reliable). Can be enabled in Settings for testing.
+
+### 🔄 Stability Restoration & Quality Improvements
+- **v2.5.1 System Restoration:** The placeholder and syntax protection logic has been reverted to the v2.5.1 architecture, which has proven to be more stable and reliable.
+- **New Placeholder Format:** Switched to the `XRPYXVAR0XRPYX` format for all translation engines. This "single-word" format is much more resistant to corruption by AI and Google Translate compared to old bracket-based formats.
+- **🆕 Spaced Placeholder Strategy:** Placeholders are now surrounded by spaces before sending to translation API. This helps Google Translate treat them as distinct "words" (like proper nouns) and reduces corruption risk. Extra spaces are automatically cleaned during restoration.
+- **🧠 Smart Hybrid Protection System:** Implemented an intelligent two-tier protection strategy:
+  - **Wrapper tags** (tags that wrap the entire sentence, like `{i}Hello world{/i}`) are safely removed and stored. They're re-added after translation (opening at start, closing at end).
+  - **Partial tags** (mid-sentence tags like `Hello {i}beautiful{/i} world`) are protected with placeholders to preserve their position in the translated text.
+  - **Variables** (`[player_name]`, `[item]`) are protected with spaced placeholders (` XRPYXVAR0XRPYX `).
+  - This approach eliminates wrapper tag corruption while maintaining translation accuracy for partial tags.
+- **Fuzzy Matching Removed:** The RapidFuzz-based "Smart Repair" (Fuzzy Matching) feature in the Syntax Guard module has been removed to eliminate the risk of false-positive matches.
+- **Tolerant Validation:** Integrity check phase is now more flexible; missing or corrupted placeholders now trigger a warning instead of rejecting the entire translation.
+- **AI Prompt Optimization:** System prompts for OpenAI, Gemini, and Local LLMs have been updated to reflect the new placeholder format and rules.
+- **UI Cleanup:** The "Smart Repair (Fuzzy Match)" option has been removed from the Settings page as it is no longer relevant in the new architecture.
+- **Locale Synchronization:** All localization files (`locales/*.json`) have been updated, and deprecated keys have been cleaned up.
+
 ## [2.6.2] - 2026-02-01
 ### 🔧 Gemini Fix & Critical Safety Patch
 - **Gemini Model Update:** Changed the default Gemini model from `gemini-2.0-flash-exp` (experimental) to `gemini-2.5-flash` (latest stable). This resolves issues where the API key would not work due to model access restrictions.

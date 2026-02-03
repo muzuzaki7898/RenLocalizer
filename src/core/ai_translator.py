@@ -39,8 +39,8 @@ class LLMTranslator(BaseTranslator):
 Your task is to translate the given text from {source_lang} to {target_lang}.
 
 CRITICAL RULES:
-1. Preserve all placeholders like [[v0]], [[t1]], [[e2]]. These represent Ren'Py variables and tags.
-2. Do NOT translate or modify the content inside double square brackets [[ ]].
+1. Preserve all placeholders like XRPYXVAR0XRPYX, XRPYXTAG1XRPYX, XRPYXESC2XRPYX. These are protected Ren'Py variables and tags.
+2. Do NOT translate, modify, or add spaces to these XRPYX...XRPYX placeholders.
 3. Maintain the original tone and style of the visual novel.
 4. Return ONLY the translated text. Do NOT add notes, explanations, or quotes.
 5. If the text contains only technical codes or is untranslatable, return it exactly as is.
@@ -151,7 +151,7 @@ IMPORTANT:
 - Unless it is a proper name like "John" or "Tokyo", it MUST be translated.
 - If it contains [brackets], translate AROUND them.
 - Return ONLY the translation, nothing else.
-- Preserve placeholders like [[v0]], [[t1]], [[e2]] exactly as they are."""
+- Preserve placeholders like XRPYXVAR0XRPYX exactly as they are."""
 
     async def translate_single(self, request: TranslationRequest) -> TranslationResult:
         protected_text, placeholders = protect_renpy_syntax(request.text)
@@ -187,14 +187,13 @@ IMPORTANT:
         for attempt in range(max_retries + 1):
             try:
                 translated_content = await self._generate_completion(system_prompt, protected_text)
-                fuzzy_enabled = self.config_manager.translation_settings.enable_fuzzy_match if self.config_manager else True
-                final_text = restore_renpy_syntax(translated_content, placeholders, fuzzy_enabled)
+                final_text = restore_renpy_syntax(translated_content, placeholders)
                 
-                # 2. AŞAMA KORUMA (Validation)
+                # 2. AŞAMA KORUMA (Validation - Sadece uyarı, reddetme)
                 missing_vars = validate_translation_integrity(final_text, placeholders)
                 if missing_vars:
-                   self.emit_log("warning", f"syntax integrity check failed: Missing variables {missing_vars}. Text: {request.text[:30]}...")
-                   raise ValueError(f"Integrity check failed. Missing variables: {missing_vars}")
+                   self.emit_log("warning", f"Syntax integrity warning: Possible missing variables {missing_vars}. Text: {request.text[:30]}...")
+                   # v2.5.1 uyumlu: Hata fırlatma, sadece uyar
                 
                 # Aggressive Retry: If translation equals original, retry with enhanced prompt
                 if aggressive_retry and final_text.strip() == request.text.strip() and len(request.text.strip()) > 3:
@@ -210,8 +209,7 @@ IMPORTANT:
                         
                         try:
                             retry_content = await self._generate_completion(aggressive_prompt, protected_text)
-                            fuzzy_enabled = self.config_manager.translation_settings.enable_fuzzy_match if self.config_manager else True
-                            retry_final = restore_renpy_syntax(retry_content, placeholders, fuzzy_enabled)
+                            retry_final = restore_renpy_syntax(retry_content, placeholders)
                             
                             if retry_final.strip() != request.text.strip():
                                 self.emit_log("info", f"Aggressive retry successful after {retry_attempt + 1} attempts")
@@ -356,14 +354,13 @@ IMPORTANT:
                     u_idx = int(m.group(1)) # This is unique index
                     translated_protected = m.group(2).strip()
                     if 0 <= u_idx < len(unique_requests):
-                        fuzzy_enabled = self.config_manager.translation_settings.enable_fuzzy_match if self.config_manager else True
-                        final_text = restore_renpy_syntax(translated_protected, all_placeholders[u_idx], fuzzy_enabled)
+                        final_text = restore_renpy_syntax(translated_protected, all_placeholders[u_idx])
                         
-                        # 2. AŞAMA KORUMA (Validation)
+                        # 2. AŞAMA KORUMA (Validation - Sadece uyarı)
                         missing_vars = validate_translation_integrity(final_text, all_placeholders[u_idx])
                         if missing_vars:
-                             self.emit_log("warning", f"Batch item {u_idx} failed integrity check: Missing {missing_vars}. Dropping for single retry.")
-                             continue
+                             self.emit_log("warning", f"Batch item {u_idx} integrity warning: Missing {missing_vars}. Continuing anyway.")
+                             # v2.5.1 uyumlu: continue yerine devam et
 
                         req = unique_requests[u_idx]
                         
@@ -703,11 +700,10 @@ class LocalLLMTranslator(LLMTranslator):
             clean_text = clean_text.strip(' "«»\'') # Strip quotes and brackets
             
             # Restore
-            fuzzy_enabled = self.config_manager.translation_settings.enable_fuzzy_match if self.config_manager else True
-            final_text = restore_renpy_syntax(clean_text, placeholders, fuzzy_enabled)
+            final_text = restore_renpy_syntax(clean_text, placeholders)
             
-            # Last resort: if the model corrupted placeholders or returned empty, use original
-            if not final_text or '[[' in final_text and '[[' not in request.text:
+            # Last resort: if the model corrupted XRPYX placeholders or returned empty, use original
+            if not final_text or 'XRPYX' in final_text and 'XRPYX' not in request.text:
                  self.emit_log("warning", f"Local LLM corrupted placeholders, using original: {request.text[:50]}...")
                  final_text = request.text
 
