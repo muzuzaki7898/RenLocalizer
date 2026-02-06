@@ -40,7 +40,7 @@ Rectangle {
         // Ana Menü Öğeleri
         NavButton {
             icon: "🏠"
-            tooltip: (backend.uiTrigger, backend.getTextWithDefault("nav_home", "Ana Sayfa"))
+            tooltip: (backend.uiTrigger, backend.getTextWithDefault("nav_home", "Home"))
             selected: navRoot.currentIndex === 0
             onClicked: {
                 navRoot.currentIndex = 0
@@ -50,7 +50,7 @@ Rectangle {
 
         NavButton {
             icon: "🛠"
-            tooltip: (backend.uiTrigger, backend.getTextWithDefault("nav_tools", "Araçlar"))
+            tooltip: (backend.uiTrigger, backend.getTextWithDefault("nav_tools", "Tools"))
             selected: navRoot.currentIndex === 1
             onClicked: {
                 navRoot.currentIndex = 1
@@ -60,7 +60,7 @@ Rectangle {
 
         NavButton {
             icon: "📚"
-            tooltip: (backend.uiTrigger, backend.getTextWithDefault("nav_glossary", "Sözlük Yönetimi"))
+            tooltip: (backend.uiTrigger, backend.getTextWithDefault("nav_glossary", "Glossary Management"))
             selected: navRoot.currentIndex === 2
             onClicked: {
                 navRoot.currentIndex = 2
@@ -70,7 +70,7 @@ Rectangle {
 
         NavButton {
             icon: "🧠"
-            tooltip: (backend.uiTrigger, backend.getTextWithDefault("nav_cache", "Çeviri Belleği (TM)"))
+            tooltip: (backend.uiTrigger, backend.getTextWithDefault("nav_cache", "Translation Memory (TM)"))
             selected: navRoot.currentIndex === 3
             onClicked: {
                 navRoot.currentIndex = 3
@@ -80,7 +80,7 @@ Rectangle {
 
         NavButton {
             icon: "⚙"
-            tooltip: (backend.uiTrigger, backend.getTextWithDefault("nav_settings", "Ayarlar"))
+            tooltip: (backend.uiTrigger, backend.getTextWithDefault("nav_settings", "Settings"))
             selected: navRoot.currentIndex === 4
             onClicked: {
                 navRoot.currentIndex = 4
@@ -94,7 +94,7 @@ Rectangle {
         // Alt Menü
         NavButton {
             icon: "❤"
-            tooltip: (backend.uiTrigger, backend.getTextWithDefault("nav_support", "Destek Ol"))
+            tooltip: (backend.uiTrigger, backend.getTextWithDefault("nav_support", "Support"))
             onClicked: backend.openUrl("https://www.patreon.com/c/LordOfTurk")
         }
 
@@ -106,7 +106,7 @@ Rectangle {
 
         NavButton {
             icon: "ℹ"
-            tooltip: (backend.uiTrigger, backend.getTextWithDefault("nav_about", "Hakkında"))
+            tooltip: (backend.uiTrigger, backend.getTextWithDefault("nav_about", "About"))
             selected: navRoot.currentIndex === 5
             onClicked: {
                 navRoot.currentIndex = 5

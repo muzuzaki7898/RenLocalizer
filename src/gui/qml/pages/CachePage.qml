@@ -47,7 +47,7 @@ Rectangle {
             Layout.fillWidth: true
             
             Label {
-                text: "🧠 " + (backend.uiTrigger, backend.getTextWithDefault("nav_cache", "Çeviri Belleği (TM)"))
+                text: "🧠 " + (backend.uiTrigger, backend.getTextWithDefault("nav_cache", "Translation Memory (TM)"))
                 font.pixelSize: 24
                 font.bold: true
                 color: root.mainTextColor
@@ -56,7 +56,7 @@ Rectangle {
             Item { Layout.fillWidth: true }
             
             Button {
-                text: "🗑️ " + (backend.uiTrigger, backend.getTextWithDefault("btn_clear_cache", "Tümünü Temizle"))
+                text: "🗑️ " + (backend.uiTrigger, backend.getTextWithDefault("btn_clear_cache", "Clear All"))
                 Material.background: Material.Red
                 onClicked: clearConfirmDialog.open()
             }
@@ -71,7 +71,7 @@ Rectangle {
                 id: searchField
                 Layout.fillWidth: true
                 Layout.preferredHeight: 50
-                placeholderText: (backend.uiTrigger, backend.getTextWithDefault("cache_search_placeholder", "Ara... (Orijinal, Çeviri, Motor)"))
+                placeholderText: (backend.uiTrigger, backend.getTextWithDefault("cache_search_placeholder", "Search... (Original, Translation, Engine)"))
                 leftPadding: 16
                 
                 background: Rectangle {
@@ -87,11 +87,11 @@ Rectangle {
                 text: "🔄"
                 onClicked: refreshData()
                 ToolTip.visible: hovered
-                ToolTip.text: "Yenile"
+                ToolTip.text: (backend.uiTrigger, backend.getTextWithDefault("btn_refresh", "Refresh"))
             }
             
             Label {
-                text: (backend.uiTrigger, backend.getTextWithDefault("total_cache", "Kayıt: {count}")).replace("{count}", cacheModel.count)
+                text: (backend.uiTrigger, backend.getTextWithDefault("total_cache", "Entries: {count}")).replace("{count}", cacheModel.count)
                 color: root.secondaryTextColor
             }
         }
@@ -216,7 +216,7 @@ Rectangle {
     // ==================== DIALOGS ====================
     Dialog {
         id: editDialog
-        title: (backend.uiTrigger, backend.getTextWithDefault("edit_cache_title", "Önbelleği Düzenle"))
+        title: (backend.uiTrigger, backend.getTextWithDefault("edit_cache_title", "Edit Cache"))
         anchors.centerIn: parent
         modal: true
         width: 450
@@ -239,7 +239,7 @@ Rectangle {
         contentItem: ColumnLayout {
             spacing: 15
             
-            Label { text: (backend.uiTrigger, backend.getTextWithDefault("original_text", "Orijinal Metin")); color: root.secondaryTextColor }
+            Label { text: (backend.uiTrigger, backend.getTextWithDefault("original_text", "Original Text")); color: root.secondaryTextColor }
             TextArea { 
                 text: editDialog.original
                 readOnly: true
@@ -250,7 +250,7 @@ Rectangle {
                 wrapMode: Text.Wrap
             }
             
-            Label { text: (backend.uiTrigger, backend.getTextWithDefault("translated_text", "Çeviri")); color: root.secondaryTextColor }
+            Label { text: (backend.uiTrigger, backend.getTextWithDefault("translated_text", "Translation")); color: root.secondaryTextColor }
             TextArea { 
                 id: translationField
                 Layout.fillWidth: true
@@ -264,12 +264,12 @@ Rectangle {
         footer: DialogButtonBox {
             background: Rectangle { color: "transparent" }
             Button { 
-                text: (backend.uiTrigger, backend.getTextWithDefault("btn_cancel", "İptal"))
+                text: (backend.uiTrigger, backend.getTextWithDefault("btn_cancel", "Cancel"))
                 DialogButtonBox.buttonRole: DialogButtonBox.RejectRole
                 flat: true 
             }
             Button { 
-                text: (backend.uiTrigger, backend.getTextWithDefault("btn_save", "Kaydet"))
+                text: (backend.uiTrigger, backend.getTextWithDefault("btn_save", "Save"))
                 DialogButtonBox.buttonRole: DialogButtonBox.AcceptRole
                 highlighted: true
                 onClicked: {
@@ -283,13 +283,13 @@ Rectangle {
 
     Dialog {
         id: clearConfirmDialog
-        title: (backend.uiTrigger, backend.getTextWithDefault("confirm_clear_cache_title", "Önbelleği Temizle"))
+        title: (backend.uiTrigger, backend.getTextWithDefault("confirm_clear_cache_title", "Clear Cache"))
         anchors.centerIn: parent
         modal: true
         standardButtons: Dialog.Yes | Dialog.No
         
         Text {
-            text: (backend.uiTrigger, backend.getTextWithDefault("confirm_clear_cache_msg", "Tüm çeviri belleği silinecek. Bu işlem geri alınamaz.\nDevam etmek istiyor musunuz?"))
+            text: (backend.uiTrigger, backend.getTextWithDefault("confirm_clear_cache_msg", "All translation memory will be deleted. This action cannot be undone.\nDo you want to continue?"))
             color: root.mainTextColor
             padding: 20
         }

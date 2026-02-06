@@ -283,22 +283,22 @@ class AppBackend(QObject):
             
             success = adapter.extract_game(Path(game_dir))
             if success:
-                return self.config.get_ui_text("unren_completed", "RPA çıkarma tamamlandı.")
+                return self.config.get_ui_text("unren_completed", "RPA extraction completed.")
             else:
-                return self.config.get_ui_text("log_rpa_not_found_or_extracted", "RPA dosyası bulunamadı veya zaten çıkarılmış.")
+                return self.config.get_ui_text("log_rpa_not_found_or_extracted", "RPA file not found or already extracted.")
         except Exception as e:
-            return f"{self.config.get_ui_text('error', 'Hata')}: {str(e)}"
+            return f"{self.config.get_ui_text('error', 'Error')}: {str(e)}"
 
     @pyqtSlot(str, result=str)
     def cleanupSDK(self, path: str) -> str:
         """SDK temizliği yap (UnRen mod dosyalarını sil)."""
         if self._is_busy:
-            return self.config.get_ui_text("app_busy", "Başka bir işlem sürüyor...")
+            return self.config.get_ui_text("app_busy", "Another operation is in progress...")
 
         self._set_busy(True)
         # We must run this in a thread to avoid main thread blocking
         threading.Thread(target=self._run_cleanup_thread, args=(path,), daemon=True).start()
-        return self.config.get_ui_text("msg_task_started", "İşlem arka planda başlatıldı...")
+        return self.config.get_ui_text("msg_task_started", "Operation started in background...")
 
     def _run_cleanup_thread(self, path):
         try:
@@ -326,10 +326,10 @@ class AppBackend(QObject):
                     os.remove(filepath)
                     deleted_count += 1
             
-            msg = self.config.get_ui_text("msg_sdk_cleanup_success", f"Temizlik tamamlandı. {deleted_count} dosya silindi.").replace("{count}", str(deleted_count))
+            msg = self.config.get_ui_text("msg_sdk_cleanup_success", f"Cleanup completed. {deleted_count} files removed.").replace("{count}", str(deleted_count))
             self.logMessage.emit("success", msg)
         except Exception as e:
-            self.logMessage.emit("error", f"{self.config.get_ui_text('error', 'Hata')}: {str(e)}")
+            self.logMessage.emit("error", f"{self.config.get_ui_text('error', 'Error')}: {str(e)}")
         finally:
             self._set_busy(False)
 
@@ -337,11 +337,11 @@ class AppBackend(QObject):
     def runUnRen(self):
         """UnRen arayüzünü aç veya işlemi başlat (Tools page shortcut)."""
         if not self._project_path:
-            self.warningMessage.emit(self.config.get_ui_text("warning", "Uyarı"), self.config.get_ui_text("select_game_folder", "Lütfen önce oyun klasörünü seçin."))
+            self.warningMessage.emit(self.config.get_ui_text("warning", "Warning"), self.config.get_ui_text("select_game_folder", "Please select the game folder first."))
             return
         
         if self._is_busy:
-            self.warningMessage.emit(self.config.get_ui_text("warning", "Uyarı"), self.config.get_ui_text("app_busy", "Başka bir işlem sürüyor..."))
+            self.warningMessage.emit(self.config.get_ui_text("warning", "Warning"), self.config.get_ui_text("app_busy", "Another operation is in progress..."))
             return
 
         self.logMessage.emit("info", self.config.get_ui_text("msg_unren_requested", "UnRPA extraction requested..."))
@@ -359,7 +359,7 @@ class AppBackend(QObject):
     def runHealthCheck(self):
         """Sağlık kontrolünü başlat."""
         if not self._project_path:
-            self.warningMessage.emit(self.config.get_ui_text("warning", "Uyarı"), self.config.get_ui_text("select_game_folder", "Lütfen önce oyun klasörünü seçin."))
+            self.warningMessage.emit(self.config.get_ui_text("warning", "Warning"), self.config.get_ui_text("select_game_folder", "Please select the game folder first."))
             return
         
         if self._is_busy: return
@@ -390,7 +390,7 @@ class AppBackend(QObject):
     def runFontCheck(self):
         """Font kontrolünü başlat."""
         if not self._project_path:
-            self.warningMessage.emit(self.config.get_ui_text("warning", "Uyarı"), self.config.get_ui_text("select_game_folder", "Lütfen önce oyun klasörünü seçin."))
+            self.warningMessage.emit(self.config.get_ui_text("warning", "Warning"), self.config.get_ui_text("select_game_folder", "Please select the game folder first."))
             return
             
         if self._is_busy: return
@@ -430,7 +430,7 @@ class AppBackend(QObject):
     def autoInjectFont(self):
         """Uyumlu fontu otomatik indir ve enjekte et."""
         if not self._project_path:
-            self.warningMessage.emit(self.config.get_ui_text("warn_title", "Uyarı"), self.config.get_ui_text("select_game_folder", "Lütfen önce oyun klasörünü seçin."))
+            self.warningMessage.emit(self.config.get_ui_text("warn_title", "Warning"), self.config.get_ui_text("select_game_folder", "Please select the game folder first."))
             return
             
         if self._is_busy: return
@@ -447,7 +447,7 @@ class AppBackend(QObject):
     def manualInjectFont(self, font_name: str):
         """Kullanıcının seçtiği fontu indir ve enjekte et."""
         if not self._project_path:
-            self.warningMessage.emit(self.config.get_ui_text("warn_title", "Uyarı"), self.config.get_ui_text("select_game_folder", "Lütfen önce oyun klasörünü seçin."))
+            self.warningMessage.emit(self.config.get_ui_text("warn_title", "Warning"), self.config.get_ui_text("select_game_folder", "Please select the game folder first."))
             return
             
         if self._is_busy: return
@@ -508,7 +508,7 @@ class AppBackend(QObject):
                 self.logMessage.emit("error", final_msg)
                 
         except Exception as e:
-            self.logMessage.emit("error", f"Font injection critical error: {str(e)}")
+            self.logMessage.emit("error", self.config.get_ui_text("log_font_inject_critical_error", "Font injection critical error: {error}").replace("{error}", str(e)))
         finally:
             self._set_busy(False)
 
@@ -540,7 +540,7 @@ class AppBackend(QObject):
                 incomp=summary['incompatible_fonts']
             )
         except Exception as e:
-            return f"{self.config.get_ui_text('error', 'Hata')}: {str(e)}"
+            return f"{self.config.get_ui_text('error', 'Error')}: {str(e)}"
     
     @pyqtSlot(result=str)
     def getLastProjectPath(self) -> str:
@@ -566,9 +566,9 @@ class AppBackend(QObject):
         game_dir = os.path.join(project_dir, 'game')
         
         if os.path.isdir(game_dir):
-            self.logMessage.emit("info", "✅ " + self.config.get_ui_text("valid_renpy_project", "Geçerli Ren'Py projesi"))
+            self.logMessage.emit("info", "✅ " + self.config.get_ui_text("valid_renpy_project", "Valid Ren'Py project"))
         else:
-            self.logMessage.emit("warning", "⚠️ " + self.config.get_ui_text("game_folder_not_found", "game/ klasörü bulunamadı"))
+            self.logMessage.emit("warning", "⚠️ " + self.config.get_ui_text("game_folder_not_found", "game/ folder not found"))
 
         # Reload cache for the new project (Async)
         self._update_cache_path_async()
@@ -587,8 +587,8 @@ class AppBackend(QObject):
         # Show warnings for AI engines
         if engine in ["openai", "gemini", "deepseek", "local_llm"]:
             self.warningMessage.emit(
-                self.config.get_ui_text("warning", "⚠️ Uyarı"),
-                self.config.get_ui_text("ai_censorship_warning", "AI modelleri sansür uygulayabilir veya yavaş çalışabilir.")
+                self.config.get_ui_text("warning", "⚠️ Warning"),
+                self.config.get_ui_text("ai_censorship_warning", "AI models may apply censorship or run slowly.")
             )
 
     @pyqtSlot()
@@ -600,7 +600,7 @@ class AppBackend(QObject):
         self.logger.info(f"Initializing translation engine: {engine_str} (Proxy: {use_proxy})")
         
         # Translate UI text for loading message
-        msg = self.config.get_ui_text("msg_loading_ai", "AI modülü ve kütüphaneler yükleniyor...")
+        msg = self.config.get_ui_text("msg_loading_ai", "Loading AI module and libraries...")
         
         # Start async initialization
         self._set_initializing(True, msg)
@@ -718,7 +718,7 @@ class AppBackend(QObject):
     def extractGlossaryTerms(self) -> str:
         """Projeden terimleri otomatik çıkar."""
         if not self._project_path:
-            return self.config.get_ui_text("glossary_extract_no_project", "Önce proje seçin.")
+            return self.config.get_ui_text("glossary_extract_no_project", "Select a project first.")
             
         try:
             from src.tools.glossary_extractor import GlossaryExtractor
@@ -734,9 +734,9 @@ class AppBackend(QObject):
             if added > 0:
                 self.config.save_glossary()
                 return self.config.get_ui_text("msg_glossary_extracted_success", f"{added} yeni terim eklendi.").replace("{count}", str(added))
-            return self.config.get_ui_text("msg_glossary_extracted_fail", "Yeni terim bulunamadı.")
+            return self.config.get_ui_text("msg_glossary_extracted_fail", "No new terms found.")
         except ImportError:
-            return "GlossaryExtractor modülü bulunamadı."
+            return self.config.get_ui_text("glossary_extractor_not_found", "GlossaryExtractor module not found.")
         except Exception as e:
             return f"{self.config.get_ui_text('error', 'Hata')}: {str(e)}"
 
@@ -801,7 +801,7 @@ class AppBackend(QObject):
     def generateRuntimeHook(self):
         """Runtime Hook dosyasını oluştur (Çevirileri zorla yükle)."""
         if not self._project_path:
-            self.warningMessage.emit(self.config.get_ui_text("warn_title", "Uyarı"), self.config.get_ui_text("select_game_folder", "Lütfen önce oyun klasörünü seçin."))
+            self.warningMessage.emit(self.config.get_ui_text("warn_title", "Warning"), self.config.get_ui_text("select_game_folder", "Please select the game folder first."))
             return
             
         try:
@@ -833,7 +833,7 @@ class AppBackend(QObject):
 # Generated by RenLocalizer.
 
 # Set default language at first run (before init blocks)
-define config.default_language = "{renpy_lang}"
+# define config.default_language = "{renpy_lang}"  <-- REMOVED: Managed by zzz_{renpy_lang}_language.rpy
 
 init 1501 python:
     # =========================================================================
@@ -843,38 +843,61 @@ init 1501 python:
         target = "{renpy_lang}"
         renpy.change_language(target)
         persistent.renlocalizer_target_lang = target
-        renpy.notify("RenLocalizer: Language → {renpy_lang.title()}")
+        renpy.notify("RenLocalizer: Language -> {renpy_lang.title()}")
         renpy.restart_interaction()
 
     # Register Shift+L as language toggle
     config.underlay.append(renpy.Keymap(shift_K_l=_renlocalizer_switch_lang))
 
     # =========================================================================
-    # RUNTIME TEXT TRANSLATION HOOK
+    # RUNTIME TEXT TRANSLATION HOOK (HYBRID MODE)
     # =========================================================================
-    # IMPORTANT: Only use config.replace_text, NOT config.say_menu_text_filter
-    # say_menu_text_filter runs BEFORE translation, so translate_string won't work.
-    # replace_text runs AFTER substitutions, which is the correct place.
+    # We use a Hybrid Approach to catch ALL strings:
+    # 1. say_menu_text_filter: Translates Dialogue/Menus BEFORE variable substitution.
+    #    This catches strings like "%(name)s wins!" -> "%(name)s kazandı!".
+    # 2. replace_text: Translates Screens/UI AFTER substitution.
+    #    This catches UI text that doesn't go through the say statement.
     
-    # Save original replacer if it exists and hasn't been wrapped yet
-    if not hasattr(store, '_renlocalizer_old_replace_text'):
-        if hasattr(config, 'replace_text') and config.replace_text:
-            store._renlocalizer_old_replace_text = config.replace_text
-        else:
-            store._renlocalizer_old_replace_text = lambda s: s
+    # --- Hook 1: Say/Menu Filter (Pre-Substitution) ---
+    if not hasattr(store, '_renlocalizer_old_say_filter'):
+        store._renlocalizer_old_say_filter = config.say_menu_text_filter
 
-    def _renlocalizer_force_translate(s):
-        # 1. Run original game filters first
-        s = store._renlocalizer_old_replace_text(s)
-        # 2. Force Ren'Py translation lookup (only if string exists)
+    def _renlocalizer_say_filter(s):
+        # 1. Run original filter first (if any)
+        if store._renlocalizer_old_say_filter:
+            s_orig = store._renlocalizer_old_say_filter(s)
+            if s_orig is not None:
+                s = s_orig
+        
+        # 2. Force Translation of the RAW string
         if s:
+            # Check if translation exists for this exact string
             translated = renpy.translate_string(s)
-            # Only use translated version if it's actually different
             if translated and translated != s:
                 return translated
         return s
 
-    # Install ONLY the replace_text hook (runs AFTER native translation)
+    config.say_menu_text_filter = _renlocalizer_say_filter
+
+    # --- Hook 2: Replace Text (Post-Substitution / Screens) ---
+    if not hasattr(store, '_renlocalizer_old_replace_text'):
+        try:
+            store._renlocalizer_old_replace_text = config.replace_text
+        except:
+            store._renlocalizer_old_replace_text = lambda s: s
+
+    def _renlocalizer_force_translate(s):
+        # 1. Run original replace_text first
+        if store._renlocalizer_old_replace_text:
+            s = store._renlocalizer_old_replace_text(s)
+        
+        # 2. Force Translation (Fallback for UI)
+        if s:
+            translated = renpy.translate_string(s)
+            if translated and translated != s:
+                return translated
+        return s
+
     config.replace_text = _renlocalizer_force_translate
 '''
             hook_path = os.path.join(game_dir, "zzz_renlocalizer_runtime.rpy")
@@ -940,7 +963,7 @@ init 1501 python:
     def startTranslation(self):
         """Çeviri işlemini başlat."""
         if not self._project_path:
-            self.logMessage.emit("error", self.config.get_ui_text("please_select_exe", "Lütfen bir oyun seçin"))
+            self.logMessage.emit("error", self.config.get_ui_text("please_select_exe", "Please select a game"))
             return
         
         if self._is_translating:
@@ -975,7 +998,7 @@ init 1501 python:
             self.pipeline.finished.connect(self._on_pipeline_finished)
             self.pipeline.show_warning.connect(self._on_show_warning)
             
-            self.logMessage.emit("info", self.config.get_ui_text("pipeline_starting", "Pipeline başlatılıyor..."))
+            self.logMessage.emit("info", self.config.get_ui_text("pipeline_starting", "Pipeline starting..."))
             
             # Start worker
             self.pipeline_worker = PipelineWorker(self.pipeline)
@@ -1097,13 +1120,13 @@ init 1501 python:
                 if manual:
                      self.updateCheckFinished.emit(True, f"Update found: {result.latest_version}")
             else:
-                msg = self.config.get_ui_text("update_check_no_update", "En son sürümü kullanıyorsunuz.")
+                msg = self.config.get_ui_text("update_check_no_update", "You are up to date.")
                 if manual:
                      self.logMessage.emit("success", msg)
                      self.updateCheckFinished.emit(False, msg)
         except Exception as e:
             if manual:
-                self.logMessage.emit("error", f"Update check failed: {e}")
+                self.logMessage.emit("error", self.config.get_ui_text("log_update_check_failed", "Update check failed: {error}").replace("{error}", str(e)))
                 self.updateCheckFinished.emit(False, f"Update Check Failed: {e}")
 
     # ========== HELPERS ==========
@@ -1195,7 +1218,7 @@ init 1501 python:
             return "" # Empty string = success
         except Exception as e:
             err = str(e)
-            self.logMessage.emit("error", f"Export failed: {err}")
+            self.logMessage.emit("error", self.config.get_ui_text("log_export_failed", "Export failed: {error}").replace("{error}", err))
             return err
             
     @pyqtSlot(str, result=str)
@@ -1233,7 +1256,7 @@ init 1501 python:
 
         except Exception as e:
             err = str(e)
-            self.logMessage.emit("error", f"Import failed: {err}")
+            self.logMessage.emit("error", self.config.get_ui_text("log_import_failed", "Import failed: {error}").replace("{error}", err))
             return err
 
     # ========== CACHE EXPLORER SLOTS ==========
@@ -1281,7 +1304,7 @@ init 1501 python:
                     
             return entries
         except Exception as e:
-            self.logMessage.emit("error", f"Error listing cache: {e}")
+            self.logMessage.emit("error", self.config.get_ui_text("log_cache_list_error", "Error listing cache: {error}").replace("{error}", str(e)))
             return []
 
     def _get_current_cache_file(self) -> Optional[str]:
@@ -1345,10 +1368,10 @@ init 1501 python:
             if cache_file and os.path.exists(os.path.dirname(cache_file)):
                 self.translation_manager.save_cache(cache_file)
                 
-            self.logMessage.emit("success", "Translation memory cleared.")
+            self.logMessage.emit("success", self.config.get_ui_text("log_cache_cleared", "Translation memory cleared."))
             return True
         except Exception as e:
-            self.logMessage.emit("error", f"Error clearing cache: {e}")
+            self.logMessage.emit("error", self.config.get_ui_text("log_cache_clear_error", "Error clearing cache: {error}").replace("{error}", str(e)))
             return False
 
     @pyqtSlot(result=int)

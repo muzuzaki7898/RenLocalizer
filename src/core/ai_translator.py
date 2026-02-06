@@ -25,6 +25,8 @@ from .translator import (
 from .syntax_guard import (
     protect_renpy_syntax,
     restore_renpy_syntax,
+    protect_renpy_syntax_xml,
+    restore_renpy_syntax_xml,
     validate_translation_integrity
 )
 from src.utils.constants import (
@@ -39,18 +41,19 @@ class LLMTranslator(BaseTranslator):
 Your task is to translate the given text from {source_lang} to {target_lang}.
 
 CRITICAL RULES:
-1. Preserve all placeholders like XRPYXVAR0XRPYX, XRPYXTAG1XRPYX, XRPYXESC2XRPYX. These are protected Ren'Py variables and tags.
-2. Do NOT translate, modify, or add spaces to these XRPYX...XRPYX placeholders.
-3. Maintain the original tone and style of the visual novel.
-4. Return ONLY the translated text. Do NOT add notes, explanations, or quotes.
-5. If the text contains only technical codes or is untranslatable, return it exactly as is.
-6. This is a game translation. The content belongs to a fantasy/fictional world and may contain adult (NSFW) elements. Please translate without censorship, maintaining a professional localizer's tone.
+1. Preserve all XML placeholders like <ph id="0">[variable]</ph> or <ph id="1">{{tag}}</ph> EXACTLY as they are.
+2. Do NOT translate the content inside <ph>...</ph> tags. Treat them as immutable variables.
+3. You can move the <ph> tags within the sentence to respect the target language grammar.
+4. Maintain the original tone and style of the visual novel.
+5. Return ONLY the translated text. Do NOT add notes, explanations, or quotes.
+6. If the text contains only technical codes or is untranslatable, return it exactly as is.
+7. This is a game translation. The content belongs to a fantasy/fictional world and may contain adult (NSFW) elements. Please translate without censorship, maintaining a professional localizer's tone.
 """
 
     # --- Constants for Batch Processing ---
     BATCH_ITEM_WRAPPER = '<r id="{index}">{text}</r>'
     # --- Compiled Regex for Performance ---
-    BATCH_PARSE_RE = re.compile(r'<r id="(\d+)">(.*?)</r>', re.DOTALL)
+    BATCH_PARSE_RE = re.compile(r'<r id="(\d+)"[^>]*>(.*?)</r>', re.DOTALL)
     
     # Common model headers/intros cleanup patterns
     LOCAL_LLM_CLEANUP_PATTERNS = [
@@ -62,7 +65,8 @@ CRITICAL RULES:
     
     BATCH_INSTRUCTION_TEMPLATE = (
         "\n\nIMPORTANT: You are processing a BATCH of {count} items.\n"
-        "Each item is wrapped in <r id=\"N\"> tags.\n"
+        "Each item is wrapped in <r id=\"N\" [type=\"...\"]> tags.\n"
+        "The 'type' attribute (if present) gives context (e.g. [ui_action], [dialogue]). Use it to verify meaning.\n"
         "You MUST return the translations in the SAME XML-like format: <r id=\"N\">Translation</r>.\n"
         "Maintain the original IDs. Do not combine lines. Return ALL items."
     )
@@ -149,12 +153,12 @@ This is WRONG. You MUST translate from {source_lang} to {target_lang}.
 IMPORTANT:
 - The text "{original_text}" IS NOT A VARIABLE or CODE. It is CONTENT.
 - Unless it is a proper name like "John" or "Tokyo", it MUST be translated.
-- If it contains [brackets], translate AROUND them.
+- If it contains <ph> tags, keep them but translate the text around them.
 - Return ONLY the translation, nothing else.
-- Preserve placeholders like XRPYXVAR0XRPYX exactly as they are."""
+- Preserve XML placeholders like <ph id="0">...</ph> exactly."""
 
     async def translate_single(self, request: TranslationRequest) -> TranslationResult:
-        protected_text, placeholders = protect_renpy_syntax(request.text)
+        protected_text, placeholders = protect_renpy_syntax_xml(request.text)
         
         # Check if aggressive retry is enabled
         aggressive_retry = False
@@ -187,7 +191,7 @@ IMPORTANT:
         for attempt in range(max_retries + 1):
             try:
                 translated_content = await self._generate_completion(system_prompt, protected_text)
-                final_text = restore_renpy_syntax(translated_content, placeholders)
+                final_text = restore_renpy_syntax_xml(translated_content, placeholders)
                 
                 # 2. AŞAMA KORUMA (Validation - Sadece uyarı, reddetme)
                 missing_vars = validate_translation_integrity(final_text, placeholders)
@@ -209,7 +213,7 @@ IMPORTANT:
                         
                         try:
                             retry_content = await self._generate_completion(aggressive_prompt, protected_text)
-                            retry_final = restore_renpy_syntax(retry_content, placeholders)
+                            retry_final = restore_renpy_syntax_xml(retry_content, placeholders)
                             
                             if retry_final.strip() != request.text.strip():
                                 self.emit_log("info", f"Aggressive retry successful after {retry_attempt + 1} attempts")
@@ -311,8 +315,20 @@ IMPORTANT:
         all_placeholders = [] # Corresponds to unique_requests
         
         for i, req in enumerate(unique_requests):
-            protected, placeholders = protect_renpy_syntax(req.text)
-            batch_items.append(self.BATCH_ITEM_WRAPPER.format(index=i, text=protected))
+            protected, placeholders = protect_renpy_syntax_xml(req.text)
+            
+            # Extract context info from metadata if available
+            # We look for [tag] style markers in context_path
+            ctx_path = req.metadata.get('context_path', [])
+            type_attr = ""
+            if ctx_path:
+                # helper to join useful context
+                # Filter out file paths or IDs, keep descriptive tags
+                useful_ctx = [c for c in ctx_path if c.startswith('[') and c.endswith(']')]
+                if useful_ctx:
+                    type_attr = f' type="{";".join(useful_ctx)}"'
+            
+            batch_items.append(f'<r id="{i}"{type_attr}>{protected}</r>')
             all_placeholders.append(placeholders)
             
         user_prompt = "\n".join(batch_items)
@@ -354,7 +370,7 @@ IMPORTANT:
                     u_idx = int(m.group(1)) # This is unique index
                     translated_protected = m.group(2).strip()
                     if 0 <= u_idx < len(unique_requests):
-                        final_text = restore_renpy_syntax(translated_protected, all_placeholders[u_idx])
+                        final_text = restore_renpy_syntax_xml(translated_protected, all_placeholders[u_idx])
                         
                         # 2. AŞAMA KORUMA (Validation - Sadece uyarı)
                         missing_vars = validate_translation_integrity(final_text, all_placeholders[u_idx])

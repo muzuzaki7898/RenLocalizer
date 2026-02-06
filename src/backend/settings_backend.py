@@ -69,11 +69,11 @@ class SettingsBackend(QObject):
     def getAvailableThemes(self) -> list:
         """Get available themes - internal only, no system theme."""
         return [
-            {"code": "dark", "name": self.config.get_ui_text("theme_dark", "🌙 Koyu")},
-            {"code": "light", "name": self.config.get_ui_text("theme_light", "☀️ Açık")},
-            {"code": "red", "name": self.config.get_ui_text("theme_red", "🔴 Kırmızı")},
-            {"code": "turquoise", "name": self.config.get_ui_text("theme_turquoise", "🔵 Turkuaz")},
-            {"code": "green", "name": self.config.get_ui_text("theme_green", "🌿 Yeşil")},
+            {"code": "dark", "name": self.config.get_ui_text("theme_dark", "🌙 Dark")},
+            {"code": "light", "name": self.config.get_ui_text("theme_light", "☀️ Light")},
+            {"code": "red", "name": self.config.get_ui_text("theme_red", "🔴 Red")},
+            {"code": "turquoise", "name": self.config.get_ui_text("theme_turquoise", "🔵 Turquoise")},
+            {"code": "green", "name": self.config.get_ui_text("theme_green", "🌿 Green")},
             {"code": "neon", "name": self.config.get_ui_text("theme_neon", "🌈 Neon")},
         ]
     
@@ -563,7 +563,7 @@ class SettingsBackend(QObject):
             asyncio.set_event_loop(loop)
             try:
                 stats = loop.run_until_complete(run_refresh())
-                msg = self.config.get_ui_text("proxy_refresh_success", "Proxy listesi güncellendi: {working}/{total} aktif.").format(
+                msg = self.config.get_ui_text("proxy_refresh_success", "Proxy list updated: {working}/{total} active.").format(
                     working=stats['working_proxies'], total=stats['total_proxies']
                 )
                 self.proxyRefreshFinished.emit(True, msg)

@@ -8,11 +8,17 @@ Now powered by Qt Quick (QML)
 import os
 import sys
 import warnings
+import multiprocessing
 from pathlib import Path
 from src.utils.logger import setup_logger
 
+# ============================================================
+# SAFETY: Increase recursion limit for deep Ren'Py ASTs
+# ============================================================
+sys.setrecursionlimit(5000)
+
 # Default version fallback
-VERSION = "2.6.3"
+VERSION = "2.6.4"
 
 try:
     from src.version import VERSION as _v
@@ -64,7 +70,7 @@ if sys.platform == "win32":
         import ctypes
         # Set explicitly for taskbar icon to appear immediately
         # Changed ID slightly to force Windows Icon Cache refresh
-        myappid = "LordOfTurk.RenLocalizer.V2.QML.Rev1"
+        myappid = "LordOfTurk.RenLocalizer.V2.QML"
         ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(myappid)
     except Exception:
         pass  # Silent fail is acceptable on non-Windows or old Windows versions
@@ -359,25 +365,17 @@ def main() -> int:
             root_window = engine.rootObjects()[0]
             if icon_path.exists() and not app_icon.isNull():
                 root_window.setIcon(app_icon)
-                app.setWindowIcon(app_icon) # Set app icon again
+                # app.setWindowIcon(app_icon) # Redundant
             
-            # Explicitly show window after setting properties
-            root_window.show()
-            
-            # Additional force for Windows Taskbar refresh using Win32 API
+            # Explicitly force window creation to get HWND before showing
+            # This ensures the icon is applied at the OS level before the window appears
             if sys.platform == "win32" and icon_path.exists():
                 try:
                     import ctypes
                     from ctypes import wintypes
                     
-                    # Get Window Handle (HWND)
+                    # Force native window handling
                     hwnd = root_window.winId()
-                    
-                    # Load Icon via Windows API (Large and Small) - bypassing Qt
-                    h_icon = QIcon(str(icon_path)).pixmap(32, 32).toImage() # 32x32 for Taskbar
-                    # Note: Getting HICON from Qt is tricky without heavy boilerplate. 
-                    # Simpler approach: Rely on Qt's setWindowIcon but force refresh via AppID or just wait.
-                    # Alternatively, use LoadImageW if we want to be pure native.
                     
                     user32 = ctypes.windll.user32
                     ICON_SMALL = 0
@@ -397,6 +395,12 @@ def main() -> int:
                 except Exception as e:
                     print(f"Warning: Failed to set native Windows icon: {e}")
 
+            # Show window AFTER setting native icons
+            root_window.show()
+            
+            # Process events immediately to flush icon changes
+            app.processEvents()
+
         print("[OK] UI loaded successfully. Entering event loop.")
         return app.exec()
 
@@ -414,4 +418,5 @@ def main() -> int:
 
 
 if __name__ == "__main__":
+    multiprocessing.freeze_support()
     sys.exit(main())

@@ -1,33 +1,68 @@
 # -*- coding: utf-8 -*-
 # MIT License - RenLocalizer
 """
-Syntax Guard Module
-===================
-Ren'Py sözdizimini (değişkenler, tagler, özellikli karakterler) koruma ve geri yükleme işlemlerini yönetir.
+Syntax Guard Module (v3.1 Hybrid)
+=================================
+Ren'Py ve Python sözdizimini (değişkenler, tagler, format karakterleri) koruma ve geri yükleme işlemlerini yönetir.
+Bu modül, çeviri motorlarının (Google, DeepL) kod yapısını bozmasını engellemek için "Askeri Düzeyde" koruma sağlar.
 
-v2.5.1 uyumlu stabilize edilmiş sürüm:
-- Placeholder formatı: XRPYXVAR0XRPYX (tek kelime prensibi, AI tarafından bozulması zor)
-- Fuzzy matching kaldırıldı (false positive riski nedeniyle)
-- Validation toleranslı hale getirildi
+Architecture & Optimizations (v2.6.4+):
+---------------------------------------
+1. **Hybrid Protection Strategy:**
+   - **Wrapper Tags:** Dış katmandaki tagler ({i}...{/i}) tamamen kesilip alınır (Token tasarrufu + Güvenlik).
+   - **Internal Tokens:** İçerideki değişkenler ([var], %s) `XRPYX` formatlı placeholder'lara dönüştürülür.
+   
+2. **Regex Pooling:**
+   - Tüm regex'ler modül seviyesinde derlenir (Pre-compiled).
+   - Python'un `re` motoru için optimize edilmiş "Atomic Group" benzeri yapılar kullanılır.
+   
+3. **Bracket Healing (Cerrahi Onarım):**
+   - Çeviri sonrası oluşan "Google Hallucination" hatalarını (örn: `[ [`) analiz eder ve onarır.
+   - Nested (iç içe) değişken yapılarını (`[list [ 1 ]]`) tespit edip düzeltir.
+
+4. **Python Formatting Support:**
+   - `%s`, `%d`, `%f`, `%i` ve `%(var)s` gibi standart Python formatlarını otomatik tanır ve korur.
 """
 
 import re
 from typing import Dict, Tuple, List
 
 # Ren'Py variable patterns
+# Ren'Py variable patterns (Individual)
 RENPY_VAR_PATTERN = re.compile(r'\[([^\[\]]+)\]')  # [variable]
 RENPY_TAG_PATTERN = re.compile(r'\{([^\{\}]+)\}')  # {tag}
-RENPY_ESCAPED_PATTERN = re.compile(r'\{\{|\}\}')   # {{ }}
-RENPY_QMARK_PLACEHOLDER_RE = re.compile(r'\?[A-Za-z]\d{3}\?')
-RENPY_ANGLE_PLACEHOLDER_RE = re.compile(r'\u27e6[^\u27e7]+\u27e7')
 
-# Combined protection regex
-# Includes: {{, }}, {tag}, [var], ?A000?, ⟦...⟧, %% (double percent = literal %)
-PROTECT_RE = re.compile(
-    r'(%%|'  # Double percent (literal % in Ren'Py/Python)
-    r'\{\{|\}\}|\{[^\}]+\}|\[[^\[\]]+\]|'
-    r'\?[A-Za-z]\d{3}\?|'
-    r'\u27e6[^\u27e7]+\u27e7)'
+# =============================================================================
+# SHARED REGEX PATTERNS (Single Source of Truth)
+# =============================================================================
+# Base building blocks for protection regexes
+_PAT_PCT = r'%%'                             # Literal % (double percent)
+_PAT_ESC = r'\{\{|\}\}|\[\[|\]\]'            # Escaped braces/brackets: {{, }}, [[, ]]
+_PAT_TAG = r'\{[^\}]+\}'                     # {tag} (greedy match inside braces)
+# _PAT_VAR: Matches [variable], [obj.attr], and [list[index]] (1-level nesting)
+# Logic: Starts with [, contains either non-brackets OR a paired [...] set, ends with ]
+_PAT_VAR = r'\[+(?:[^\[\]\n]|\[[^\[\]\n]*\])+\]+'
+_PAT_FMT = r'%\([^)]+\)[sdfi]|%[sdfi]'       # Python formatting: %(var)s or %s (Support for s, d, f, i)
+_PAT_QMK = r'\?[A-Za-z]\d{3}\?'              # ?A000? style
+_PAT_UNI = r'\u27e6[^\u27e7]+\u27e7'         # ⟦...⟧ style
+
+# Combined pattern string (Order matters: most specific/longest first)
+_PROTECT_PATTERN_STR = f"({_PAT_VAR}|{_PAT_TAG}|{_PAT_FMT}|{_PAT_ESC}|{_PAT_PCT}|{_PAT_QMK}|{_PAT_UNI})"
+
+# Pre-compiled Regexes (Module Level Optimization)
+PROTECT_RE = re.compile(_PROTECT_PATTERN_STR)
+
+# Specific Regexes for protect_renpy_syntax logic (Tag extraction)
+# These capture the wrapper tags to identify them
+_OPEN_TAG_RE = re.compile(
+    r'^(\{(?:i|b|u|s|plain|fast|nw|w(?:=[\d.]+)?|p(?:=[\d.]+)?|cps(?:=\*?[\d.]+)?|'
+    r'color(?:=[^}]+)?|size(?:=[^}]+)?|font(?:=[^}]+)?|outlinecolor(?:=[^}]+)?|'
+    r'alpha(?:=[^}]+)?|k(?:=[^}]+)?|rb|rt|space(?:=[^}]+)?|vspace(?:=[^}]+)?|'
+    r'image(?:=[^}]+)?|a(?:=[^}]+)?)\})+'
+)
+
+_CLOSE_TAG_RE = re.compile(
+    r'(\{/(?:i|b|u|s|plain|color|size|font|outlinecolor|alpha|a)\})+$'
 )
 
 # Aggressive spaced pattern for restoration (handles AI adding spaces)
@@ -74,21 +109,8 @@ def protect_renpy_syntax(text: str) -> Tuple[str, Dict[str, str]]:
     wrapper_opening = []  # Başta bulunan açılış tagleri
     wrapper_closing = []  # Sonda bulunan kapanış tagleri
     
-    # Açılış tag pattern: {i}, {b}, {color=...}, etc. (tüm Ren'Py text tags)
-    opening_tag_pattern = re.compile(
-        r'^(\{(?:i|b|u|s|plain|fast|nw|w(?:=[\d.]+)?|p(?:=[\d.]+)?|cps(?:=\*?[\d.]+)?|'
-        r'color(?:=[^}]+)?|size(?:=[^}]+)?|font(?:=[^}]+)?|outlinecolor(?:=[^}]+)?|'
-        r'alpha(?:=[^}]+)?|k(?:=[^}]+)?|rb|rt|space(?:=[^}]+)?|vspace(?:=[^}]+)?|'
-        r'image(?:=[^}]+)?|a(?:=[^}]+)?)\})+'
-    )
-    
-    # Kapanış tag pattern: {/i}, {/b}, {/color}, etc.
-    closing_tag_pattern = re.compile(
-        r'(\{/(?:i|b|u|s|plain|color|size|font|outlinecolor|alpha|a)\})+$'
-    )
-    
     # Başta açılış tag'leri var mı?
-    opening_match = opening_tag_pattern.match(result_text)
+    opening_match = _OPEN_TAG_RE.match(result_text)
     if opening_match:
         wrapper_opening_str = opening_match.group(0)
         result_text = result_text[len(wrapper_opening_str):]
@@ -97,7 +119,7 @@ def protect_renpy_syntax(text: str) -> Tuple[str, Dict[str, str]]:
             wrapper_opening.append(tag_match.group(0))
     
     # Sonda kapanış tag'leri var mı?
-    closing_match = closing_tag_pattern.search(result_text)
+    closing_match = _CLOSE_TAG_RE.search(result_text)
     if closing_match:
         wrapper_closing_str = closing_match.group(0)
         result_text = result_text[:closing_match.start()]
@@ -115,22 +137,14 @@ def protect_renpy_syntax(text: str) -> Tuple[str, Dict[str, str]]:
     result_text = result_text.strip()
     
     # AŞAMA 2: Kalan tüm syntax'ı placeholder'a çevir
-    # Bu aşamada: partial tagler, değişkenler, escaped karakterler
-    protect_pattern = re.compile(
-        r'(%%|'  # Double percent
-        r'\{\{|\}\}|'  # Escaped braces
-        r'\{/?[^}]+\}|'  # Remaining text tags (partial)
-        r'%\([^)]+\)[sd]|'  # %(var)s format
-        r'\[[^\[\]]+\]|'  # Variables [name]
-        r'\?[A-Za-z]\d{3}\?|'  # ?A000? style
-        r'\u27e6[^\u27e7]+\u27e7)'  # ⟦...⟧ style
-    )
+    # Bu aşamada: partial tagler, değişkenler, escaped karakterler, python formatları
+    # (Global PROTECT_RE kullanılıyor)
     
     counter = 0
     out_parts: List[str] = []
     last = 0
     
-    for m in protect_pattern.finditer(result_text):
+    for m in PROTECT_RE.finditer(result_text):
         start, end = m.start(), m.end()
         out_parts.append(result_text[last:start])
         
@@ -208,8 +222,12 @@ def restore_renpy_syntax(text: str, placeholders: Dict[str, str]) -> str:
         if placeholder in result:
             # Placeholder + etrafındaki opsiyonel boşlukları bul ve orijinalle değiştir
             # Bu, protect aşamasında eklenen boşlukları düzgün temizler
-            spaced_pattern = re.compile(r'\s*' + re.escape(placeholder) + r'\s*')
-            result = spaced_pattern.sub(original, result)
+            # Placeholder'ı sadece kendisiyle değiştir (etrafındaki boşlukları YUTMA)
+            # Daha önce regex r'\s*' + ph + r'\s*' kullanıyorduk, bu da çevirideki boşlukları siliyordu.
+            # Artık sadece placeholder değişimine güveniyoruz. Google'dan dönen çift boşluklar (koruma için eklediğimiz) 
+            # kalabilir ama yapışık metinden (ör: "is[var]") çok daha iyidir.
+            pattern = re.compile(re.escape(placeholder))
+            result = pattern.sub(original, result)
         else:
             remaining_placeholders.append((placeholder, original))
     
@@ -271,6 +289,8 @@ def restore_renpy_syntax(text: str, placeholders: Dict[str, str]) -> str:
             rf'XRPY[A-Z]\s*{spaced_core}\s*XRPY[A-Z]?',
             # Boşluklu tam pattern
             rf'X\s*R\s*P\s*Y\s*X?\s*{spaced_core}\s*(?:X\s*R\s*P\s*Y\s*X?)?',
+            # XVAR0XRPYX (XRPYX kısaltılmış, XVAR0 olarak başlamış)
+            rf'X\s*{spaced_core}\s*XRPY[A-Z]?',
         ]
         
         for fp in fuzzy_patterns:
@@ -321,7 +341,45 @@ def restore_renpy_syntax(text: str, placeholders: Dict[str, str]) -> str:
         
         for tag in closing_tags:
             result = result + tag
-                
+    
+    # AŞAMA 5: Final Syntax Cleanup (Google "Improvement" Reversal)
+    # Google Translate parantezlerin arasına boşluk koymayı çok sever.
+    # Bu adımlar, Ren'Py syntax'ını bozan bu "güzellikleri" geri alır.
+
+    # 1. Parantez Tamiri: Google boşluk atmaya bayılır -> [ [ S ] ] -> [[S]]
+    # Açılışları birleştir: [ [ -> [[ , [  [ -> [[
+    result = re.sub(r'\[\s*\[', '[[', result)
+    # Kapanışları birleştir: ]  ] -> ]]
+    result = re.sub(r'\]\s*\]', ']]', result)
+    
+    # 2. Değişken İçi Boşlukları Temizle: [ var ] -> [var]
+    # Sadece tek kelime (variable) veya sayı içerenleri hedefle.
+    result = re.sub(r'\[\s+([a-zA-Z0-9_]+)\s+\]', r'[\1]', result)
+    
+    # 3. Dizi/Liste Erişimi Temizliği: [var [ 1 ] ] -> [var[1]]
+    # Önce içteki [ 1 ] -> [1]
+    result = re.sub(r'\[\s*(\d+)\s*\]', r'[\1]', result)
+    
+    # Şimdi dıştaki boşlukları al: [var [1]] -> [var[1]]
+    # Veya yanyana erişim: list [1] -> list[1] (Daha riskli, dikkatli olmalıyız)
+    # En güvenlisi: sadece iç içe olanları (nested placeholders) düzeltmek.
+    result = re.sub(r'\[\s*([a-zA-Z0-9_]+)\s+(\[\d+\])\s*\]', r'[\1\2]', result)
+    
+    # 4. Genel "Google Hallucination" Temizliği (Atomik Onarım)
+    # Google bazen placeholder'ı parçalar: XRPYX VAR 0 XRPYX -> XRPYXVAR0XRPYX
+    # Hatta bazen: X R P Y X  VAR  0  X R P Y X  yapar.
+    def _fix_shattered_placeholder(m):
+        # Boşlukları temizle ve büyük harfe zorla
+        return re.sub(r'\s+', '', m.group(0)).upper()
+
+    # X\s*R\s*P\s*Y\s*X yapısını ve arasındaki VAR/TAG içeriğini yakala (Case-insensitive)
+    shattered_re = re.compile(r'X\s*R\s*P\s*Y\s*X\s*[A-Z0-9\s_]+\s*X\s*R\s*P\s*Y\s*X', re.IGNORECASE)
+    result = shattered_re.sub(_fix_shattered_placeholder, result)
+    
+    # Parantez etrafındaki gereksiz boşlukları (placeholder dışı kalmışsa) temizle
+    result = re.sub(r'\[\s*(\[[A-Z0-9_]+\])', r'\1', result)
+    result = re.sub(r'(\[[A-Z0-9_]+\])\s*\]', r'\1', result)
+
     return result
 
 
@@ -389,15 +447,8 @@ def validate_translation_integrity(text: str, placeholders: Dict[str, str]) -> L
 # Bu yöntem placeholder değiştirmeden çok daha güvenilir.
 
 # HTML koruma için regex (protect_renpy_syntax ile aynı pattern'leri kullanır)
-HTML_PROTECT_RE = re.compile(
-    r'(%%|'  # Double percent
-    r'\{\{|\}\}|'  # Escaped braces
-    r'\{[^\}]+\}|'  # Text tags {i}, {color=#xxx}, etc.
-    r'\[[^\[\]]+\]|'  # Variables [name], [player.name], etc.
-    r'\?[A-Za-z]\d{3}\?|'  # ?A000? style
-    r'\u27e6[^\u27e7]+\u27e7|'  # ⟦...⟧ style
-    r'%\([^)]+\)[sd])'  # %(var)s or %(var)d format
-)
+# HTML koruma için regex (protect_renpy_syntax ile aynı pattern'leri kullanır - Shared Source)
+HTML_PROTECT_RE = re.compile(_PROTECT_PATTERN_STR)
 
 
 def protect_renpy_syntax_html(text: str) -> str:
@@ -467,5 +518,94 @@ def restore_renpy_syntax_html(text: str) -> str:
     # Google bazen fazladan HTML entity ekleyebilir, bunları da temizle
     result = result.replace('&lt;', '<').replace('&gt;', '>')
     result = result.replace('&amp;', '&').replace('&quot;', '"')
+    
+    return result
+
+
+# =============================================================================
+# XML PLACEHOLDER SYSTEM (LLM Optimized)
+# =============================================================================
+# LLM'ler (OpenAI, Gemini, vb.) en iyi XML benzeri yapıları korur.
+# Bu nedenle XRPYX yerine <ph id="N">...</ph> formatı kullanıyoruz.
+
+
+def protect_renpy_syntax_xml(text: str) -> Tuple[str, Dict[str, str]]:
+    """
+    LLM'ler için XML tabanlı koruma (XRPYX yerine).
+    
+    Format: <ph id="0">[variable]</ph>
+    
+    Bu format LLM'lerin "code-switching" yapmasını engeller ve
+    taglerin içeriğini çevirmeden korumalarını sağlar.
+    
+    Args:
+        text (str): Korunacak metin
+        
+    Returns:
+        Tuple[str, Dict[str, str]]: (XML'li metin, placeholder map)
+    """
+    placeholders: Dict[str, str] = {}
+    result_text = text
+    
+    counter = 0
+    out_parts: List[str] = []
+    last = 0
+    
+    for m in PROTECT_RE.finditer(result_text):
+        start, end = m.start(), m.end()
+        out_parts.append(result_text[last:start])
+        
+        token = m.group(0)
+        
+        # XML ID oluştur
+        ph_id = str(counter)
+        
+        # <ph> tag'i oluştur
+        # İçeriği de içinde tutuyoruz ki LLM bağlamı görsün ama dokunmasın
+        xml_tag = f'<ph id="{ph_id}">{token}</ph>'
+        
+        # Map'e kaydet (id -> orijinal)
+        placeholders[ph_id] = token
+        
+        out_parts.append(xml_tag)
+        counter += 1
+        last = end
+        
+    out_parts.append(result_text[last:])
+    return ''.join(out_parts), placeholders
+
+
+def restore_renpy_syntax_xml(text: str, placeholders: Dict[str, str]) -> str:
+    """
+    XML taglerini temizler ve orijinalleri geri yükler.
+    
+    Regex ile <ph id="N">...</ph> yapılarını bulur ve map'teki
+    orijinal değerle (id'ye göre) değiştirir.
+    
+    Args:
+        text (str): XML içeren çevrilmiş metin
+        placeholders (Dict[str, str]): id -> orijinal değer
+        
+    Returns:
+        str: Temizlenmiş metin
+    """
+    if not text or not placeholders:
+        return text
+    
+    # Regex: <ph id="N">...</ph> or <ph id = 'N'>...</ ph>
+    # Case insensitive, whitespace tolerant for attributes and closing tag
+    ph_pattern = re.compile(
+        r'<ph\b[^>]*\bid\s*=\s*["\']?(\d+)["\']?[^>]*>.*?</\s*ph\s*>',
+        re.IGNORECASE | re.DOTALL
+    )
+    
+    def replacer(match):
+        ph_id = match.group(1)
+        # ID map'te varsa orijinali dön, yoksa match'i (veya boşu) dön
+        if ph_id in placeholders:
+            return placeholders[ph_id]
+        return match.group(0) # Bulunamazsa dokunma (integrity check yakalar)
+        
+    result = ph_pattern.sub(replacer, text)
     
     return result

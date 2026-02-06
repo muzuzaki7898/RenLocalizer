@@ -10,7 +10,6 @@ project_dir = os.path.abspath(os.getcwd())
 hidden_imports = collect_submodules('src')
 
 # Aggressively collect submodules for external libraries to prevent missing imports
-hidden_imports += collect_submodules('qfluentwidgets')
 hidden_imports += collect_submodules('aiohttp')
 hidden_imports += collect_submodules('requests')
 hidden_imports += collect_submodules('httpx')
@@ -24,7 +23,6 @@ hidden_imports += collect_submodules('unrpa')
 hidden_imports += collect_submodules('openai')
 hidden_imports += collect_submodules('google.genai')
 hidden_imports += collect_submodules('yaml')
-hidden_imports += collect_submodules('darkdetect')
 hidden_imports += collect_submodules('fontTools')
 hidden_imports += collect_submodules('pyparsing')
 hidden_imports += collect_submodules('certifi')
@@ -46,9 +44,6 @@ else:
         'PIL._tkinter_finder',
     ])
 
-# Collect data files for libraries that need them (e.g. QFluentWidgets icons)
-qfluent_datas = collect_data_files('qfluentwidgets')
-
 # Define datas with absolute paths to avoid not found errors
 datas_list = [
     (os.path.join(project_dir, 'locales'), 'locales'),
@@ -57,7 +52,7 @@ datas_list = [
     (os.path.join(project_dir, 'src', 'gui', 'qml'), os.path.join('src', 'gui', 'qml')),
     # Add version.py for runtime reading
     (os.path.join(project_dir, 'src', 'version.py'), 'src'),
-] + qfluent_datas
+]
 
 # Add Linux/Mac shell scripts only when building on those platforms
 # These are for source-based execution assistance, not required for bundled apps

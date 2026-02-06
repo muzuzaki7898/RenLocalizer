@@ -182,6 +182,7 @@
   "proxy_tab": "پروکسی",
   "advanced_tab": "پیشرفته",
   "text_types_description": "انواع متون مورد نظر برای ترجمه را انتخاب کنید.",
+  "translation_filters": "فیلترهای ترجمه",
   "core_text_types_group": "انواع متن پایه",
   "translate_dialogue_label": "دیالوگ‌ها",
   "translate_dialogue_tooltip": "دیالوگ‌های شخصیت‌ها و متن راوی",
@@ -672,6 +673,7 @@
   "how_to_use": "چطور استفاده کنیم؟",
   "rpa_extraction_needed": "نیاز به استخراج",
   "rpa_extraction_needed_desc": "فایل‌ها آرشیو هستند. استخراج شوند؟",
+  "tip_aggressive_translation": "نکته: اگر متوجه خطوط ترجمه‌نشده شدید، مود 'ترجمه تهاجمی' را در تنظیمات فعال کنید. این مود کندتر است اما خطوط سرسخت را مجبور به ترجمه می‌کند. <a href='https://github.com/Lord0fTurk/RenLocalizer/wiki/FAQ'>اطلاعات بیشتر (FAQ)</a>",
   "support_banner_title": "حمایت از ما؟",
   "support_banner_desc": "برای ادامه راه حمایت خود را از ما دریغ نکنید.",
   "support_hint": "کمک به پروژه؟",
@@ -842,5 +844,23 @@
   "font_manual_title": "Manual Font Selection",
   "font_manual_desc": "Manually select and download a Google Font from the list instead of auto-matching.",
   "font_manual_select": "Select Font:",
-  "btn_download_inject": "Download & Inject"
+  "btn_download_inject": "Download & Inject",
+  "api_key_label": "کلید API",
+  "app_log_qt_ui": " - Qt Quick UI",
+  "btn_refresh": "بروزرسانی",
+  "diagnostics_desc": "ابزارهای تشخیصی و کنترلی برای بهبود کیفیت ترجمه.",
+  "gemini_api_key_label": "کلید API جمینای",
+  "gemini_section_title": "✨ Google Gemini",
+  "local_llm_model_placeholder": "نام مدل",
+  "local_llm_url_placeholder": "آدرس سرور",
+  "log_proxy_refreshing": "در حال بروزرسانی...",
+  "openai_section_title": "🤖 OpenAI / OpenRouter / DeepSeek",
+  "proxy_url_placeholder": "مثال: http://user:pass@host:port",
+  "settings_hook_desc": "ایجاد مود Runtime Hook برای تشخیص ترجمه‌ها توسط بازی.",
+  "settings_use_html_protection": "محافظت از قالب HTML (تجربی)",
+  "tooltip_html_protection": "از متغیرها محافظت می‌کند. از تگ <span class=\"notranslate\"> گوگل استفاده می‌کند.",
+  "translation_tools_desc": "ابزارهای پیشرفته ترجمه و تست.",
+  "unren_desc": "استفاده از ابزارهای استخراج RPA برای باز کردن آرشیوهای .rpa بازی‌های رن‌پای.",
+  "auto_hook_gen": "ایجاد خودکار پس از ترجمه",
+  "update_check_no_update": "شما از آخرین نسخه استفاده می کنید."
 }

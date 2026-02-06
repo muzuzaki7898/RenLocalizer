@@ -68,7 +68,7 @@ Rectangle {
                         }
 
                         Label {
-                            text: (backend.uiTrigger, backend.getTextWithDefault("app_description", "Profesyonel Ren'Py çeviri aracı.\nAI destekli, çoklu motor, hızlı ve güvenilir."))
+                            text: (backend.uiTrigger, backend.getTextWithDefault("app_description", "Professional Ren'Py translation tool.\nAI powered, multi-engine, fast and reliable."))
                             font.pixelSize: 14
                             color: root.secondaryTextColor
                             wrapMode: Text.Wrap
@@ -110,14 +110,14 @@ Rectangle {
                         spacing: 4
 
                         Label {
-                            text: (backend.uiTrigger, backend.getTextWithDefault("nav_support", "Destek Ol!"))
+                            text: (backend.uiTrigger, backend.getTextWithDefault("nav_support", "Support Us!"))
                             font.pixelSize: 20
                             font.bold: true
                             color: "white"
                         }
 
                         Label {
-                            text: (backend.uiTrigger, backend.getTextWithDefault("support_banner_desc", "Geliştirmeye katkıda bulunun ve özel içeriklere erişin."))
+                            text: (backend.uiTrigger, backend.getTextWithDefault("support_banner_desc", "Contribute to development and access exclusive content."))
                             font.pixelSize: 13
                             color: "#ccffffff"
                             wrapMode: Text.Wrap
@@ -161,7 +161,7 @@ Rectangle {
                     spacing: 16
 
                     Label {
-                        text: "🔗 " + (backend.uiTrigger, backend.getTextWithDefault("links_title", "Bağlantılar"))
+                        text: "🔗 " + (backend.uiTrigger, backend.getTextWithDefault("links_title", "Links"))
                         font.pixelSize: 18
                         font.bold: true
                         color: root.mainTextColor
@@ -176,7 +176,7 @@ Rectangle {
                         // GitHub Button
                         LinkButton { label: (backend.uiTrigger, backend.getTextWithDefault("link_github", "📚 GitHub")); onClicked: backend.openUrl("https://github.com/Lord0fTurk/RenLocalizer") }
                         LinkButton { label: (backend.uiTrigger, backend.getTextWithDefault("link_wiki", "📖 Wiki")); onClicked: backend.openUrl("https://github.com/Lord0fTurk/RenLocalizer/wiki") }
-                        LinkButton { label: (backend.uiTrigger, backend.getTextWithDefault("link_issues", "🐛 Hata Bildir")); onClicked: backend.openUrl("https://github.com/Lord0fTurk/RenLocalizer/issues") }
+                        LinkButton { label: (backend.uiTrigger, backend.getTextWithDefault("link_issues", "🐛 Report Bug")); onClicked: backend.openUrl("https://github.com/Lord0fTurk/RenLocalizer/issues") }
                     }
                 }
             }
@@ -197,7 +197,7 @@ Rectangle {
                     spacing: 16
 
                     Label {
-                        text: "✨ " + (backend.uiTrigger, backend.getTextWithDefault("features_title", "Özellikler"))
+                        text: "✨ " + (backend.uiTrigger, backend.getTextWithDefault("features_title", "Features"))
                         font.pixelSize: 18
                         font.bold: true
                         color: root.mainTextColor
@@ -210,12 +210,12 @@ Rectangle {
                         Repeater {
                             model: [
                                 (backend.uiTrigger, backend.getTextWithDefault("feature_multi_engine", "🌐 Multi-Engine")),
-                                (backend.uiTrigger, backend.getTextWithDefault("feature_ai_powered", "🤖 AI Destekli")),
-                                (backend.uiTrigger, backend.getTextWithDefault("feature_fast_translation", "⚡ Hızlı Çeviri")),
-                                (backend.uiTrigger, backend.getTextWithDefault("feature_rpa_support", "📦 RPA Desteği")),
+                                (backend.uiTrigger, backend.getTextWithDefault("feature_ai_powered", "🤖 AI Powered")),
+                                (backend.uiTrigger, backend.getTextWithDefault("feature_fast_translation", "⚡ Fast Translation")),
+                                (backend.uiTrigger, backend.getTextWithDefault("feature_rpa_support", "📦 RPA Support")),
                                 (backend.uiTrigger, backend.getTextWithDefault("feature_auto_unren", "🔄 Auto UnRen")),
                                 (backend.uiTrigger, backend.getTextWithDefault("feature_glossary_short", "📝 Glossary")),
-                                (backend.uiTrigger, backend.getTextWithDefault("feature_multi_lang", "🌍 Çoklu Dil")),
+                                (backend.uiTrigger, backend.getTextWithDefault("feature_multi_lang", "🌍 Multi-Language")),
                                 (backend.uiTrigger, backend.getTextWithDefault("feature_modern_ui", "🎨 Modern UI"))
                             ]
 

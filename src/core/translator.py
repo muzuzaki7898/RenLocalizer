@@ -71,9 +71,17 @@ class BaseTranslator(ABC):
         self.should_stop_callback: Optional[Callable[[], bool]] = None
         self._session: Optional[aiohttp.ClientSession] = None
         self._connector: Optional[aiohttp.TCPConnector] = None
+        self._session_lock = asyncio.Lock() # Mutex for thread-safe session creation checks
+        self.user_agents = [
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36', 
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:109.0) Gecko/20100101 Firefox/121.0'
+        ]
 
     def emit_log(self, level: str, message: str):
         """Emits log to both standard logger and UI status callback."""
+        # ... logic as before ...
         if level.lower() == 'error':
             self.logger.error(message)
         elif level.lower() == 'warning':
@@ -85,11 +93,42 @@ class BaseTranslator(ABC):
             self.status_callback(level, message)
 
     async def _get_session(self) -> aiohttp.ClientSession:
-        if self._session is None or self._session.closed:
-            self._connector = aiohttp.TCPConnector(limit=256, ttl_dns_cache=300)
-            timeout = aiohttp.ClientTimeout(total=15)
-            self._session = aiohttp.ClientSession(connector=self._connector, timeout=timeout)
-        return self._session
+        """
+        Get or create a reused client session with optimized TCP/DNS settings.
+        Implemented with Double-Checked Locking to prevent race conditions in high concurrency.
+        """
+        if self._session and not self._session.closed:
+            return self._session
+
+        async with self._session_lock:
+            # Second check inside lock
+            if self._session and not self._session.closed:
+                return self._session
+                
+            # TCP Connector Optimization
+            self._connector = aiohttp.TCPConnector(
+                limit=100,
+                limit_per_host=20,
+                ttl_dns_cache=300,
+                use_dns_cache=True,
+                force_close=False, 
+                enable_cleanup_closed=True
+            )
+            
+            timeout = aiohttp.ClientTimeout(total=45, connect=10, sock_read=30)
+            
+            headers = {
+                'Connection': 'keep-alive'
+            }
+            if hasattr(self, 'user_agents') and self.user_agents:
+                headers['User-Agent'] = random.choice(self.user_agents)
+
+            self._session = aiohttp.ClientSession(
+                connector=self._connector,
+                timeout=timeout,
+                headers=headers
+            )
+            return self._session
 
     def _get_text(self, key: str, default: str, **kwargs) -> str:
         """Helper to get localized text from config_manager."""
@@ -185,14 +224,15 @@ class GoogleTranslator(BaseTranslator):
     
     # Lingva instances (free, no API key needed)
     lingva_instances = [
-        "https://lingva.ml",
-        "https://lingva.lunar.icu",
-        "https://lingva.garudalinux.org",  # Extra fallback; avoids AV warnings seen with plausibility.cloud
+        "https://lingva.lunar.icu",         # Often fastest
+        "https://lingva.garudalinux.org",   # Very stable
+        "https://translate.plausibility.cloud", 
+        "https://lingva.ml",                # Official (put last due to traffic/downtime)
     ]
     
     # Default values (can be overridden from config)
     multi_q_concurrency = 16  # Paralel endpoint istekleri
-    max_slice_chars = 3000   # Bir istekteki maksimum karakter
+    max_slice_chars = 1800   # Bir istekteki maksimum karakter (URL limit prevent)
     max_texts_per_slice = 25  # Maximum texts per slice
     use_multi_endpoint = True  # Çoklu endpoint kullan
     enable_lingva_fallback = True  # Lingva fallback aktif
@@ -204,7 +244,10 @@ class GoogleTranslator(BaseTranslator):
     def __init__(self, *args, config_manager=None, **kwargs):
         super().__init__(*args, **kwargs)
         self._endpoint_index = 0
-        self._lingva_index = 0
+        
+        # Start from a random Lingva instance to distribute load / avoid dead first server
+        self._lingva_index = random.randint(0, len(self.lingva_instances) - 1)
+        
         self._endpoint_health: Dict[str, dict] = {}  # {url: {'fails': int, 'banned_until': float}}
         
         # Initialize health tracking for all endpoints
@@ -218,7 +261,7 @@ class GoogleTranslator(BaseTranslator):
             self.enable_lingva_fallback = getattr(ts, 'enable_lingva_fallback', True)
             # Slider ile kontrol edilen 'max_concurrent_threads' değerini baz alıyoruz
             self.multi_q_concurrency = getattr(ts, 'max_concurrent_threads', 16)
-            self.max_slice_chars = getattr(ts, 'max_chars_per_request', 5000)
+            self.max_slice_chars = getattr(ts, 'max_chars_per_request', 2000)
             self.max_texts_per_slice = getattr(ts, 'max_batch_size', 200)  # Use general batch size for Google
             self.aggressive_retry = getattr(ts, 'aggressive_retry_translation', False)
             self.use_html_protection = getattr(ts, 'use_html_protection', False)
@@ -266,11 +309,13 @@ class GoogleTranslator(BaseTranslator):
         
         for _ in range(len(self.lingva_instances)):
             instance = self._get_next_lingva()
-            url = f"{instance}/api/v1/{lingva_source}/{target}/{urllib.parse.quote(text)}"
+            # Encode specifically for Lingva URL structure
+            url = f"{instance}/api/v1/{lingva_source}/{target}/{urllib.parse.quote(text, safe='')}"
             
             try:
                 session = await self._get_session()
-                async with session.get(url, timeout=aiohttp.ClientTimeout(total=10)) as resp:
+                # Reduced timeout to 6s for faster failover
+                async with session.get(url, timeout=aiohttp.ClientTimeout(total=6)) as resp:
                     if resp.status == 200:
                         data = await resp.json()
                         if data and 'translation' in data:
@@ -311,41 +356,56 @@ class GoogleTranslator(BaseTranslator):
         
         # Try Google endpoints first (parallel race)
         async def try_endpoint(endpoint: str) -> Optional[str]:
-            try:
-                query = urllib.parse.urlencode(params, doseq=True, safe='')
-                url = f"{endpoint}?{query}"
-                session = await self._get_session()
-                
-                proxy = None
-                if self.use_proxy and self.proxy_manager:
-                    p = self.proxy_manager.get_next_proxy()
-                    if p:
-                        proxy = p.url
-                
-                async with session.get(url, proxy=proxy, timeout=aiohttp.ClientTimeout(total=8)) as resp:
-                    if resp.status == 200:
-                        data = await resp.json(content_type=None)
-                        if data and isinstance(data, list) and data[0]:
-                            text = ''.join(part[0] for part in data[0] if part and part[0])
-                            # Reset failure count on success
-                            if endpoint in self._endpoint_health:
-                                self._endpoint_health[endpoint]['fails'] = 0
-                            return text
+            max_attempts = 3
+            for attempt in range(1, max_attempts + 1):
+                try:
+                    query = urllib.parse.urlencode(params, doseq=True, safe='')
+                    url = f"{endpoint}?{query}"
+                    session = await self._get_session()
                     
-                    # Track failure (HTTP error)
-                    if endpoint in self._endpoint_health:
-                        self._endpoint_health[endpoint]['fails'] += 1
-                        if self._endpoint_health[endpoint]['fails'] >= self.MIRROR_MAX_FAILURES:
-                             self._endpoint_health[endpoint]['banned_until'] = time.time() + self.MIRROR_BAN_TIME
-                             self.logger.warning(f"Google Mirror BANNED temporarily (5min): {endpoint}")
+                    proxy = None
+                    if self.use_proxy and self.proxy_manager:
+                        p = self.proxy_manager.get_next_proxy()
+                        if p:
+                            proxy = p.url
+                    
+                    async with session.get(url, proxy=proxy, timeout=aiohttp.ClientTimeout(total=8)) as resp:
+                        if resp.status == 200:
+                            data = await resp.json(content_type=None)
+                            if data and isinstance(data, list) and data[0]:
+                                text = ''.join(part[0] for part in data[0] if part and part[0])
+                                # Successful translation: Reset failure count
+                                if endpoint in self._endpoint_health:
+                                    self._endpoint_health[endpoint]['fails'] = 0
+                                return text
+                        
+                        elif resp.status == 429: # Too Many Requests
+                            # Aggressive Backoff: Wait 2s -> 4s -> 8s + Jitter
+                            wait_time = (2 ** attempt) + random.uniform(0.5, 1.5)
+                            self.logger.warning(f"Google 429 (Rate Limit) on {endpoint}. Backing off {wait_time:.2f}s...")
+                            await asyncio.sleep(wait_time)
+                            # Do not count as 'fail' immediately to keep mirror alive, but retry
+                            continue
 
-            except Exception as e:
-                # Track failure (Exception)
+                        # Other HTTP errors (500, 403, etc.)
+                        if endpoint in self._endpoint_health:
+                            self._endpoint_health[endpoint]['fails'] += 1
+                
+                except Exception:
+                    # Network/Timeout errors
+                    # Mild Backoff: Wait 1s -> 2s
+                    wait_time = (1.5 ** attempt) * 0.5
+                    await asyncio.sleep(wait_time)
+                    if endpoint in self._endpoint_health:
+                         self._endpoint_health[endpoint]['fails'] += 1
+
+                # Check if we should ban the mirror after this attempt
                 if endpoint in self._endpoint_health:
-                    self._endpoint_health[endpoint]['fails'] += 1
                     if self._endpoint_health[endpoint]['fails'] >= self.MIRROR_MAX_FAILURES:
-                            self._endpoint_health[endpoint]['banned_until'] = time.time() + self.MIRROR_BAN_TIME
-                            self.logger.warning(f"Google Mirror BANNED temporarily (5min): {endpoint} ({str(e)[:50]})")
+                         self._endpoint_health[endpoint]['banned_until'] = time.time() + self.MIRROR_BAN_TIME
+                         self.logger.warning(f"Google Mirror BANNED temporarily (5min): {endpoint}")
+                         return None # Stop retrying this endpoint if banned
+
             return None
         
         translated_text = None
@@ -424,10 +484,29 @@ class GoogleTranslator(BaseTranslator):
 
                     # If translation equals original and aggressive_retry is enabled
                     if self.aggressive_retry and final_text.strip() == request.text.strip():
-                        self.logger.debug(f"Translation unchanged, retrying with Lingva: {request.text[:50]}")
+                        self.logger.debug(f"Translation unchanged. Starting Aggressive Retry chain...")
                         
-                        # Try Lingva fallback for unchanged translations
+                        # LEVEL 1: Try another Google Endpoint
+                        retry_google_res = await try_endpoint(self._get_next_endpoint())
+                        if retry_google_res:
+                            if self.use_html_protection:
+                                retry_google_final = restore_renpy_syntax_html(retry_google_res)
+                            else:
+                                retry_google_final = restore_renpy_syntax(retry_google_res, placeholders)
+                            
+                            # Validasyon
+                            if (retry_google_final.strip() != request.text.strip()) and (not validate_translation_integrity(retry_google_final, placeholders)):
+                                self.logger.info("Aggressive: Alternative Google Endpoint succeeded!")
+                                final_text = retry_google_final
+                                # Success, return immediately
+                                return TranslationResult(
+                                    request.text, final_text, request.source_lang, request.target_lang,
+                                    TranslationEngine.GOOGLE, True, metadata={'aggressive': True}
+                                )
+
+                        # LEVEL 2: Try Lingva fallback (Eğer Google yine başarısız olduysa)
                         if self.enable_lingva_fallback:
+                            self.logger.debug("Aggressive: Google failed, trying Lingva...")
                             # Prepare Lingva input
                             if self.use_html_protection:
                                 lingva_input, lingva_map = protect_renpy_syntax(request.text)
@@ -1515,7 +1594,7 @@ class TranslationManager:
         else:
             self.use_cache = True
 
-        self.cache_capacity = 20000
+        self.cache_capacity = 500000  # Increased from 20k to 500k to support large VNs
         self._cache: OrderedDict = OrderedDict()
         self._cache_lock = asyncio.Lock()
         self.cache_hits = 0

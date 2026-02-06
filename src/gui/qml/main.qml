@@ -243,7 +243,7 @@ ApplicationWindow {
 
         function onUpdateCheckFinished(hasUpdate, message) {
             if (!hasUpdate) {
-                warningDialog.title = (backend.uiTrigger, backend.getTextWithDefault("info", "Bilgi"))
+                warningDialog.title = (backend.uiTrigger, backend.getTextWithDefault("dialog_info_title", "Info"))
                 warningDialog.text = message
                 warningDialog.open()
             }
@@ -265,7 +265,7 @@ ApplicationWindow {
         anchors.centerIn: parent
         width: 450
         modal: true
-        title: (backend.uiTrigger, backend.getTextWithDefault("update_available_title", "🚀 Güncelleme Mevcut!"))
+        title: (backend.uiTrigger, backend.getTextWithDefault("update_available_title", "🚀 Update Available!"))
         
         background: Rectangle {
             color: "#252540"
@@ -277,22 +277,22 @@ ApplicationWindow {
         contentItem: ColumnLayout {
             spacing: 15
             Label { 
-                text: (backend.uiTrigger, backend.getTextWithDefault("update_available_message", "Yeni bir sürüm mevcut!")).replace("{latest}", updateDialog.latestVer).replace("{current}", "") 
+                text: (backend.uiTrigger, backend.getTextWithDefault("update_available_message", "A new version is available!")).replace("{latest}", updateDialog.latestVer).replace("{current}", "") 
                 font.bold: true; font.pixelSize: 18; color: "#3498db"
                 Layout.alignment: Qt.AlignHCenter
             }
             Label { 
-                text: (backend.uiTrigger, backend.getTextWithDefault("current_version", "Mevcut Sürüm: ")) + updateDialog.currentVer
+                text: (backend.uiTrigger, backend.getTextWithDefault("current_version", "Current Version: ")) + updateDialog.currentVer
                 color: "#ccc"; font.pixelSize: 14
                 Layout.alignment: Qt.AlignHCenter
             }
             Label { 
-                text: (backend.uiTrigger, backend.getTextWithDefault("new_version", "Yeni Sürüm: ")) + updateDialog.latestVer
+                text: (backend.uiTrigger, backend.getTextWithDefault("new_version", "New Version: ")) + updateDialog.latestVer
                 color: "#2ecc71"; font.bold: true; font.pixelSize: 16
                 Layout.alignment: Qt.AlignHCenter
             }
             Label {
-                text: (backend.uiTrigger, backend.getTextWithDefault("update_download_desc", "İndirmek için tarayıcıda açmak ister misiniz?"))
+                text: (backend.uiTrigger, backend.getTextWithDefault("update_download_desc", "Do you want to open in browser to download?"))
                 color: "#aaa"; font.pixelSize: 13
                 Layout.alignment: Qt.AlignHCenter
             }
@@ -301,7 +301,7 @@ ApplicationWindow {
         footer: DialogButtonBox {
             // "İndir" butonu -> Tarayıcıda açar
             Button {
-                text: "🌐 " + (backend.uiTrigger, backend.getTextWithDefault("btn_download", "İndir ve Güncelle"))
+                text: "🌐 " + (backend.uiTrigger, backend.getTextWithDefault("btn_download", "Download and Update"))
                 DialogButtonBox.buttonRole: DialogButtonBox.AcceptRole
                 background: Rectangle { radius: 8; color: "#2ecc71" }
                 contentItem: Label { text: parent.text; color: "white"; horizontalAlignment: Text.AlignHCenter }
@@ -309,7 +309,7 @@ ApplicationWindow {
             }
             // "Kapat" butonu
             Button {
-                text: (backend.uiTrigger, backend.getTextWithDefault("btn_close", "Kapat"))
+                text: (backend.uiTrigger, backend.getTextWithDefault("btn_close", "Close"))
                 DialogButtonBox.buttonRole: DialogButtonBox.RejectRole
                 background: Rectangle { radius: 8; color: "#555" }
                 contentItem: Label { text: parent.text; color: "white"; horizontalAlignment: Text.AlignHCenter }
@@ -327,7 +327,7 @@ ApplicationWindow {
         width: 400
         modal: true
         
-        title: "⚠️ " + (backend.uiTrigger, backend.getTextWithDefault("warning", "Uyarı"))
+        title: "⚠️ " + (backend.uiTrigger, backend.getTextWithDefault("warning", "Warning"))
         
         background: Rectangle {
             color: "#252540"
@@ -367,7 +367,7 @@ ApplicationWindow {
         footer: DialogButtonBox {
             background: Rectangle { color: "transparent" }
             Button {
-                text: (backend.uiTrigger, backend.getTextWithDefault("btn_ok", "Tamam"))
+                text: (backend.uiTrigger, backend.getTextWithDefault("btn_ok", "OK"))
                 DialogButtonBox.buttonRole: DialogButtonBox.AcceptRole
                 
                 background: Rectangle {
@@ -404,7 +404,7 @@ ApplicationWindow {
             spacing: 20
 
             Label {
-                text: (backend.uiTrigger, backend.getTextWithDefault("version_label", "Sürüm:")) + " v" + backend.version
+                text: (backend.uiTrigger, backend.getTextWithDefault("version_label", "Version:")) + " v" + backend.version
                 font.pixelSize: 11
                 color: "#888"
             }
@@ -412,8 +412,8 @@ ApplicationWindow {
             Label {
                 id: statusText
                 text: homePage.isTranslating ? 
-                    (backend.uiTrigger, backend.getTextWithDefault("translating", "Çeviri yapılıyor...")) : 
-                    (backend.uiTrigger, backend.getTextWithDefault("ready", "Hazır"))
+                    (backend.uiTrigger, backend.getTextWithDefault("translating", "Translating...")) : 
+                    (backend.uiTrigger, backend.getTextWithDefault("ready", "Ready"))
                 font.pixelSize: 11
                 color: homePage.isTranslating ? Material.accent : "#888"
             }

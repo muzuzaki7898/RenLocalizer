@@ -38,6 +38,45 @@ import sys
 
 
 # ============================================================================
+# PERFORMANCE: PRE-COMPILED REGEX PATTERNS (REGEX POOLING)
+# ============================================================================
+# Compiling these at module level prevents re-compilation for every single string check.
+
+# Binary / Corruption Checks
+_RE_PUA = re.compile(r'[\uE000-\uF8FF\uFFF0-\uFFFF]')
+_RE_CONTROL_CHARS = re.compile(r'[\x00-\x08\x0B\x0C\x0E-\x1F\x7F-\x9F]')
+_RE_NON_PRINTABLE_HIGH_RATIO = re.compile(r'[^\x20-\x7E\s\u00A0-\u00FF\u0100-\u024F\u0400-\u04FF\u4E00-\u9FFF\u3040-\u30FF\uAC00-\uD7AF]')
+_RE_UNUSUAL_SHORT = re.compile(r'[^\x20-\x7E]')
+_RE_ASCII_LETTERS = re.compile(r'[a-zA-Z]')
+
+# Format Checks
+_RE_COLOR_HEX = re.compile(r'^#[0-9a-fA-F]{3,8}$')
+_RE_PURE_NUMBER = re.compile(r'^-?\d+\.?\d*$')
+_RE_SNAKE_CASE = re.compile(r'^[a-z][a-z0-9]*(_[a-z0-9]+)+$')
+_RE_HAS_LETTER = re.compile(r'[a-zA-Z\u00C0-\u024F\u0400-\u04FF]')
+
+# Python Code Patterns (Combined for speed)
+_PYTHON_CODE_PATTERNS = [
+    r'\bdef\s+\w+\s*\(', r'\bclass\s+\w+\s*[:\(]', r'\bfor\s+\w+\s+in\s+', 
+    r'\bif\s+\w+\s+in\s+\w+:', r'\bimport\s+\w+', r'\bfrom\s+\w+\s+import', 
+    r'\breturn\s+\w+', r'\braise\s+\w+', r'renpy\.\w+\.\w+', r'renpy\.\w+\(', 
+    r'_\w+\[', r'\w+\s*=\s*True\b', r'\w+\s*=\s*False\b', r'\w+\s*=\s*None\b',
+]
+_RE_PYTHON_CODE = re.compile('|'.join(f'(?:{p})' for p in _PYTHON_CODE_PATTERNS))
+
+_RE_STR_CONCAT = re.compile(r'"\s*\+\s*\w+\s*\+\s*"')
+_RE_ATTR_CONCAT = re.compile(r'\w+\.\w+\s*\+')
+
+_PYTHON_BUILTINS = [
+    r'\bstr\s*\(', r'\bint\s*\(', r'\bfloat\s*\(', r'\blen\s*\(',
+    r'\blist\s*\(', r'\bdict\s*\(', r'\btuple\s*\(', r'\bset\s*\('
+]
+_RE_PYTHON_BUILTINS = re.compile('|'.join(f'(?:{p})' for p in _PYTHON_BUILTINS))
+
+_RE_FILE_PATH_VAR = re.compile(r'["\']?[\w/]+["\']?\s*\+\s*\w+')
+
+
+# ============================================================================
 # FAKE REN'PY MODULE SYSTEM
 # ============================================================================
 # We need to create fake classes that match Ren'Py's AST structure
@@ -72,15 +111,25 @@ class FakeASTBase:
         self.filename: str = ""
     
     def __setstate__(self, state: dict) -> None:
-        """Handle pickle deserialization."""
+        """Handle pickle deserialization with Data Integrity protection."""
+        # Initialize extra_state to capture unknown slots (Future Proofing)
+        self._extra_state = None
+        
         if isinstance(state, dict):
             self.__dict__.update(state)
         elif isinstance(state, tuple):
             # Some nodes use (dict, slotstate) or longer tuples.
             # Merge any dict parts into the object's __dict__.
+            found_dict = False
             for part in state:
                 if isinstance(part, dict):
                     self.__dict__.update(part)
+                    found_dict = True
+            
+            # CRITICAL: Preserve the full state tuple if it contains non-dict components.
+            # This ensures that if Ren'Py adds new slots in the tuple we don't throw them away.
+            if len(state) > 1 or not found_dict:
+                 self._extra_state = state
 
 
 # ============================================================================
@@ -103,6 +152,24 @@ class FakeSay(FakeASTBase):
         self.temporary_attributes: Optional[tuple] = None
         self.identifier: Optional[str] = None
         self.explicit_identifier: bool = False
+
+
+class FakeBubble(FakeSay):
+    """
+    Represents a speech bubble (Ren'Py 8.5+).
+    Functionally similar to Say, but distinct in AST.
+    """
+    def __init__(self):
+        super().__init__()
+        self.properties: Optional[dict] = None # Capture alt, tooltip, help
+        self.code: Optional[Any] = None # Some bubbles might have code blocks
+
+    def __setstate__(self, state):
+        # Bubbles can store properties in a dictionary within the state
+        super().__setstate__(state)
+        # Standard FakeASTBase handling usually catches basic slots,
+        # but we ensure properties are explicitly accessible.
+        pass
 
 
 class FakeTranslateSay(FakeSay):
@@ -531,12 +598,62 @@ class FakeSLDisplayable:
 class FakeSLIf:
     """Screen Language if statement."""
     def __init__(self):
-        self.entries: List[tuple] = []
-        self.location: tuple = ()
-    
+        self.entries: List[Tuple[Any, Any]] = []  # (condition, block)
+
     def __setstate__(self, state: dict) -> None:
         if isinstance(state, dict):
             self.__dict__.update(state)
+
+
+class FakeActionBase:
+    """Base for serialized Ren'Py actions."""
+    pass
+
+class FakeConfirm(FakeActionBase):
+    def __init__(self):
+        self.prompt = ""
+        self.yes = None
+        self.no = None
+
+    def __setstate__(self, state):
+        # Confirm often pickles as (prompt, yes, no) tuple or dict
+        if isinstance(state, tuple):
+             # Heuristic: first arg is usually prompt
+             if len(state) > 0 and isinstance(state[0], str):
+                 self.prompt = state[0]
+        elif isinstance(state, dict):
+             self.__dict__.update(state)
+
+class FakeNotify(FakeActionBase):
+    def __init__(self):
+        self.message = ""
+    
+    def __setstate__(self, state):
+        if isinstance(state, tuple) and len(state) > 0:
+            self.message = state[0]
+        elif isinstance(state, dict):
+            self.__dict__.update(state)
+
+class FakeTooltip(FakeActionBase):
+    def __init__(self):
+        self.value = ""
+
+    def __setstate__(self, state):
+        if isinstance(state, tuple) and len(state) > 0:
+            self.value = state[0]
+        elif isinstance(state, dict):
+             self.__dict__.update(state)
+
+class FakeHelp(FakeActionBase):
+    def __init__(self):
+        self.help = ""
+
+    def __setstate__(self, state):
+        if isinstance(state, tuple) and len(state) > 0:
+            self.help = state[0]
+        elif isinstance(state, dict):
+            self.__dict__.update(state)
+
 
 
 class FakeSLFor:
@@ -645,6 +762,35 @@ class FakeRevertableDict(dict):
     pass
 
 
+class FakeTestcase(FakeASTBase):
+    """Represents a testcase statement (Ren'Py 8.x)."""
+    def __init__(self):
+        super().__init__()
+        self.label: str = ""
+        self.test: str = ""
+        self.block: List[Any] = []
+        self.description: Optional[str] = None
+
+
+class FakeSLDrag(FakeSLDisplayable):
+    """Screen Language drag statement."""
+    def __init__(self):
+        super().__init__()
+        self.drag_name: str = ""
+        self.draggable: Optional[Any] = None
+        self.droppable: Optional[Any] = None
+        self.dragged: Optional[Any] = None
+        self.dropped: Optional[Any] = None
+
+
+class FakeSLBar(FakeSLDisplayable):
+    """Screen Language Bar and VBar."""
+    def __init__(self):
+        super().__init__()
+        self.value: Optional[Any] = None
+        self.range: Optional[Any] = None
+
+
 class FakeOrderedDict(dict):
     """Tolerant OrderedDict replacement for unpickling.
 
@@ -655,45 +801,49 @@ class FakeOrderedDict(dict):
     only consumes the first two elements of each pair when present.
     """
     def __setstate__(self, state):
-        # If state is a mapping, update normally
-        if isinstance(state, dict):
-            self.update(state)
-            return
-
-        # If state is tuple/list, it may be: (items_list,) or list(items)
-        if isinstance(state, (tuple, list)):
-            # If it's a one-element tuple whose element is a dict, handle it
-            if len(state) == 1 and isinstance(state[0], dict):
-                self.update(state[0])
+        """
+        Robust state handling for Ren'Py 8.x + Python 3.
+        Supports:
+        - Dict state
+        - Tuple of (dict,)
+        - List of pairs [(k,v), (k,v)]
+        - Flat list [k, v, k, v] (New Ren'Py serialization)
+        """
+        try:
+            # 1. Standard Dict
+            if isinstance(state, dict):
+                self.update(state)
                 return
 
-            # Walk through sequence and accept pairs (or longer tuples where
-            # the first two elements are key/value)
-            for part in state:
-                if isinstance(part, dict):
-                    self.update(part)
-                elif isinstance(part, (list, tuple)):
-                    # If it's a sequence of (k,v,...) or ((k,v), (k2,v2))
-                    # try to handle both
-                    # If it's a flat list of 2-tuples, update will work below
-                    if all(isinstance(el, (list, tuple)) and len(el) >= 2 for el in part):
-                        for el in part:
-                            k, v = el[0], el[1]
-                            self[k] = v
-                    elif len(part) >= 2 and not any(isinstance(el, (list, tuple, dict)) for el in part):
-                        # single pair-like tuple possibly with extras
-                        self[part[0]] = part[1]
-                else:
-                    # Unknown element, ignore
-                    continue
+            # 2. Tuple Wrapper (state,)
+            if isinstance(state, tuple) and len(state) == 1 and isinstance(state[0], (list, dict)):
+                self.__setstate__(state[0])
+                return
 
-            return
+            # 3. List / Tuple of items
+            if isinstance(state, (list, tuple)):
+                # Case A: Pairs [(k,v), (k,v)]
+                if all(isinstance(el, (list, tuple)) and len(el) == 2 for el in state):
+                    for k, v in state:
+                        self[k] = v
+                    return
+                
+                # Case B: Flat list [k, v, k, v] (Ren'Py 8.2+ Optimization)
+                if len(state) >= 2 and len(state) % 2 == 0:
+                    # Heuristic: Check if odd elements look like keys (strings/ints)
+                    # This is slightly risky but necessary for flat lists.
+                    try:
+                        for i in range(0, len(state), 2):
+                            self[state[i]] = state[i+1]
+                        return
+                    except TypeError:
+                        pass # Fallback if unhashable
 
-        # Fallback: try to update directly (may raise) but catch exceptions
-        try:
-            self.update(state)
+                # Case C: Mixed/Legacy (try finding dicts)
+                for part in state:
+                    if isinstance(part, dict):
+                        self.update(part)
         except Exception:
-            # Last resort - ignore problematic state
             pass
 
 
@@ -775,6 +925,10 @@ class RenpyUnpickler(pickle.Unpickler):
         ("renpy.parameter", "Parameter"): FakeGeneric,
         ("renpy.parameter", "Signature"): FakeGeneric,
         
+        # New Ren'Py 8.5.2 Nodes
+        ("renpy.ast", "Bubble"): FakeBubble,
+        ("renpy.ast", "Testcase"): FakeTestcase,
+        
         # ATL (Animation and Transformation Language)
         ("renpy.atl", "RawBlock"): FakeRawBlock,
         ("renpy.atl", "RawMultipurpose"): FakeGeneric,
@@ -798,6 +952,11 @@ class RenpyUnpickler(pickle.Unpickler):
         ("renpy.sl2.slast", "SLUse"): FakeSLUse,
         ("renpy.sl2.slast", "SLPython"): FakeSLPython,
         ("renpy.sl2.slast", "SLDefault"): FakeSLDefault,
+        ("renpy.sl2.slast", "SLDrag"): FakeSLDrag,
+        ("renpy.sl2.slast", "SLOnEvent"): FakeSLOnEvent,
+        ("renpy.sl2.slast", "SLBar"): FakeSLBar,
+        ("renpy.sl2.slast", "SLVBar"): FakeSLBar, # VBar shares structure with Bar
+        ("renpy.sl2.slast", "SLCanvas"): FakeGeneric, # Usually custom, map to generic
         ("renpy.sl2.slast", "SLPass"): FakeGeneric,
         ("renpy.sl2.slast", "SLBreak"): FakeGeneric,
         ("renpy.sl2.slast", "SLContinue"): FakeGeneric,
@@ -856,6 +1015,23 @@ class RenpyUnpickler(pickle.Unpickler):
         # Collections
         ("collections", "OrderedDict"): FakeOrderedDict,
         ("collections", "defaultdict"): collections.defaultdict,
+
+        # Actions (UI/Store)
+        ("renpy.ui", "Confirm"): FakeConfirm,
+        ("renpy.store", "Confirm"): FakeConfirm,
+        ("store", "Confirm"): FakeConfirm,
+        
+        ("renpy.ui", "Notify"): FakeNotify,
+        ("renpy.store", "Notify"): FakeNotify,
+        ("store", "Notify"): FakeNotify,
+
+        ("renpy.ui", "Tooltip"): FakeTooltip,
+        ("renpy.store", "Tooltip"): FakeTooltip,
+        ("store", "Tooltip"): FakeTooltip,
+
+        ("renpy.ui", "Help"): FakeHelp,
+        ("renpy.store", "Help"): FakeHelp,
+        ("store", "Help"): FakeHelp,
     }
 
     # Minimal allowlist of harmless builtins needed for pickle internals
@@ -1212,128 +1388,109 @@ class ASTTextExtractor:
         )
     
     def _is_technical_string(self, text: str, context: str = "") -> bool:
-        """Additional context-dependent technical string checks."""
-        import re
-        p = self.parser
-
+        """
+        Additional context-dependent technical string checks.
+        Optimized with Regex Pooling and Early Returns for v2.6.4.
+        """
         text_strip = text.strip()
+        
+        # --- EARLY RETURNS (PERFORMANCE) ---
+        if not text_strip:
+            return True
+            
+        text_len = len(text_strip)
+        
+        # Very short text rules
+        if text_len == 1:
+            # Allow only if it looks like a valid single letter (e.g. 'I', 'a', Cyrillic)
+            # Fast check using pre-compiled regex
+            return not bool(_RE_HAS_LETTER.match(text_strip))
+            
+        # Pure numbers (integers or floats)
+        if text_strip[0].isdigit() or text_strip[0] == '-':
+            if _RE_PURE_NUMBER.match(text_strip):
+                return True
+
         text_lower = text_strip.lower()
         context_lower = context.lower() if context else ""
 
-        # Skip if too short (one letter is fine for Russian "Я")
-        if len(text_strip) < (1 if re.search(r'[а-яА-ЯёЁ]', text_strip) else 2):
+        # --- BINARY/CORRUPTED STRING DETECTION (Pooled Regex) ---
+        if '\ufffd' in text_strip: return True
+        if _RE_PUA.search(text_strip): return True
+        if _RE_CONTROL_CHARS.search(text_strip): return True
+        
+        # Heuristic: Short strings with absolutely no letters are suspicious context for translations
+        # (unless they are punctuation which usually get skipped anyway)
+        if text_len < 10 and not _RE_HAS_LETTER.search(text_strip):
             return True
 
-        # --- BINARY/CORRUPTED STRING DETECTION (from .rpyc files) ---
-        # CHECK 1: Replacement character
-        if '\ufffd' in text_strip:
-            return True
-        
-        # CHECK 2: Private Use Area characters (binary corruption)
-        if re.search(r'[\uE000-\uF8FF\uFFF0-\uFFFF]', text_strip):
-            return True
-        
-        # CHECK 3: Control characters (except common whitespace)
-        if re.search(r'[\x00-\x08\x0B\x0C\x0E-\x1F\x7F-\x9F]', text_strip):
-            return True
-        
-        # CHECK 4: High ratio of non-printable characters
-        strange_chars = len(re.findall(r'[^\x20-\x7E\s\u00A0-\u00FF\u0100-\u024F\u0400-\u04FF\u4E00-\u9FFF\u3040-\u30FF\uAC00-\uD7AF]', text_strip))
-        if len(text_strip) > 0 and strange_chars > len(text_strip) * 0.3:
-            return True
-        
-        # CHECK 5: Very low alphabetic content (likely random binary data)
-        if len(text_strip) > 5:
-            alpha_count = sum(1 for ch in text_strip if ch.isalpha())
-            if alpha_count < len(text_strip) * 0.2:
+        # Complex corruption checks (expensive, do only if suspicious)
+        # Using ratio checks is expensive, do it only for medium-length strings
+        if 5 < text_len < 50:
+             # Unusual chars ratio
+             strange_chars = len(_RE_NON_PRINTABLE_HIGH_RATIO.findall(text_strip))
+             if strange_chars > text_len * 0.3:
+                 return True
+             
+             # Low alpha content
+             if text_len > 8:
+                 alpha_count = len(_RE_ASCII_LETTERS.findall(text_strip))
+                 if alpha_count < text_len * 0.2:
+                     return True
+
+        if 3 <= text_len <= 15:
+            unusual_chars_count = len(_RE_UNUSUAL_SHORT.findall(text_strip))
+            if unusual_chars_count >= 1 and len(_RE_ASCII_LETTERS.findall(text_strip)) <= 3:
                 return True
-        
-        # CHECK 6: Short strings with unusual characters (rpyc corruption pattern)
-        if len(text_strip) >= 3 and len(text_strip) <= 15:
-            unusual_sequences = len(re.findall(r'[^\x20-\x7E]', text_strip))
-            ascii_letters = len(re.findall(r'[a-zA-Z]', text_strip))
-            if unusual_sequences >= 1 and ascii_letters <= 3:
+        # --- END BINARY/CORRUPTED ---
+
+        # Common file extensions
+        # Fast suffix check
+        if '.' in text_strip and text_len > 4:
+            if text_lower.endswith(('.png', '.jpg', '.jpeg', '.gif', '.webp', '.mp3', '.ogg', 
+                                    '.wav', '.ttf', '.otf', '.rpy', '.rpyc', '.json')):
                 return True
-        # --- END BINARY/CORRUPTED STRING DETECTION ---
 
-        # Skip file paths
-        extensions = ('.png', '.jpg', '.jpeg', '.gif', '.webp', '.mp3', '.ogg', 
-                      '.wav', '.ttf', '.otf', '.rpy', '.rpyc', '.json')
-        if any(text_lower.endswith(ext) for ext in extensions):
-            return True
-
-        # Skip paths
+        # Path prefixes
         if text_strip.startswith(('images/', 'audio/', 'gui/', 'fonts/')):
             return True
 
-        # Skip color codes
-        if re.match(r'^#[0-9a-fA-F]{3,8}$', text_strip):
+        # Color codes (Hex)
+        if text_strip.startswith('#') and _RE_COLOR_HEX.match(text_strip):
             return True
 
-        # Skip pure numbers
-        if re.match(r'^-?\d+\.?\d*$', text_strip):
-            return True
+        # Snake_case identifiers (technical_variable_name)
+        # Only check if it looks like a variable (no spaces)
+        if ' ' not in text_strip and '_' in text_strip:
+            if _RE_SNAKE_CASE.match(text_strip):
+                return True
 
-        # Skip snake_case identifiers
-        if re.match(r'^[a-z][a-z0-9]*(_[a-z0-9]+)+$', text_strip):
-            return True
-
-        # Must contain at least one letter
-        if not re.search(r'[a-zA-Z\u00C0-\u024F\u0400-\u04FF]', text):
-            return True
-
-        # Check against the whitelist
+        # Check against the whitelist (context-based)
         if context and self._context_requires_whitelist(context_lower) and not any(key in context_lower for key in DATA_KEY_WHITELIST):
             return True
         
-        # Skip Ren'Py internal engine identifiers
-        # e.g., "renpy.dissolve renpy.dissolve", "renpy.mask renpy.mask", "renpy.matrixcolor renpy.texture"
+        # Ren'Py internal identifiers
         if text_strip.startswith('renpy.') or ' renpy.' in text_strip:
             return True
 
-        # --- PYTHON CODE / DOCSTRING DETECTION ---
-        # Skip strings containing Python code patterns (commonly from docstrings)
-        python_code_patterns = [
-            r'\bdef\s+\w+\s*\(',           # Function definitions
-            r'\bclass\s+\w+\s*[:\(]',      # Class definitions
-            r'\bfor\s+\w+\s+in\s+',        # For loops
-            r'\bif\s+\w+\s+in\s+\w+:',     # If in checks
-            r'\bimport\s+\w+',              # Import statements
-            r'\bfrom\s+\w+\s+import',       # From imports
-            r'\breturn\s+\w+',              # Return statements
-            r'\braise\s+\w+',               # Raise exceptions
-            r'renpy\.\w+\.\w+',             # Ren'Py module calls
-            r'renpy\.\w+\(',                # Ren'Py function calls
-            r'_\w+\[',                      # Internal dict access
-            r'\w+\s*=\s*True\b',            # Boolean assignment
-            r'\w+\s*=\s*False\b',           # Boolean assignment
-            r'\w+\s*=\s*None\b',            # None assignment
-        ]
-        for pattern in python_code_patterns:
-            if re.search(pattern, text_strip):
-                return True
-        
-        # --- STRING CONCATENATION / CODE EXPRESSIONS ---
-        if re.search(r'"\s*\+\s*\w+\s*\+\s*"', text_strip) and len(text_strip) < 60:
-            return True
-        if re.search(r'\w+\.\w+\s*\+', text_strip) and len(text_strip) < 40:
+        # --- PYTHON CODE DETECTION (Pooled) ---
+        if _RE_PYTHON_CODE.search(text_strip):
             return True
         
-        # --- PYTHON BUILT-IN FUNCTION CALLS ---
-        python_builtin_calls = [
-            r'\bstr\s*\(', r'\bint\s*\(', r'\bfloat\s*\(', r'\blen\s*\(',
-            r'\blist\s*\(', r'\bdict\s*\(', r'\btuple\s*\(', r'\bset\s*\('
-        ]
-        if len(text_strip) < 80 or ' ' not in text_strip.strip():
-            for pattern in python_builtin_calls:
-                if re.search(pattern, text_strip):
-                    return True
-        
-        # --- FILE PATH PATTERNS WITH VARIABLES ---
-        if re.search(r'["\']?[\w/]+["\']?\s*\+\s*\w+', text_strip) and (len(text_strip) < 50 or '/' in text_strip):
-            if ' ' not in text_strip.strip():
-                return True
+        # --- STRING CONCATENATION ---
+        if '+' in text_strip:
+             if len(text_strip) < 60 and _RE_STR_CONCAT.search(text_strip):
+                 return True
+             if len(text_strip) < 40 and _RE_ATTR_CONCAT.search(text_strip):
+                 return True
+             if len(text_strip) < 80 and _RE_FILE_PATH_VAR.search(text_strip):
+                 return True
 
+        # --- PYTHON BUILTINS ---
+        if '(' in text_strip and text_len < 80 and ' ' not in text_strip:
+             if _RE_PYTHON_BUILTINS.search(text_strip):
+                 return True
+        
         return False
 
     def _extract_string_content(self, quoted_string: str) -> str:
@@ -1523,6 +1680,71 @@ class ASTTextExtractor:
                     if len(item) >= 3 and item[2]:
                         self._walk_nodes(item[2], f"{context}/menu_item")
         
+        # Ren'Py 8.5+ Bubble (Speech Bubbles)
+        elif isinstance(node, FakeBubble):
+            character = getattr(node, 'who', '') or ""
+            what = getattr(node, 'what', '')
+            
+            # 1. Main Dialogue
+            if what and isinstance(what, str):
+                self._add_text(
+                    str(what),
+                    getattr(node, 'linenumber', 0),
+                    'bubble_dialogue', # Specialized type
+                    character=str(character) if character else "",
+                    context=context,
+                    node_type=node_type
+                )
+            
+            # 2. Bubble Properties (alt, tooltip, help)
+            props = getattr(node, 'properties', None)
+            if props and isinstance(props, dict):
+                for key in ['alt', 'tooltip', 'help', 'caption']:
+                    val = props.get(key)
+                    if val and isinstance(val, str):
+                         self._add_text(
+                            val,
+                            getattr(node, 'linenumber', 0),
+                            f'bubble_prop_{key}',
+                            context=f"{context}/bubble_prop",
+                            node_type=node_type
+                        )
+
+        # Ren'Py 8.5+ Testcase
+        elif isinstance(node, FakeTestcase):
+            # Extract description if present
+            desc = getattr(node, 'description', None)
+            if desc and isinstance(desc, str):
+                 self._add_text(
+                    desc,
+                    getattr(node, 'linenumber', 0),
+                    'testcase_desc',
+                    context=context,
+                    node_type=node_type
+                )
+            
+            # Recursively check the test block
+            # Test blocks might contain standard Say nodes or other verifiable statements
+            block = getattr(node, 'block', None)
+            if block:
+                # Use a specific context to track we are inside a test
+                self._walk_nodes(block, f"{context}/testcase:{getattr(node, 'label', 'unknown')}")
+
+        # Screen Language Drag
+        elif isinstance(node, FakeSLDrag):
+            # 1. Drag Name (if meaningful)
+            dname = getattr(node, 'drag_name', None)
+            if dname and isinstance(dname, str):
+                # Only add if it's NOT a technical ID (e.g. looks like a title)
+                if not self._is_technical_string(dname, context="drag_name"):
+                     self._add_text(
+                        dname,
+                        getattr(node, 'linenumber', 0),
+                        'ui_drag_name',
+                        context=f"{context}/drag",
+                        node_type=node_type
+                    )
+
         # Label block
         elif isinstance(node, FakeLabel):
             label_name = getattr(node, 'name', '')
@@ -1612,6 +1834,26 @@ class ASTTextExtractor:
         # Generic block handling
         elif hasattr(node, 'block') and node.block:
             self._walk_nodes(node.block, context)
+
+    def _extract_from_action(self, action: Any, line_number: int, context: str) -> None:
+        """Extract text from Action objects (Confirm, Notify, etc.)."""
+        if isinstance(action, (list, tuple)):
+            for act in action:
+                self._extract_from_action(act, line_number, context)
+            return
+
+        if isinstance(action, FakeConfirm):
+            if hasattr(action, 'prompt') and action.prompt:
+                self._add_text(action.prompt, line_number, 'ui_action', context=f"{context}:Confirm")
+        elif isinstance(action, FakeNotify):
+            if hasattr(action, 'message') and action.message:
+                self._add_text(action.message, line_number, 'ui_action', context=f"{context}:Notify")
+        elif isinstance(action, FakeHelp):
+             if hasattr(action, 'help') and isinstance(action.help, str):
+                 self._add_text(action.help, line_number, 'ui_action', context=f"{context}:Help")
+        elif isinstance(action, FakeTooltip):
+             if hasattr(action, 'value') and isinstance(action.value, str):
+                 self._add_text(action.value, line_number, 'ui_action', context=f"{context}:Tooltip")
     
     def _process_screen_node(self, node: Any, context: str = "") -> None:
         """Process Screen Language nodes."""
@@ -1651,6 +1893,9 @@ class ASTTextExtractor:
                             self._extract_screen_text_value(value, line_number, context, type(node).__name__)
                         elif isinstance(value, FakePyExpr) or hasattr(value, 'source'):
                             self._extract_from_code_obj(value, line_number)
+                    
+                    elif key == 'action':
+                        self._extract_from_action(value, line_number, context)
             
             # Process children
             for child in getattr(node, 'children', []):
@@ -1775,12 +2020,7 @@ class ASTTextExtractor:
             processed_text, placeholder_map = p.preserve_placeholders(text)
             self._add_text(processed_text, line_number, 'ui', context='gui', placeholder_map=placeholder_map)
         
-        # Match renpy.show("image") pattern
-        show_pattern = r'renpy\.show\s*\(\s*["\'](.+?)["\']\s*\)'
-        for match in re.finditer(show_pattern, code):
-            text = match.group(1)
-            processed_text, placeholder_map = p.preserve_placeholders(text)
-            self._add_text(processed_text, line_number, 'ui', context='show', placeholder_map=placeholder_map)
+
         
         # --- UPDATED: Generic "Smart Key" Scanner ---
         # Use robust regex that handles escaped quotes
@@ -1828,14 +2068,18 @@ class ASTTextExtractor:
                 processed_text, placeholder_map = p.preserve_placeholders(text)
                 self._add_text(processed_text, line_number, 'string', context='', placeholder_map=placeholder_map)
     
-    def _extract_strings_from_code_ast(self, code: str, line_number: int) -> None:
+    def _extract_strings_from_code_ast(self, code: str, line_number: int) -> bool:
         """AST-based extraction for Python code blocks, focusing on string constants, f-strings, lists and dicts."""
         import textwrap
+        import ast
+        
         clean_code = code
         # Strip leading Ren'Py python block header: init python: or python:
         header_re = re.compile(r'^(?:\s*init\s+python\s*:|\s*python\s*:)', flags=re.I)
-        if header_re.match(code.strip().splitlines()[0]) if code.strip() else False:
-            # Remove the first header line and dedent the rest
+        match = header_re.match(code.strip().splitlines()[0]) if code.strip() else None
+        
+        if match:
+            # Remove the first header line and dedent the rest to make it valid python
             lines = code.splitlines()
             # find first non-empty line that is the header
             idx = 0
@@ -1845,154 +2089,173 @@ class ASTTextExtractor:
                     break
             block_lines = lines[idx+1:]
             clean_code = textwrap.dedent('\n'.join(block_lines))
+
         try:
             tree = ast.parse(clean_code)
         except Exception:
             return False
 
         p = self.parser
-
-        def add_text_val(raw_text: str, ctx: str = '', text_type: str = 'python_string'):
+        
+        # Helper to add text securely
+        def add_text_val(raw_text: str, rel_line: int, ctx: str = '', text_type: str = 'python_string'):
             if not raw_text or len(raw_text.strip()) < 2:
                 return
+            
+            # Additional heuristic: Skip strings that look like file paths or technical IDs
+            if re.match(r'^[a-zA-Z0-9_/\\.-]+\.(png|jpg|mp3|ogg|rpy|rpyc|webp|gif)$', raw_text, re.I):
+                return
+            
             processed_text, placeholder_map = p.preserve_placeholders(raw_text)
+            
+            # Use strict context filtering if needed
             if self._is_technical_string(raw_text, context=ctx):
                 return
-            self._add_text(processed_text, line_number, text_type, context=ctx or '', character='', placeholder_map=placeholder_map)
+                
+            self._add_text(
+                processed_text, 
+                line_number + rel_line - 1, # Adjust for relative line in block
+                text_type, 
+                context=ctx or '', 
+                character='', 
+                placeholder_map=placeholder_map
+            )
 
-        class Visitor(ast.NodeVisitor):
-            def __init__(self):
-                super().__init__()
-                self.current_assign_ctx = ''
-            def visit_Constant(self, node):
-                if isinstance(node.value, str):
-                    add_text_val(node.value)
-                self.generic_visit(node)
+        class DeepStringVisitor(ast.NodeVisitor):
+            def __init__(self, source_code):
+                self.source_code = source_code
+                self.context_stack = []
 
-            def visit_JoinedStr(self, node):
-                parts = []
-                for v in node.values:
-                    if isinstance(v, ast.Constant) and isinstance(v.value, str):
-                        parts.append(v.value)
-                    elif isinstance(v, ast.FormattedValue):
-                        # Try to extract the source segment text for the expression when possible
-                        try:
-                            expr_src = ast.get_source_segment(code, v) or 'expr'
-                        except Exception:
-                            expr_src = 'expr'
-                        parts.append('{' + expr_src + '}')
-                add_text_val(''.join(parts))
+            def _get_context(self):
+                # Limit context depth to avoid overly long identifiers
+                return "/".join(self.context_stack[-3:]) if self.context_stack else ""
+
+            def visit_Assign(self, node):
+                # Track variable names as context
+                pushed = False
+                try:
+                    target = node.targets[0]
+                    if isinstance(target, ast.Name):
+                        self.context_stack.append(f"var:{target.id}")
+                        pushed = True
+                    elif isinstance(target, ast.Attribute):
+                         self.context_stack.append(f"var:{target.attr}")
+                         pushed = True
+                except:
+                    pass
+                
                 self.generic_visit(node)
+                
+                if pushed:
+                    self.context_stack.pop()
 
             def visit_Call(self, node):
-                # Detect join calls like ", ".join(['a','b']) where value is a constant string
-                try:
-                    func = node.func
-                    # joined string: Attribute(value=Constant(', '), attr='join')
-                    if isinstance(func, ast.Attribute) and func.attr == 'join':
-                        val = func.value
-                        if isinstance(val, ast.Constant) and isinstance(val.value, str):
-                            add_text_val(val.value)
-                    # format call: "{}".format(...)
-                    if isinstance(func, ast.Attribute) and func.attr == 'format':
-                        val = func.value
-                        if isinstance(val, ast.Constant) and isinstance(val.value, str):
-                            add_text_val(val.value)
-                    # _p() call or renpy.notify call (not exhaustive)
-                    if isinstance(func, ast.Name) and func.id in {'_p', 'renpy', 'notify'}:
-                        # get constants in args
-                        for a in node.args:
-                            if isinstance(a, ast.Constant) and isinstance(a.value, str):
-                                add_text_val(a.value)
-                            elif isinstance(a, ast.List):
-                                for el in a.elts:
-                                    if isinstance(el, ast.Constant) and isinstance(el.value, str):
-                                        add_text_val(el.value)
-                except Exception:
-                    pass
-                self.generic_visit(node)
+                # Handle _("text") and others
+                func_name = ""
+                if isinstance(node.func, ast.Name):
+                    func_name = node.func.id
+                elif isinstance(node.func, ast.Attribute):
+                    # Handle renpy.notify, renpy.input etc.
+                    if isinstance(node.func.value, ast.Name) and node.func.value.id == 'renpy':
+                        func_name = f"renpy.{node.func.attr}"
+                    else:
+                        func_name = node.func.attr
+                
+                # 1. Functions where ALL arguments are potential text (Translation functions)
+                if func_name in ('_', '__', 'p'):
+                    for arg in node.args:
+                        if isinstance(arg, ast.Constant) and isinstance(arg.value, str):
+                            add_text_val(arg.value, getattr(node, 'lineno', 0), self._get_context(), 'call_arg')
+                        elif isinstance(arg, ast.JoinedStr):
+                            self.visit_JoinedStr(arg)
 
-            def visit_List(self, node):
-                for elt in node.elts:
-                    if isinstance(elt, ast.Constant) and isinstance(elt.value, str):
-                        add_text_val(elt.value, ctx=self.current_assign_ctx, text_type='data_string' if self.current_assign_ctx else 'python_string')
-                    elif isinstance(elt, ast.JoinedStr):
-                        # If part of an assignment context, we should consider it data_string
-                        parts = []
-                        for v in elt.values:
-                            if isinstance(v, ast.Constant) and isinstance(v.value, str):
-                                parts.append(v.value)
-                            elif isinstance(v, ast.FormattedValue):
-                                try:
-                                    expr_src = ast.get_source_segment(code, v) or 'expr'
-                                except Exception:
-                                    expr_src = 'expr'
-                                parts.append('{' + expr_src + '}')
-                        add_text_val(''.join(parts), ctx=self.current_assign_ctx, text_type='data_string' if self.current_assign_ctx else 'python_string')
+                # 2. Functions where the FIRST argument is text
+                elif func_name in ('notify', 'renpy.notify', 'Confirm', 'Notify', 'MouseTooltip', 'ui.text', 'ui.textbutton', 'ui.label'):
+                    if node.args and isinstance(node.args[0], ast.Constant) and isinstance(node.args[0].value, str):
+                        add_text_val(node.args[0].value, getattr(node, 'lineno', 0), f"call:{func_name}", 'ui_arg')
+
+                # 3. renpy.input / input (prompt is 1st arg or 'prompt' kwarg)
+                elif func_name in ('input', 'renpy.input'):
+                    # Check first arg
+                    if node.args and isinstance(node.args[0], ast.Constant) and isinstance(node.args[0].value, str):
+                        add_text_val(node.args[0].value, getattr(node, 'lineno', 0), "input_prompt", 'ui_arg')
+                    # Check 'prompt' kwarg
+                    for kw in node.keywords:
+                        if kw.arg == 'prompt' and isinstance(kw.value, ast.Constant) and isinstance(kw.value.value, str):
+                            add_text_val(kw.value.value, getattr(node, 'lineno', 0), "input_prompt", 'ui_arg')
+
+                # 4. renpy.say (who, what, ...) -> 'what' is the 2nd argument
+                elif func_name == 'renpy.say':
+                    if len(node.args) >= 2 and isinstance(node.args[1], ast.Constant) and isinstance(node.args[1].value, str):
+                        add_text_val(node.args[1].value, getattr(node, 'lineno', 0), "say_what", 'dialogue')
+
+                # 5. achievement.register(key, title="...", description="...")
+                elif func_name == 'achievement.register':
+                    for kw in node.keywords:
+                        if kw.arg in ('title', 'description') and isinstance(kw.value, ast.Constant) and isinstance(kw.value.value, str):
+                            add_text_val(kw.value.value, getattr(node, 'lineno', 0), f"achievement_{kw.arg}", 'ui_string')
+
+                # 6. Tooltip("Text")
+                elif func_name == 'Tooltip':
+                     if node.args and isinstance(node.args[0], ast.Constant) and isinstance(node.args[0].value, str):
+                        add_text_val(node.args[0].value, getattr(node, 'lineno', 0), "tooltip", 'ui_string')
+
                 self.generic_visit(node)
 
             def visit_Dict(self, node):
-                for v in node.values:
-                    if isinstance(v, ast.Constant) and isinstance(v.value, str):
-                        add_text_val(v.value, ctx=self.current_assign_ctx, text_type='data_string' if self.current_assign_ctx else 'python_string')
-                    elif isinstance(v, ast.JoinedStr):
-                        self.visit_JoinedStr(v)
+                # Iterate over keys and values
+                for k, v in zip(node.keys, node.values):
+                    # Use key as context for value
+                    key_ctx = "item"
+                    if k and isinstance(k, ast.Constant):
+                        key_ctx = str(k.value)
+                    
+                    self.context_stack.append(key_ctx)
+                    self.visit(v) # Visit value
+                    self.context_stack.pop()
+                    
+                    # We typically don't visit keys for translation unless they are strictly strings
+                    # But usually dictionary keys are technical. Skipping keys.
+
+            def visit_List(self, node):
+                # Lists in assignments usually imply data
                 self.generic_visit(node)
 
-            def visit_Assign(self, node):
-                # capture variable context by name if possible
-                try:
-                    if isinstance(node.targets[0], ast.Name):
-                        varname = node.targets[0].id
-                except Exception:
-                    varname = None
-                val = node.value
-                ctx = ''
-                if varname and varname.lower() in DATA_KEY_WHITELIST:
-                    ctx = f'rpyc_val:{varname}'
-                if isinstance(val, ast.Constant) and isinstance(val.value, str):
-                    add_text_val(val.value, ctx=ctx, text_type='data_string' if ctx else 'python_string')
-                elif isinstance(val, ast.JoinedStr):
-                    # pass context for formats
-                    parts = []
-                    for v in val.values:
-                        if isinstance(v, ast.Constant) and isinstance(v.value, str):
-                            parts.append(v.value)
-                        elif isinstance(v, ast.FormattedValue):
-                            try:
-                                expr_src = ast.get_source_segment(code, v) or 'expr'
-                            except Exception:
-                                expr_src = 'expr'
-                            parts.append('{' + expr_src + '}')
-                    add_text_val(''.join(parts), ctx=ctx, text_type='data_string' if ctx else 'python_string')
-                else:
-                    # Set a context to allow nested lists/dicts to be processed with variable context
-                    prev_ctx = self.current_assign_ctx
-                    self.current_assign_ctx = ctx
-                    self.generic_visit(node)
-                    self.current_assign_ctx = prev_ctx
+            def visit_Constant(self, node):
+                if isinstance(node.value, str) and len(node.value) > 1:
+                    ctx = self._get_context()
+                    # Only extract if we are in a meaningful context (assignment or inside struct)
+                    if ctx:
+                        add_text_val(node.value, getattr(node, 'lineno', 0), ctx, 'data_string')
+            
+            def visit_JoinedStr(self, node):
+                # F-String Reconstruction
+                parts = []
+                for val in node.values:
+                    if isinstance(val, ast.Constant) and isinstance(val.value, str):
+                        parts.append(val.value)
+                    elif isinstance(val, ast.FormattedValue):
+                        # Capture the expression part: {expr}
+                        # We use ast.get_source_segment to get the code snippet of the expression
+                        try:
+                            seg = ast.get_source_segment(self.source_code, val.value)
+                            if seg:
+                                parts.append(f"{{{seg}}}")
+                            else:
+                                parts.append("{_expr_}")
+                        except:
+                             parts.append("{_expr_}")
+                
+                full_str = "".join(parts)
+                # Only add if it looks like a sentence
+                if len(full_str) > 2 and not full_str.startswith("{"):
+                    add_text_val(full_str, getattr(node, 'lineno', 0), self._get_context(), 'f_string')
 
-            def visit_BinOp(self, node):
-                # Extract strings from concatenations and % formatting
-                try:
-                    if isinstance(node.op, ast.Add):
-                        left = node.left
-                        right = node.right
-                        if isinstance(left, ast.Constant) and isinstance(left.value, str):
-                            add_text_val(left.value)
-                        if isinstance(right, ast.Constant) and isinstance(right.value, str):
-                            add_text_val(right.value)
-                    if isinstance(node.op, ast.Mod):
-                        # % formatting: left is constant string
-                        left = node.left
-                        if isinstance(left, ast.Constant) and isinstance(left.value, str):
-                            add_text_val(left.value)
-                except Exception:
-                    pass
-                self.generic_visit(node)
-
-        Visitor().visit(tree)
+        # Run visitor
+        visitor = DeepStringVisitor(clean_code)
+        visitor.visit(tree)
         return True
+
 
     def _extract_strings_from_line(self, line: str, line_number: int) -> None:
         """Extract string literals from a line of code."""

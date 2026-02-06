@@ -49,7 +49,7 @@ Rectangle {
             Layout.fillWidth: true
             
             Label {
-                text: "📚 " + (backend.uiTrigger, backend.getTextWithDefault("nav_glossary", "Sözlük Yönetimi"))
+                text: "📚 " + (backend.uiTrigger, backend.getTextWithDefault("nav_glossary", "Glossary Management"))
                 font.pixelSize: 24
                 font.bold: true
                 color: root.mainTextColor
@@ -58,7 +58,7 @@ Rectangle {
             Item { Layout.fillWidth: true }
             
             Button {
-                text: "✨ " + (backend.uiTrigger, backend.getTextWithDefault("glossary_extract_btn", "Otomatik Çıkar"))
+                text: "✨ " + (backend.uiTrigger, backend.getTextWithDefault("glossary_extract_btn", "Auto Extract"))
                 onClicked: {
                     var result = backend.extractGlossaryTerms()
                     // Sonuç zaten logMessage ile geliyor ama direkt de gösterebiliriz
@@ -70,7 +70,7 @@ Rectangle {
             }
             
             Button {
-                text: "➕ " + (backend.uiTrigger, backend.getTextWithDefault("edit_add", "Ekle"))
+                text: "➕ " + (backend.uiTrigger, backend.getTextWithDefault("edit_add", "Add"))
                 highlighted: true
                 onClicked: addDialog.open()
             }
@@ -82,13 +82,13 @@ Rectangle {
             spacing: 12
             
             Button {
-                text: "🔄 " + (backend.uiTrigger, backend.getTextWithDefault("btn_translate_empty", "Boşları Çevir"))
+                text: "🔄 " + (backend.uiTrigger, backend.getTextWithDefault("btn_translate_empty", "Translate Empty"))
                 onClicked: backend.translateEmptyGlossaryItems()
                 flat: true
             }
             
             Button {
-                text: "📝 " + (backend.uiTrigger, backend.getTextWithDefault("btn_copy_source", "Kaynağı Kopyala"))
+                text: "📝 " + (backend.uiTrigger, backend.getTextWithDefault("btn_copy_source", "Copy Source"))
                 onClicked: backend.fillEmptyGlossaryWithSource()
                 flat: true
             }
@@ -96,7 +96,7 @@ Rectangle {
             Item { Layout.fillWidth: true }
             
             Label {
-                text: (backend.uiTrigger, backend.getTextWithDefault("total_count_label", "Toplam: {count}")).replace("{count}", glossaryModel.count)
+                text: (backend.uiTrigger, backend.getTextWithDefault("total_count_label", "Total: {count}")).replace("{count}", glossaryModel.count)
                 color: "#666"
                 font.pixelSize: 12
             }
@@ -108,13 +108,13 @@ Rectangle {
             spacing: 12
             
             Button {
-                text: "📤 " + (backend.uiTrigger, backend.getTextWithDefault("btn_export_glossary", "Dışa Aktar"))
+                text: "📤 " + (backend.uiTrigger, backend.getTextWithDefault("btn_export_glossary", "Export"))
                 flat: true
                 onClicked: exportDialog.open()
             }
             
             Button {
-                text: "📥 " + (backend.uiTrigger, backend.getTextWithDefault("btn_import_glossary", "İçe Aktar"))
+                text: "📥 " + (backend.uiTrigger, backend.getTextWithDefault("btn_import_glossary", "Import"))
                 flat: true
                 onClicked: importDialog.open()
             }
@@ -133,11 +133,11 @@ Rectangle {
                 anchors.rightMargin: 16
                 spacing: 10
                 
-                Label { text: (backend.uiTrigger, backend.getTextWithDefault("glossary_source", "Kaynak Metin")); color: root.secondaryTextColor; font.bold: true; Layout.preferredWidth: 250 }
+                Label { text: (backend.uiTrigger, backend.getTextWithDefault("glossary_source", "Source Text")); color: root.secondaryTextColor; font.bold: true; Layout.preferredWidth: 250 }
                 Rectangle { width: 1; height: 20; color: root.separatorColor }
-                Label { text: (backend.uiTrigger, backend.getTextWithDefault("glossary_target", "Çeviri")); color: root.secondaryTextColor; font.bold: true; Layout.fillWidth: true }
+                Label { text: (backend.uiTrigger, backend.getTextWithDefault("glossary_target", "Translation")); color: root.secondaryTextColor; font.bold: true; Layout.fillWidth: true }
                 Rectangle { width: 1; height: 20; color: root.separatorColor }
-                Label { text: (backend.uiTrigger, backend.getTextWithDefault("action", "İşlem")); color: root.secondaryTextColor; font.bold: true; Layout.preferredWidth: 60 }
+                Label { text: (backend.uiTrigger, backend.getTextWithDefault("action", "Action")); color: root.secondaryTextColor; font.bold: true; Layout.preferredWidth: 60 }
             }
         }
 
@@ -176,7 +176,7 @@ Rectangle {
                     
                     // Target (Editable-like look but currently view-only in list, edit via delete/re-add for MVP)
                     Label { 
-                        text: model.target ? model.target : (backend.uiTrigger, backend.getTextWithDefault("empty_placeholder", "<boş>"))
+                        text: model.target ? model.target : (backend.uiTrigger, backend.getTextWithDefault("empty_placeholder", "<empty>"))
                         color: model.target ? Material.accent : "#555"
                         font.italic: !model.target
                         Layout.fillWidth: true
@@ -203,7 +203,7 @@ Rectangle {
     // ==================== ADD DIALOG ====================
     Dialog {
         id: addDialog
-        title: (backend.uiTrigger, backend.getTextWithDefault("glossary_add_title", "Terim Ekle"))
+        title: (backend.uiTrigger, backend.getTextWithDefault("glossary_add_title", "Add Term"))
         anchors.centerIn: parent
         modal: true
         width: 400
@@ -219,7 +219,7 @@ Rectangle {
         
         background: Rectangle { color: root.cardBackground; radius: 12; border.color: root.borderColor }
         header: Label { 
-            text: (backend.uiTrigger, backend.getTextWithDefault("glossary_add_title", "Terim Ekle"))
+            text: (backend.uiTrigger, backend.getTextWithDefault("glossary_add_title", "Add Term"))
             padding: 20
             font.bold: true
             font.pixelSize: 18
@@ -229,7 +229,7 @@ Rectangle {
         contentItem: ColumnLayout {
             spacing: 15
             
-            Label { text: (backend.uiTrigger, backend.getTextWithDefault("glossary_source_hint", "Kaynak (Örn: Sword)")); color: root.secondaryTextColor }
+            Label { text: (backend.uiTrigger, backend.getTextWithDefault("glossary_source_hint", "Source (e.g. Sword)")); color: root.secondaryTextColor }
             TextField { 
                 id: sourceField
                 Layout.fillWidth: true
@@ -237,7 +237,7 @@ Rectangle {
                 background: Rectangle { color: root.inputBackground; radius: 6; border.color: root.borderColor }
             }
             
-            Label { text: (backend.uiTrigger, backend.getTextWithDefault("glossary_target_hint", "Çeviri (Örn: Kılıç)")); color: root.secondaryTextColor }
+            Label { text: (backend.uiTrigger, backend.getTextWithDefault("glossary_target_hint", "Translation (e.g. Sword Translation)")); color: root.secondaryTextColor }
             TextField { 
                 id: targetField
                 Layout.fillWidth: true
@@ -249,12 +249,12 @@ Rectangle {
         footer: DialogButtonBox {
             background: Rectangle { color: "transparent" }
             Button { 
-                text: (backend.uiTrigger, backend.getTextWithDefault("btn_cancel", "İptal"))
+                text: (backend.uiTrigger, backend.getTextWithDefault("btn_cancel", "Cancel"))
                 DialogButtonBox.buttonRole: DialogButtonBox.RejectRole
                 flat: true 
             }
             Button { 
-                text: (backend.uiTrigger, backend.getTextWithDefault("btn_save", "Kaydet"))
+                text: (backend.uiTrigger, backend.getTextWithDefault("btn_save", "Save"))
                 DialogButtonBox.buttonRole: DialogButtonBox.AcceptRole
                 highlighted: true
 
@@ -270,7 +270,7 @@ Rectangle {
     // ==================== FILE DIALOGS ====================
     FileDialog {
         id: importDialog
-        title: (backend.uiTrigger, backend.getTextWithDefault("dialog_import_glossary", "Sözlük İçe Aktar"))
+        title: (backend.uiTrigger, backend.getTextWithDefault("dialog_import_glossary", "Import Glossary"))
         nameFilters: ["Data Files (*.xlsx *.xls *.csv *.json)", "Excel Files (*.xlsx *.xls)", "CSV Files (*.csv)", "JSON Files (*.json)", "All Files (*)"]
         fileMode: FileDialog.OpenFile
         onAccepted: {
@@ -283,7 +283,7 @@ Rectangle {
 
     FileDialog {
         id: exportDialog
-        title: (backend.uiTrigger, backend.getTextWithDefault("dialog_export_glossary", "Sözlük Dışa Aktar"))
+        title: (backend.uiTrigger, backend.getTextWithDefault("dialog_export_glossary", "Export Glossary"))
         nameFilters: ["Excel Files (*.xlsx)", "CSV Files (*.csv)", "JSON Files (*.json)"]
         fileMode: FileDialog.SaveFile
         defaultSuffix: "xlsx"

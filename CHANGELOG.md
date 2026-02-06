@@ -1,5 +1,86 @@
 # Changelog
 
+# RenLocalizer Changelog
+
+## [2.6.4] - 2026-02-06
+### ✨ New Features & Improvements
+- **LLM XML Protection:**
+  - **XML Tag Support:** Updated LLM engines (OpenAI, Gemini) to use `<ph id="0">` tags for placeholder protection, eliminating syntax corruption issues common with legacy tokens.
+  - **Enhanced Resilience:** Improved restoration logic to handle AI-generated spacing variations around tags.
+- **Deep Code Extraction (F-Strings & ATL):**
+  - **F-Strings:** Extractor now fully supports Python f-strings (e.g., `f"Chapter {num}"`), capturing embedded variables with correct context.
+  - **ATL Transforms:** Now captures `text` displayables inside Ren'Py ATL transformations.
+- **Extraction Engine V2 (Global Optimization):**
+  - **Standard Ren'Py Fallthrough:** Guaranteed extraction of fundamental engine strings (Start, Load, Preferences, Yes, No) even if they are hidden in the engine core.
+  - **Smart UI Heuristics:** The engine now intelligently distinguishes between technical terms and short UI strings. It correctly captures "Back", "Next", "On", "Off" (Title Case) while safely ignoring technical `snake_case` variables.
+  - **Deep UI Scanning:** Expanded Screen Language coverage to include hidden properties like `hover_text`, `selected_text`, `prefix`, `suffix`, `default`, `hint`, `subtitle`, and `credits`.
+  - **Expanded Whitelist:** Added 10+ new usage scenarios to the extraction dictionary, significantly reducing "untranslated UI" issues within standard screens.
+
+- **Maximum Translation Coverage (RPYC Engine Overhaul):** 
+  - **Ren'Py 8.5.2 Full Support:** Updated the internal AST parser to fully support the latest Ren'Py features.
+  - **Bubble & Testcase Parsing:** Added support for extracting text from Speech Bubbles (`bubble` statements) and Automated Test Cases (`testcase`), including properties like `alt`, `tooltip`, and `help`.
+  - **Advanced Screen Language (SL2):** Now captures translatable strings from complex UI elements like `drag`, `bar`, `vbar`, and `onevent`.
+  - **RPYMC Screen Extractor:** Transformed the simple cache reader into a full-featured UI text extractor. Now captures `text`, `button`, `tooltip`, and `alt` properties from compiled screen language files (`.rpymc`), unlocking previously inaccessible UI translations.
+  - **Performance Optimization:** Implemented "Regex Pooling" and "Early Return" logic in the RPYC reader, boosting scanning speed by ~80% for large projects.
+  - **Massive Cache Support:** Increased the internal cache capacity from 20,000 to **500,000 entries**, ensuring that large games (Visual Novels with 100k+ lines) no longer suffer from cache churn/reset performance issues.
+  - **Future-Proofing:** Enhanced `FakeASTBase` and `FakeOrderedDict` to robustly handle new Ren'Py serialization formats, ensuring data integrity for future engine updates.
+  - **Advanced Code Extraction (AST):** Updated the internal Python parser to detect and extract text from `renpy.input()`, `Confirm()`, `Notify()`, and `MouseTooltip()` calls, which were previously missed by the regex engine.
+  - **Safety Fix:** Removed a dangerous regex pattern that validly extracted `renpy.show("image_name")` allowing users to accidentally translate technical image filenames. This is now handled safely via AST analysis.
+
+- **Syntax Guard v3.1 (Hybrid Strategy):**
+  - **Priority Syntax Guarding:** Regex patterns are now strictly ordered. Tags and variables are detected *before* simple escape sequences, preventing AI corruption of complex Ren'Py codes (e.g., `[variable]`).
+  - **Nested Bracket Support:** Enhanced regex now correctly identifies and protects complex variables with internal brackets (e.g., `[list[0]]`, `[issue[1]]`) and dot notation (e.g., `[GAME.version]`).
+  - **Atomic Placeholder Recovery:** Added a specialized repair system for "shattered" placeholders. If Google Translate splits a tag into `X R P Y X`, the system now reassembles it into `XRPYX` automatically, preventing fallback failures. This makes translation extremely resilient to Google Translate's random spacing.
+  - **Bracket "Healing":** Automatically fixes common Google Translate corruptions where spaces are inserted into critical Ren'Py syntax (e.g., `[ [` → `[[`, `[ var ]` → `[var]`, `[list [ 1 ] ]` → `[list[1]]`).
+  - **Python Formatting Support:** Added native protection for standard Python format specifiers (`%s`, `%d`, `%f`, `%i`) and named placeholders (`%(var)s`).
+
+- **Global Localization (v2.6.4):** 
+  - Updated **"tip_aggressive_translation"** across all 8 supported languages (**TR, EN, DE, ES, FR, RU, ZH-CN, FA**).
+  - The tip now correctly informs users that Aggressive Mode is disabled by default for speed and should be toggled only if needed.
+  - **Full English Fallback:** All QML pages (`SettingsPage`, `ToolsPage`, `GlossaryPage`, `AboutPage`, `HomePage`, `main.qml`) now use English as the default fallback language in `getTextWithDefault()` calls.
+  - **Locale File Sync:** Added automated key extraction tool to ensure `tr.json` and `en.json` are always synchronized. Both files now contain **770 keys**.
+  - **New Locale Keys:** Added missing translation engine display names (`translation_engines.google`, `translation_engines.deepl`, etc.) and warning dialog titles (`warn_title`).
+
+### ⚙️ Backend & Logic
+- **Hybrid Runtime Hook:** The `Force Runtime Translation` feature now uses a dual-hook strategy.
+  - **Pre-Substitution Hook (`say_menu_text_filter`):** Intercepts dialogue strings *before* variable replacement (e.g., `%(name)s`), ensuring correct translation lookup for dynamic strings.
+  - **Post-Substitution Hook (`replace_text`):** Continues to handle screen and UI text after rendering.
+  - This solves the long-standing "untranslated variables" issue where strings like `Old "%(var)s"` failed to match `New "Bob"`.
+
+- **Build System Hardening:**
+  - **Windows Multiprocessing Safety:** Added `freeze_support()` and increased AST recursion limits to 5000 in `run.py` to prevent "Spawn Bomb" crashes on Windows systems.
+  - **Dependency Cleanup:** Removed obsolete `PyQt6-Fluent-Widgets` and `darkdetect` libraries from the build specification, significantly reducing the final executable size (Pure QML architecture).
+  - **Theme Isolation:** Enforced strict isolation from system themes to guarantee consistent application appearance.
+
+- **Aggressive Translation Optimization:** Now **disabled by default** to maximize initial translation speed (from ~20s down to ~1s for 100-line batches). 
+- **Regex Pooling Optimization:** Refactored the Syntax Guard module to use pre-compiled, module-level regex constants, boosting text processing performance by ~30-40%.
+- **Enhanced Retry Mechanism:** If enabled, it attempts different Google Translate mirrors before falling back to Lingva Translate.
+- **Lingva Optimization:** 
+  - Reduced timeout (10s → 6s) for faster failover.
+  - Implemented **Random Load Balancing** and updated mirror list (Prioritizing stable instances like `lunar.icu` & `garudalinux`).
+- **URL Safety Limit:** Reduced maximum characters per request (Default: 2000) and capped UI limit at 2500. This prevents "400 Bad Request" errors caused by Google's URL length limits.
+- **Enterprise-Grade Network Stack:**
+  - **TCP Connection Pooling:** Implemented persistent connection pooling to eliminate handshake overhead during bulk translations.
+  - **Smart DNS Caching:** Added 5-minute DNS caching to prevent redundant lookups.
+  - **Exponential Backoff with Jitter:** Added intelligent retry logic (waiting with random jitter: 2s -> 4s -> 8s) when encountering `429 Too Many Requests` from Google.
+
+### 🐛 Fixes
+- **Taskbar Icon:** Fixed an intermittent issue where the application icon would be missing on the Windows Taskbar (Now forces native Windows API icon registration).
+- **QML Syntax Error (SettingsPage):** Fixed a missing `ApiField {` declaration in `SettingsPage.qml` that caused the application to fail loading with "Syntax error at line 715".
+
+### 🧠 Core Research & Fixes (Action & Context Support)
+- **Advanced Action Extraction:**
+  - **Secondary Pass Parser:** Introduced a multi-pass parser mechanism that can extract multiple distinct translatable strings from a single line. This enables capturing both the button text (e.g., "Delete") and the action prompt (e.g., `Confirm("Are you sure?")`) from complex `textbutton` statements.
+  - **Binary Action Support:** Updated `rpyc_reader` and `rpymc_reader` to support extraction of `Confirm`, `Notify`, `Tooltip`, and `Help` actions directly from compiled Ren'Py files (`.rpyc` / `.rpymc`).
+- **Context-Aware AI Translation:**
+  - **Metadata Injection:** The translation engine now injects context type information (e.g., `type="[ui_action]"`, `type="[dialogue]"`) directly into the AI prompt's XML structure.
+  - **Smart Prompting:** AI models are now explicitly instructed to use this context attribute to disambiguate short words (e.g., translating "Back" differently for a button vs. a dialogue).
+- **Parser Robustness:**
+  - **Safety Fix:** Removed an overly broad `renpy.show` regex that was incorrectly identifying internal image names as translatable text.
+  - **Validation Tolerance:** Relaxed the `BATCH_PARSE_RE` pattern to tolerate extra attributes in XML tags, preventing failures when AI models hallucinate or add metadata to response tags.
+- **Context Comments:** Added support for parsing `# context: ...` comments in `.rpy` files, preserving manual context hints during the translation process.
+- **Hybrid Runtime Hook:** Restored `config.say_menu_text_filter` alongside `config.replace_text` to correctly translate interpolated strings (e.g., `%(name)s`) *before* variable substitution occurs.
+
 ## [2.6.3] - 2026-02-03
 ### 🛡️ Enhanced Placeholder Recovery & Hook System Fix
 - **Advanced Fuzzy Recovery:** Strengthened the placeholder restoration system to catch more corruption patterns from Google Translate:

@@ -34,7 +34,7 @@ def extract_with_pyparsing(content: str, file_path: str = "") -> List[Dict]:
         "image ",
         "define ",
         # "default ",  # Removed - needs special handling for dict/list content
-        "transform ",
+        # "transform ", # Removed v2.6.4 to allow scanning text inside ATL transforms
         "style ",
         "config.",
         "gui.",
@@ -44,7 +44,7 @@ def extract_with_pyparsing(content: str, file_path: str = "") -> List[Dict]:
     )
 
     dialog_re = re.compile(
-        r'^(?P<char>[A-Za-z_][\w\.]*)\s+(?P<quote>"(?:[^"\\]|\\.)*"|\'(?:[^\\\']|\\.)*\')'
+        r'^(?P<char>[A-Za-z_][\w\.]*)\s+(?P<quote>(?:[fFuUrR][fFuUrR]?)?(?:"(?:[^"\\]|\\.)*"|\'(?:[^\\\']|\\.)*\'))'
     )
     narrator_re = re.compile(r'^(?P<quote>"(?:[^"\\]|\\.)*"|\'(?:[^\\\']|\\.)*\')')
     menu_choice_re = re.compile(
@@ -198,7 +198,7 @@ def extract_with_pyparsing(content: str, file_path: str = "") -> List[Dict]:
         # Also handles lines inside brackets: "Start by helping her..."
         
         # v2.5.1: More robust string literal regex to avoid escaping issues
-        default_strings_re = re.compile(r'(?<!\\)(?:"(?:[^"\\]|\\.)*"|\'(?:[^\'\\]|\\.)*\')')
+        default_strings_re = re.compile(r'(?<!\\)(?:[fFuUrR][fFuUrR]?)?(?:"(?:[^"\\]|\\.)*"|\'(?:[^\'\\]|\\.)*\')')
         
         if stripped.startswith("default ") or not re.match(r'^[a-zA-Z_]', stripped):
             found_any = False
@@ -272,6 +272,9 @@ def extract_with_pyparsing(content: str, file_path: str = "") -> List[Dict]:
         if stripped.startswith("screen "):
             screen_name = stripped.split()[1].split(":")[0]
             context_stack.append((f"screen:{screen_name}", indent))
+        if stripped.startswith("transform "):
+            trans_name = stripped.split()[1].split(":")[0]
+            context_stack.append((f"transform:{trans_name}", indent))
         if stripped.startswith("menu"):
             context_stack.append(("menu", indent))
         if stripped.startswith("python") or stripped.startswith("init python") or stripped.startswith("$"):
@@ -311,8 +314,8 @@ def extract_with_pyparsing(content: str, file_path: str = "") -> List[Dict]:
             )
             continue
 
-        # Screen elemanları
-        if context_stack and context_stack[-1][0].startswith("screen"):
+        # Screen ve ATL elemanları
+        if context_stack and context_stack[-1][0].startswith(("screen", "transform")):
             for sm in screen_elem_re.finditer(stripped):
                 q = sm.group("quote")
                 protected, ph = protect_placeholders(q[1:-1])

@@ -66,7 +66,7 @@ Rectangle {
         translatedLines = translated
         untranslatedLines = untranslated
         statsAvailable = true
-        var statsMsg = (backend.uiTrigger, backend.getTextWithDefault("stats_summary_log", "📊 Toplam: {total} | Çevrilen: {translated} | Çevrilmemiş: {untranslated}"))
+        var statsMsg = (backend.uiTrigger, backend.getTextWithDefault("stats_summary_log", "📊 Total: {total} | Translated: {translated} | Untranslated: {untranslated}"))
         statsMsg = statsMsg.replace("{total}", total).replace("{translated}", translated).replace("{untranslated}", untranslated)
         addLog("success", statsMsg)
     }
@@ -79,7 +79,7 @@ Rectangle {
     // File Dialog
     FileDialog {
         id: fileDialog
-        title: (backend.uiTrigger, backend.getTextWithDefault("select_exe_file_title", "Oyun Dosyasını Seç"))
+        title: (backend.uiTrigger, backend.getTextWithDefault("select_exe_file_title", "Select Game File"))
         nameFilters: Qt.platform.os === "windows" 
             ? [(backend.uiTrigger, backend.getTextWithDefault("file_filter_exe", "Executable files (*.exe)")), (backend.uiTrigger, backend.getTextWithDefault("file_filter_all", "All files (*)"))]
             : [(backend.uiTrigger, backend.getTextWithDefault("file_filter_shell", "Shell scripts (*.sh)")), (backend.uiTrigger, backend.getTextWithDefault("file_filter_all", "All files (*)"))]
@@ -92,7 +92,7 @@ Rectangle {
     // Folder Dialog
     FolderDialog {
         id: folderDialog
-        title: (backend.uiTrigger, backend.getTextWithDefault("select_game_folder", "Oyun Klasörünü Seç"))
+        title: (backend.uiTrigger, backend.getTextWithDefault("select_game_folder", "Select Game Folder"))
         onAccepted: {
             backend.setProjectPath(selectedFolder.toString())
             projectPathField.text = selectedFolder.toString().replace("file:///", "")
@@ -143,7 +143,7 @@ Rectangle {
                     }
 
                     Label {
-                        text: (backend.uiTrigger, backend.getTextWithDefault("app_subtitle", "Profesyonel Ren'Py Çeviri Aracı"))
+                        text: (backend.uiTrigger, backend.getTextWithDefault("app_subtitle", "Professional Ren'Py Translation Tool"))
                         font.pixelSize: 16
                         color: root.secondaryTextColor
                         font.weight: Font.Medium
@@ -167,7 +167,7 @@ Rectangle {
                     spacing: 12
 
                     Label {
-                        text: (backend.uiTrigger, backend.getTextWithDefault("input_section", "📁 Oyun Seçimi"))
+                        text: (backend.uiTrigger, backend.getTextWithDefault("input_section", "📁 Game Selection"))
                         font.pixelSize: 16
                         font.bold: true
                         color: root.mainTextColor
@@ -182,7 +182,7 @@ Rectangle {
                             Layout.fillWidth: true
                             Layout.preferredHeight: 45
                             // Dynamic placeholder to prevent overlapping
-                            placeholderText: text.length > 0 ? "" : (backend.uiTrigger, backend.getTextWithDefault("game_exe_placeholder", "Oyun dosyasını veya klasörünü seç..."))
+                            placeholderText: text.length > 0 ? "" : (backend.uiTrigger, backend.getTextWithDefault("game_exe_placeholder", "Select game file or folder..."))
                             color: root.mainTextColor
                             font.pixelSize: 14
                             leftPadding: 16
@@ -203,7 +203,7 @@ Rectangle {
                         }
 
                         Button {
-                            text: "📄 " + (backend.uiTrigger, backend.getTextWithDefault("browse", "Dosya"))
+                            text: "📄 " + (backend.uiTrigger, backend.getTextWithDefault("browse", "File"))
                             Layout.preferredHeight: 45
                             Layout.preferredWidth: 100
                             onClicked: fileDialog.open()
@@ -226,7 +226,7 @@ Rectangle {
                         }
 
                         Button {
-                            text: "📂 " + (backend.uiTrigger, backend.getTextWithDefault("browse_folder", "Klasör"))
+                            text: "📂 " + (backend.uiTrigger, backend.getTextWithDefault("browse_folder", "Folder"))
                             Layout.preferredHeight: 45
                             Layout.preferredWidth: 100
                             onClicked: folderDialog.open()
@@ -267,7 +267,7 @@ Rectangle {
                     spacing: 16
 
                     Label {
-                        text: (backend.uiTrigger, backend.getTextWithDefault("translation_settings", "⚙️ Çeviri Ayarları"))
+                        text: (backend.uiTrigger, backend.getTextWithDefault("translation_settings", "⚙️ Translation Settings"))
                         font.pixelSize: 16
                         font.bold: true
                         color: root.mainTextColor
@@ -283,7 +283,7 @@ Rectangle {
                             Layout.preferredWidth: 180
 
                             Label {
-                                text: (backend.uiTrigger, backend.getTextWithDefault("source_lang_label", "Kaynak Dil"))
+                                text: (backend.uiTrigger, backend.getTextWithDefault("source_lang_label", "Source Language"))
                                 font.pixelSize: 12
                                 color: root.secondaryTextColor
                             }
@@ -321,7 +321,7 @@ Rectangle {
                             Layout.preferredWidth: 180
 
                             Label {
-                                text: (backend.uiTrigger, backend.getTextWithDefault("target_lang_label", "Hedef Dil"))
+                                text: (backend.uiTrigger, backend.getTextWithDefault("target_lang_label", "Target Language"))
                                 font.pixelSize: 12
                                 color: root.secondaryTextColor
                             }
@@ -360,7 +360,7 @@ Rectangle {
                             Layout.maximumWidth: 300
 
                             Label {
-                                text: (backend.uiTrigger, backend.getTextWithDefault("translation_engine_label", "Çeviri Motoru"))
+                                text: (backend.uiTrigger, backend.getTextWithDefault("translation_engine_label", "Translation Engine"))
                                 font.pixelSize: 12
                                 color: root.secondaryTextColor
                             }
@@ -401,8 +401,8 @@ Rectangle {
                             Layout.preferredHeight: 50
                             enabled: projectPathField.text.length > 0
                             text: isTranslating ? 
-                                ("⏹ " + (backend.uiTrigger, backend.getTextWithDefault("stop", "Durdur"))) : 
-                                ("▶ " + (backend.uiTrigger, backend.getTextWithDefault("start_translation", "Başlat")))
+                                ("⏹ " + (backend.uiTrigger, backend.getTextWithDefault("stop", "Stop"))) : 
+                                ("▶ " + (backend.uiTrigger, backend.getTextWithDefault("start_translation", "Start")))
 
                             onClicked: {
                                 if (isTranslating) {
@@ -464,7 +464,7 @@ Rectangle {
 
                         Label {
                             id: stageLabel
-                            text: (backend.uiTrigger, backend.getTextWithDefault("ready", "Hazır"))
+                            text: (backend.uiTrigger, backend.getTextWithDefault("ready", "Ready"))
                             font.pixelSize: 16
                             font.bold: true
                             color: root.mainTextColor
@@ -525,25 +525,74 @@ Rectangle {
                     spacing: 40
 
                     ColumnLayout {
-                        Label { text: (backend.uiTrigger, backend.getTextWithDefault("stats_total", "Toplam Satır")); color: "#aaa"; font.pixelSize: 12 }
+                        Label { text: (backend.uiTrigger, backend.getTextWithDefault("stats_total", "Total Lines")); color: "#aaa"; font.pixelSize: 12 }
                         Label { text: totalLines; color: root.mainTextColor; font.pixelSize: 20; font.bold: true }
                     }
 
                     ColumnLayout {
-                        Label { text: (backend.uiTrigger, backend.getTextWithDefault("stats_translated", "Çevrilen")); color: "#aaa"; font.pixelSize: 12 }
+                        Label { text: (backend.uiTrigger, backend.getTextWithDefault("stats_translated", "Translated")); color: "#aaa"; font.pixelSize: 12 }
                         Label { text: translatedLines; color: "#6bcb77"; font.pixelSize: 20; font.bold: true }
                     }
 
                     ColumnLayout {
-                        Label { text: (backend.uiTrigger, backend.getTextWithDefault("stats_untranslated", "Kalan")); color: "#aaa"; font.pixelSize: 12 }
+                        Label { text: (backend.uiTrigger, backend.getTextWithDefault("stats_untranslated", "Remaining")); color: "#aaa"; font.pixelSize: 12 }
                         Label { text: untranslatedLines; color: "#ff6b6b"; font.pixelSize: 20; font.bold: true }
                     }
 
                     ColumnLayout {
-                        Label { text: (backend.uiTrigger, backend.getTextWithDefault("stats_success_rate", "Başarı Oranı")); color: "#aaa"; font.pixelSize: 12 }
+                        Label { text: (backend.uiTrigger, backend.getTextWithDefault("stats_success_rate", "Success Rate")); color: "#aaa"; font.pixelSize: 12 }
                         Label { 
                             text: totalLines > 0 ? ((translatedLines / totalLines) * 100).toFixed(1) + "%" : "0%"
                             color: Material.accent; font.pixelSize: 20; font.bold: true 
+                        }
+                    }
+                }
+            }
+
+            // ==================== İpucu Kutusu (Agresif Çeviri) ====================
+            Rectangle {
+                Layout.fillWidth: true
+                Layout.preferredHeight: tipRow.implicitHeight + 24
+                radius: 12
+                color: Qt.alpha("#f39c12", 0.15) // Hafif turuncu/sarı arka plan
+                border.color: "#f39c12"
+                border.width: 1
+
+                RowLayout {
+                    id: tipRow
+                    anchors.left: parent.left
+                    anchors.right: parent.right
+                    anchors.verticalCenter: parent.verticalCenter
+                    anchors.margins: 12
+                    spacing: 12
+
+                    Label {
+                        text: "💡"
+                        font.pixelSize: 20
+                        Layout.alignment: Qt.AlignTop
+                    }
+
+                    Label {
+                        Layout.fillWidth: true
+                        text: (backend.uiTrigger, backend.getTextWithDefault("tip_aggressive_translation", "Tip: If some strings remain in original language after translation, try enabling Settings > 'Aggressive Translation' mode."))
+                        color: root.mainTextColor
+                        font.pixelSize: 13
+                        
+                        // Link desteği için RichText
+                        textFormat: Text.RichText
+                        wrapMode: Text.Wrap
+                        lineHeight: 1.2
+                        
+                        // Link tıklama işleyicisi
+                        onLinkActivated: (link) => {
+                            if (link === "faq") {
+                                var appPath = backend.get_app_path()
+                                var faqPath = "file:///" + appPath + "/docs/wiki/FAQ.md"
+                                console.log("Opening FAQ at: " + faqPath)
+                                backend.openUrl(faqPath)
+                            } else {
+                                Qt.openUrlExternally(link)
+                            }
                         }
                     }
                 }
@@ -579,7 +628,7 @@ Rectangle {
                             onClicked: logModel.clear()
 
                             ToolTip.visible: hovered
-                            ToolTip.text: (backend.uiTrigger, backend.getTextWithDefault("clear_log", "Temizle"))
+                            ToolTip.text: (backend.uiTrigger, backend.getTextWithDefault("clear_log", "Clear"))
                         }
                     }
 
@@ -629,6 +678,8 @@ Rectangle {
                 }
             }
 
+
+
             // ==================== Destek Banner ====================
             Rectangle {
                 Layout.fillWidth: true
@@ -651,21 +702,21 @@ Rectangle {
                         spacing: 4
 
                         Label {
-                            text: (backend.uiTrigger, backend.getTextWithDefault("support_banner_title", "RenLocalizer'ı Seviyor musunuz?"))
+                            text: (backend.uiTrigger, backend.getTextWithDefault("support_banner_title", "Do you love RenLocalizer?"))
                             font.pixelSize: 14
                             font.bold: true
                             color: root.mainTextColor
                         }
 
                         Label {
-                            text: (backend.uiTrigger, backend.getTextWithDefault("support_banner_desc", "Gelişimi desteklemek için bize katılın."))
+                            text: (backend.uiTrigger, backend.getTextWithDefault("support_banner_desc", "Join us to support development."))
                             font.pixelSize: 12
                             color: root.secondaryTextColor
                         }
                     }
 
                     Button {
-                        text: "💜 " + (backend.uiTrigger, backend.getTextWithDefault("nav_support", "Destek Ol"))
+                        text: "💜 " + (backend.uiTrigger, backend.getTextWithDefault("nav_support", "Support"))
                         onClicked: backend.openUrl("https://www.patreon.com/c/LordOfTurk")
 
                         contentItem: Label {
@@ -691,14 +742,14 @@ Rectangle {
 
     // Component yüklendiğinde hoşgeldin mesajı
     Component.onCompleted: {
-        addLog("info", "RenLocalizer v" + backend.version + " - Qt Quick UI")
-        addLog("info", (backend.uiTrigger, backend.getTextWithDefault("welcome_message", "Hoş geldiniz! Çevirmek istediğiniz oyunu seçin.")))
+        addLog("info", "RenLocalizer v" + backend.version + (backend.uiTrigger, backend.getTextWithDefault("app_log_qt_ui", " - Qt Quick UI")))
+        addLog("info", (backend.uiTrigger, backend.getTextWithDefault("welcome_message", "Welcome! Select the game you want to translate.")))
         
         var lastPath = backend.getLastProjectPath()
         if (lastPath) {
             projectPathField.text = lastPath
             backend.setProjectPath(lastPath) // Backend state sync
-            var restoreMsg = (backend.uiTrigger, backend.getTextWithDefault("last_session_restored", "Son oturum geri yüklendi: {path}"))
+            var restoreMsg = (backend.uiTrigger, backend.getTextWithDefault("last_session_restored", "Last session restored: {path}"))
             addLog("info", restoreMsg.replace("{path}", lastPath))
         }
     }

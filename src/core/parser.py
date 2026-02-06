@@ -32,7 +32,19 @@ DATA_KEY_WHITELIST = {
     'name', 'title', 'description', 'desc', 'text', 'content', 'caption',
     'label', 'prompt', 'help', 'header', 'footer', 'message', 'dialogue',
     'summary', 'quest', 'objective', 'char', 'character',
-    'tips', 'hints', 'help', 'notes', 'log', 'history', 'inventory', 'items', 'objectives', 'goals', 'achievements', 'gallery'
+    'tips', 'hints', 'notes', 'log', 'history', 'inventory', 'items', 
+    'objectives', 'goals', 'achievements', 'gallery', 'sender', 'receiver',
+    'tooltip', 'alt', 'what', 'who', 'menu', 'hint', 'subtitle', 
+    'stat', 'credits', 'authors', 'about', 'version_name', 'hover_text', 'selected_text'
+}
+
+# Standard Ren'Py strings to guarantee extraction (Fallthrough)
+STANDARD_RENPY_STRINGS = {
+    "Start", "Load", "Preferences", "About", "Help", "Quit", "Return",
+    "Save", "Load Game", "Main Menu", "History", "Skip", "Auto", "Quick",
+    "Q.Save", "Q.Load", "Prefs", "Back", "End Replay", "Yes", "No",
+    "Empty Slot", "Test", "Language", "Music", "Sound", "Voice", "Self-Voicing",
+    "Clipboard Voicing", "Text Speed", "Auto-Forward Time"
 }
 
 
@@ -197,7 +209,13 @@ class RenPyParser:
 
         # Use the shared quoted-string pattern for these common cases to avoid
         # duplicated complex literals and accidental unbalanced escapes.
-        self.renpy_show_re = re.compile(r'^\s*(?:\$\s+)?renpy\.show\s*\(\s*' + self._quoted_string)
+        # REMOVED: renpy.show_re (Dangerous regex that matched technical image names)
+
+        # Actions and Input Prompts (v2.6.4 Extension)
+        # Matches: Confirm("Text"), Notify("Text"), renpy.input("Text")
+        self.action_call_re = re.compile(
+            r'.*\b(?:Confirm|Notify|Tooltip|MouseTooltip|Help|renpy\.input)\s*\(\s*(?:.*?(?:prompt|message|value)\s*=\s*)?(?:_\s*\(\s*)?(?P<quote>"(?:[^"\\]|\\.)*"|\'(?:[^\\\']|\\.)*\')'
+        )
 
         self.layout_text_re = re.compile(r'^\s*layout\.[a-zA-Z0-9_]+\s*=\s*' + self._quoted_string)
         self.store_text_re = re.compile(r'^\s*store\.[a-zA-Z0-9_]+\s*=\s*' + self._quoted_string)
@@ -294,7 +312,9 @@ class RenPyParser:
             {'regex': self.extend_re, 'type': 'dialogue'},
             {'regex': self.narrator_re, 'type': 'dialogue'},
             {'regex': self.gui_variable_re, 'type': 'gui'},
-            {'regex': self.renpy_show_re, 'type': 'ui'},
+            # REMOVED: renpy_show_re
+            # Actions now handled in Secondary Pass (v2.6.4)
+            
             # NEW v2.4.1 patterns
             {'regex': self.default_translatable_re, 'type': 'translatable_string'},
             {'regex': self.show_screen_re, 'type': 'ui'},
@@ -562,6 +582,31 @@ class RenPyParser:
                         log_line = f"{file_path}:{idx+1} [{text_type}] ctx={current_context} text={text}"
                         self.logger.info(f"[ENTRY] {log_line}")
                 break
+
+            # --- V2.6.4: Secondary Pass for Actions (Confirm, Notify, Input) ---
+            # This runs independently so we can capture BOTH the button text AND the action prompt on the same line.
+            action_match = self.action_call_re.match(raw_line)
+            if action_match and self.is_meaningful_text(action_match.group('quote')):
+                quote_raw = action_match.group('quote')
+                raw, text = self._extract_string_raw_and_unescaped(quote_raw, start_line=idx, lines=lines)
+                key = (text, idx + 1, tuple(current_context))
+                
+                # Deduplication check
+                if key not in seen_texts:
+                    entry = self._record_entry(
+                        text=text,
+                        raw_text=raw,
+                        line_number=idx + 1,
+                        context_line=stripped_line,
+                        text_type='ui_action',
+                        context_path=list(current_context),
+                        character='',
+                        file_path=str(file_path),
+                    )
+                    if entry:
+                        entries.append(entry)
+                        seen_texts.add(key)
+                        self.logger.info(f"[ENTRY+ACTION] {file_path}:{idx+1} [ui_action] text={text}")
         return entries
 
     def extract_from_json(self, file_path: Path) -> List[Dict[str, Any]]:

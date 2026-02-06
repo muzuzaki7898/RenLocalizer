@@ -19,7 +19,7 @@ from typing import List, Dict, Tuple, Optional
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from src.utils.encoding import read_text_safely
+from src.utils.encoding import read_text_safely, save_text_safely
 
 
 @dataclass
@@ -122,6 +122,10 @@ class TLParser:
         
         # Sadece # path.rpy:123 veya # game/path.rpy:123 formatı - kaynak yorum
         self._source_comment_re = re.compile(r'^\s*#\s*([^:]+:\d+)\s*$')
+
+        # Custom Context Comment (RenLocalizer Deep Scan & manual)
+        # Format: # context: screen:options
+        self._context_comment_re = re.compile(r'^\s*#\s*context:\s*(.+)\s*$')
     
     @staticmethod
     def make_translation_id(file_path: str, line_number: int, text: str, context_path: Optional[List[str]] = None, raw_text: Optional[str] = None) -> str:
@@ -292,13 +296,38 @@ class TLParser:
                 i += 1
                 continue
             
+            # Context comment (# context: screen:x)
+            ctx_match = self._context_comment_re.match(stripped)
+            if ctx_match:
+                # Add to current context for the next entry
+                # We store it transiently.
+                # Note: This implementation assumes context comment comes immediately before the entry
+                # or inside the block.
+                extra_ctx = ctx_match.group(1).strip()
+                # If we are in a block, we can't easily append to current_block_id (it's a string)
+                # But we can use it when creating the Entry.
+                # Let's verify if we need a list for current_context
+                # For now, let's just append it to a temporary list
+                if not hasattr(self, '_temp_context_list'):
+                     self._temp_context_list = []
+                self._temp_context_list.append(extra_ctx)
+                i += 1
+                continue
+            
             # STRINGS FORMAT: old "..." / new "..."
             old_match = self._old_re.match(stripped)
             if old_match:
                 old_text = self._unescape_string(old_match.group(1))
                 new_text = ""
                 line_no = i + 1
-                ctx = [current_block_id] if current_block_id else []
+                
+                # Combine block ID and temp context
+                final_ctx = []
+                if current_block_id: final_ctx.append(current_block_id)
+                if hasattr(self, '_temp_context_list') and self._temp_context_list:
+                    final_ctx.extend(self._temp_context_list)
+                    self._temp_context_list = [] # Reset after consuming
+
                 
                 # Sonraki satır new "..." olmalı
                 if i + 1 < len(lines):
@@ -317,8 +346,8 @@ class TLParser:
                         entry_type='string',
                         source_comment=current_source_comment,
                         block_id=current_block_id,
-                        context_path=[current_block_id] if current_block_id else [],
-                        translation_id=self.make_translation_id(file_path, line_no, old_text, [current_block_id] if current_block_id else [])
+                        context_path=final_ctx,
+                        translation_id=self.make_translation_id(file_path, line_no, old_text, final_ctx)
                     )
                     entries.append(entry)
                 
@@ -620,8 +649,7 @@ class TLParser:
             
             save_path = output_path or tl_file.file_path
             
-            with open(save_path, 'w', encoding='utf-8-sig', newline='\n') as f:
-                f.write(updated_content)
+            return save_text_safely(Path(save_path), updated_content, encoding='utf-8-sig', newline='\n')
             
             self.logger.info(f"Kaydedildi: {save_path}")
             return True

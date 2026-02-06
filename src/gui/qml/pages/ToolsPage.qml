@@ -20,7 +20,7 @@ Rectangle {
             spacing: 24
 
             Label {
-                text: "🛠 " + (backend.uiTrigger, backend.getTextWithDefault("nav_tools", "Araçlar"))
+                text: "🛠 " + (backend.uiTrigger, backend.getTextWithDefault("nav_tools", "Tools"))
                 font.pixelSize: 24
                 font.bold: true
                 color: root.mainTextColor
@@ -35,62 +35,62 @@ Rectangle {
 
                 // --- RPA Araçları ---
                 ToolCard {
-                    title: (backend.uiTrigger, backend.getTextWithDefault("unrpa_title", "RPA Arşiv Yönetimi"))
-                    desc: (backend.uiTrigger, backend.getTextWithDefault("unrpa_desc", ".rpa dosyalarını açın veya paketleyin."))
+                    title: (backend.uiTrigger, backend.getTextWithDefault("unrpa_title", "RPA Archive Management"))
+                    desc: (backend.uiTrigger, backend.getTextWithDefault("unrpa_desc", "Extract or pack .rpa files."))
                     icon: "📦"
-                    btnText: (backend.uiTrigger, backend.getTextWithDefault("btn_manage", "Yönet"))
+                    btnText: (backend.uiTrigger, backend.getTextWithDefault("btn_manage", "Manage"))
                     onClicked: backend.runUnRen() // Backend'de tanımlanmalı veya dialog açmalı
                 }
 
                 // --- Sağlık Kontrolü ---
                 ToolCard {
-                    title: (backend.uiTrigger, backend.getTextWithDefault("health_check_title", "Sağlık Kontrolü"))
-                    desc: (backend.uiTrigger, backend.getTextWithDefault("diagnostics_desc", "Proje hatalarını, eksik dosyaları tara."))
+                    title: (backend.uiTrigger, backend.getTextWithDefault("health_check_title", "Health Check"))
+                    desc: (backend.uiTrigger, backend.getTextWithDefault("diagnostics_desc", "Scan project for errors, missing files."))
                     icon: "🩺"
-                     btnText: (backend.uiTrigger, backend.getTextWithDefault("run_check", "Taramayı Başlat"))
+                     btnText: (backend.uiTrigger, backend.getTextWithDefault("run_check", "Start Scan"))
                     onClicked: backend.runHealthCheck()
                 }
 
                 // --- Font Kontrolü ---
                 ToolCard {
-                    title: (backend.uiTrigger, backend.getTextWithDefault("font_check_title", "Font Uyumluluğu"))
-                    desc: (backend.uiTrigger, backend.getTextWithDefault("font_check_desc", "Seçilen dilin font tarafından desteklenip desteklenmediğini test et."))
+                    title: (backend.uiTrigger, backend.getTextWithDefault("font_check_title", "Font Compatibility"))
+                    desc: (backend.uiTrigger, backend.getTextWithDefault("font_check_desc", "Test if the selected language is supported by the font."))
                     icon: "🔤"
-                    btnText: (backend.uiTrigger, backend.getTextWithDefault("font_check_now_button", "Test Et"))
+                    btnText: (backend.uiTrigger, backend.getTextWithDefault("font_check_now_button", "Test Now"))
                     onClicked: backend.runFontCheck()
                 }
 
                 // --- Otomatik Font Enjeksiyonu ---
                 ToolCard {
-                    title: "🅰️ " + (backend.uiTrigger, backend.getTextWithDefault("font_injector_title", "Otomatik Font Düzeltici"))
-                    desc: (backend.uiTrigger, backend.getTextWithDefault("font_injector_desc", "Seçilen dil için uyumlu fontu indir ve oyuna entegre et (Kare karakterleri çözümler)."))
+                    title: "🅰️ " + (backend.uiTrigger, backend.getTextWithDefault("font_injector_title", "Automatic Font Fixer"))
+                    desc: (backend.uiTrigger, backend.getTextWithDefault("font_injector_desc", "Download and integrate a compatible font for the selected language (resolves box characters)."))
                     icon: "🪄"
-                    btnText: (backend.uiTrigger, backend.getTextWithDefault("btn_fix_now", "Onar"))
+                    btnText: (backend.uiTrigger, backend.getTextWithDefault("btn_fix_now", "Fix Now"))
                     onClicked: backend.autoInjectFont()
                 }
 
                 // --- Manuel Font Seçimi (YENİ) ---
                 ToolCard {
-                    title: "🔠 " + (backend.uiTrigger, backend.getTextWithDefault("font_manual_title", "Manuel Font Seçimi"))
-                    desc: (backend.uiTrigger, backend.getTextWithDefault("font_manual_desc", "Otomatik eşleşme yerine listeden istediğiniz bir Google Fontunu seçip indirebilirsiniz."))
+                    title: "🔠 " + (backend.uiTrigger, backend.getTextWithDefault("font_manual_title", "Manual Font Selection"))
+                    desc: (backend.uiTrigger, backend.getTextWithDefault("font_manual_desc", "You can select and download a Google Font from the list instead of auto-matching."))
                     icon: "📑"
-                    btnText: (backend.uiTrigger, backend.getTextWithDefault("btn_open", "Seç"))
+                    btnText: (backend.uiTrigger, backend.getTextWithDefault("btn_open", "Select"))
                     onClicked: manualFontDialog.open()
                 }
 
                 // --- Runtime Hook Oluşturucu ---
                 ToolCard {
-                    title: "🪝 " + (backend.uiTrigger, backend.getTextWithDefault("tool_runtime_hook_title", "Runtime Hook Oluşturucu"))
-                    desc: (backend.uiTrigger, backend.getTextWithDefault("settings_hook_desc", "Oyunun çevirileri tanıması için Runtime Hook modunu oluştur."))
+                    title: "🪝 " + (backend.uiTrigger, backend.getTextWithDefault("tool_runtime_hook_title", "Runtime Hook Generator"))
+                    desc: (backend.uiTrigger, backend.getTextWithDefault("settings_hook_desc", "Create the Runtime Hook mode for the game to recognize translations."))
                     icon: "🪄"
-                    btnText: (backend.uiTrigger, backend.getTextWithDefault("generate_hook_btn", "Oluştur"))
+                    btnText: (backend.uiTrigger, backend.getTextWithDefault("generate_hook_btn", "Generate"))
                     onClicked: backend.generateRuntimeHook()
                 }
                 
                 // --- Sözde Çeviri (Test) ---
                 ToolCard {
-                    title: (backend.uiTrigger, backend.getTextWithDefault("pseudo_engine_name", "Sözde Çeviri (Test)"))
-                    desc: (backend.uiTrigger, backend.getTextWithDefault("pseudo_desc", "Test amaçlı rastgele karakterlerle çeviri yap (UI taşmalarını görmek için)."))
+                    title: (backend.uiTrigger, backend.getTextWithDefault("pseudo_engine_name", "Pseudo Translation (Test)"))
+                    desc: (backend.uiTrigger, backend.getTextWithDefault("pseudo_desc", "Translate with random characters for testing purposes (to see UI overflows)."))
                     icon: "🧪"
                     btnText: (backend.uiTrigger, backend.getTextWithDefault("start", "Başlat"))
                     onClicked: {
@@ -101,10 +101,10 @@ Rectangle {
 
                 // --- TL Klasörünü Çevir ---
                 ToolCard {
-                    title: "📂 " + (backend.uiTrigger, backend.getTextWithDefault("tl_translate_title", "TL Klasörünü Çevir"))
-                    desc: (backend.uiTrigger, backend.getTextWithDefault("tl_translate_desc", "Oyunun 'tl' klasöründeki mevcut çeviri dosyalarını doğrudan çevirmeye yarar."))
+                    title: "📂 " + (backend.uiTrigger, backend.getTextWithDefault("tl_translate_title", "Translate TL Folder"))
+                    desc: (backend.uiTrigger, backend.getTextWithDefault("tl_translate_desc", "Allows you to directly translate existing translation files in the game's 'tl' folder."))
                     icon: "🌐"
-                    btnText: (backend.uiTrigger, backend.getTextWithDefault("btn_select_and_start", "Klasör Seç ve Başlat"))
+                    btnText: (backend.uiTrigger, backend.getTextWithDefault("btn_select_and_start", "Select Folder and Start"))
                     onClicked: tlDialog.open()
                 }
             }
@@ -114,18 +114,18 @@ Rectangle {
     // Manuel Font Diyaloğu
     Dialog {
         id: manualFontDialog
-        title: (backend.uiTrigger, backend.getTextWithDefault("font_manual_title", "Manuel Font Seçimi"))
+        title: (backend.uiTrigger, backend.getTextWithDefault("font_manual_title", "Manual Font Selection"))
         anchors.centerIn: parent
         modal: true
         width: 400
         
         background: Rectangle { color: root.cardBackground; radius: 12; border.color: root.borderColor }
-        header: Label { text: (backend.uiTrigger, backend.getTextWithDefault("font_manual_title", "Manuel Font Seçimi")); padding: 20; font.bold: true; color: root.mainTextColor; font.pixelSize: 18 }
+        header: Label { text: (backend.uiTrigger, backend.getTextWithDefault("font_manual_title", "Manual Font Selection")); padding: 20; font.bold: true; color: root.mainTextColor; font.pixelSize: 18 }
         
         contentItem: ColumnLayout {
             spacing: 15
             Label { 
-                text: (backend.uiTrigger, backend.getTextWithDefault("font_manual_desc", "Listeden bir font seçin:")); 
+                text: (backend.uiTrigger, backend.getTextWithDefault("font_manual_desc", "Select a font from the list:")); 
                 color: root.secondaryTextColor; 
                 wrapMode: Text.Wrap; 
                 Layout.fillWidth: true 
@@ -141,9 +141,9 @@ Rectangle {
         
         footer: DialogButtonBox {
             background: Rectangle { color: "transparent" }
-            Button { text: (backend.uiTrigger, backend.getTextWithDefault("btn_cancel", "İptal")); DialogButtonBox.buttonRole: DialogButtonBox.RejectRole; flat: true }
+            Button { text: (backend.uiTrigger, backend.getTextWithDefault("btn_cancel", "Cancel")); DialogButtonBox.buttonRole: DialogButtonBox.RejectRole; flat: true }
             Button { 
-                text: (backend.uiTrigger, backend.getTextWithDefault("btn_download_inject", "İndir ve Uygula")); 
+                text: (backend.uiTrigger, backend.getTextWithDefault("btn_download_inject", "Download and Apply")); 
                 DialogButtonBox.buttonRole: DialogButtonBox.AcceptRole; 
                 highlighted: true
                 onClicked: {
@@ -157,25 +157,25 @@ Rectangle {
     // TL Çeviri Diyaloğu
     Dialog {
         id: tlDialog
-        title: (backend.uiTrigger, backend.getTextWithDefault("tl_dialog_title", "TL Çevirisi"))
+        title: (backend.uiTrigger, backend.getTextWithDefault("tl_dialog_title", "TL Translation"))
         anchors.centerIn: parent
         modal: true
         width: 450
         
         background: Rectangle { color: root.cardBackground; radius: 12; border.color: root.borderColor }
-        header: Label { text: (backend.uiTrigger, backend.getTextWithDefault("tl_dialog_header", "📂 TL Klasörü Çevirisi")); padding: 20; font.bold: true; color: root.mainTextColor; font.pixelSize: 18 }
+        header: Label { text: (backend.uiTrigger, backend.getTextWithDefault("tl_dialog_header", "📂 TL Folder Translation")); padding: 20; font.bold: true; color: root.mainTextColor; font.pixelSize: 18 }
         
         contentItem: ColumnLayout {
             spacing: 15
-            Label { text: (backend.uiTrigger, backend.getTextWithDefault("tl_select_folder_instruction", "Çevrilecek klasörü (örn: game/tl/turkish) seçin:")); color: root.secondaryTextColor; wrapMode: Text.Wrap; Layout.fillWidth: true }
+            Label { text: (backend.uiTrigger, backend.getTextWithDefault("tl_select_folder_instruction", "Select the folder to be translated (e.g. game/tl/turkish):")); color: root.secondaryTextColor; wrapMode: Text.Wrap; Layout.fillWidth: true }
             
             RowLayout {
-                TextField { id: tlPathField; Layout.fillWidth: true; placeholderText: (backend.uiTrigger, backend.getTextWithDefault("path_not_selected_placeholder", "Yol seçilmedi...")); color: root.mainTextColor; background: Rectangle { color: root.inputBackground; border.color: root.borderColor; radius: 6 } }
+                TextField { id: tlPathField; Layout.fillWidth: true; placeholderText: (backend.uiTrigger, backend.getTextWithDefault("path_not_selected_placeholder", "Path not selected...")); color: root.mainTextColor; background: Rectangle { color: root.inputBackground; border.color: root.borderColor; radius: 6 } }
                 Button { text: "📁"; onClicked: tlPathDialog.open() }
             }
             
             RowLayout {
-                Label { text: (backend.uiTrigger, backend.getTextWithDefault("target_lang_label", "Hedef Dil:")); color: root.secondaryTextColor; Layout.preferredWidth: 100 }
+                Label { text: (backend.uiTrigger, backend.getTextWithDefault("target_lang_label", "Target Language:")); color: root.secondaryTextColor; Layout.preferredWidth: 100 }
                 ComboBox {
                     id: tlTargetCombo
                     Layout.fillWidth: true
@@ -188,9 +188,9 @@ Rectangle {
         
         footer: DialogButtonBox {
             background: Rectangle { color: "transparent" }
-            Button { text: (backend.uiTrigger, backend.getTextWithDefault("btn_cancel", "İptal")); DialogButtonBox.buttonRole: DialogButtonBox.RejectRole; flat: true }
+            Button { text: (backend.uiTrigger, backend.getTextWithDefault("btn_cancel", "Cancel")); DialogButtonBox.buttonRole: DialogButtonBox.RejectRole; flat: true }
             Button { 
-                text: (backend.uiTrigger, backend.getTextWithDefault("start_translation", "Çeviriyi Başlat")); DialogButtonBox.buttonRole: DialogButtonBox.AcceptRole; highlighted: true
+                text: (backend.uiTrigger, backend.getTextWithDefault("start_translation", "Start Translation")); DialogButtonBox.buttonRole: DialogButtonBox.AcceptRole; highlighted: true
                 onClicked: backend.startTLTranslation(tlPathField.text, tlTargetCombo.currentValue, "auto", "google", false)
             }
         }
@@ -198,7 +198,7 @@ Rectangle {
 
     FolderDialog {
         id: tlPathDialog
-        title: (backend.uiTrigger, backend.getTextWithDefault("select_tl_folder_title", "TL Klasörünü Seçin"))
+        title: (backend.uiTrigger, backend.getTextWithDefault("select_tl_folder_title", "Select TL Folder"))
         currentFolder: "file:///" + backend.get_app_path()
         onAccepted: tlPathField.text = selectedFolder.toString().replace("file:///", "")
     }
@@ -208,7 +208,7 @@ Rectangle {
         property string title: ""
         property string desc: ""
         property string icon: ""
-        property string btnText: (backend.uiTrigger, backend.getTextWithDefault("btn_open", "Aç"))
+        property string btnText: (backend.uiTrigger, backend.getTextWithDefault("btn_open", "Open"))
         signal clicked()
 
         width: 280

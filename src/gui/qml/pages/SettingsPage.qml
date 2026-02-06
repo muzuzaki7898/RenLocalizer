@@ -23,7 +23,7 @@ Rectangle {
             spacing: 24
 
             Label {
-                text: "⚙️ " + (backend.uiTrigger, backend.getTextWithDefault("nav_settings", "Ayarlar"))
+                text: "⚙️ " + (backend.uiTrigger, backend.getTextWithDefault("nav_settings", "Settings"))
                 font.pixelSize: 28
                 font.bold: true
                 color: root.mainTextColor
@@ -31,14 +31,14 @@ Rectangle {
 
             // ==================== GENEL AYARLAR ====================
             SettingsGroup {
-                title: "🌐 " + (backend.uiTrigger, backend.getTextWithDefault("settings_general", "Genel Ayarlar"))
+                title: "🌐 " + (backend.uiTrigger, backend.getTextWithDefault("settings_general", "General Settings"))
                 
                 ColumnLayout {
                     Layout.fillWidth: true
                     spacing: 16
 
                     SettingsRow {
-                        label: (backend.uiTrigger, backend.getTextWithDefault("ui_language_label", "Uygulama Dili:"))
+                        label: (backend.uiTrigger, backend.getTextWithDefault("ui_language_label", "App Language:"))
                         ComboBox {
                             Layout.fillWidth: true
                             model: settingsBackend.getAvailableUILanguages()
@@ -55,7 +55,7 @@ Rectangle {
                     }
 
                     SettingsRow {
-                        label: (backend.uiTrigger, backend.getTextWithDefault("theme_menu", "Tema:"))
+                        label: (backend.uiTrigger, backend.getTextWithDefault("theme_menu", "Theme:"))
                         ComboBox {
                             Layout.fillWidth: true
                             model: settingsBackend.getAvailableThemes()
@@ -74,11 +74,11 @@ Rectangle {
                     CheckBox {
                         checked: settingsBackend.getCheckUpdates()
                         onCheckedChanged: settingsBackend.setCheckUpdates(checked)
-                        text: (backend.uiTrigger, backend.getTextWithDefault("check_updates", "Güncellemeleri Otomatik Denetle"))
+                        text: (backend.uiTrigger, backend.getTextWithDefault("check_updates", "Automatically check for updates"))
                     }
 
                     Button {
-                        text: "🔄 " + (backend.uiTrigger, backend.getTextWithDefault("check_updates_now_button", "Şimdi Güncellemeleri Denetle"))
+                        text: "🔄 " + (backend.uiTrigger, backend.getTextWithDefault("check_updates_now_button", "Check for updates now"))
                         onClicked: backend.checkForUpdates(true)
                         Layout.preferredHeight: 40
                         background: Rectangle {
@@ -92,7 +92,7 @@ Rectangle {
 
             // ==================== ÇEVİRİ FİLTRELERİ ====================
             SettingsGroup {
-                title: "🔍 " + (backend.uiTrigger, backend.getTextWithDefault("translation_filters", "Neler Çevrilsin?"))
+                title: "🔍 " + (backend.uiTrigger, backend.getTextWithDefault("translation_filters", "What to translate?"))
                 
                 GridLayout {
                     columns: 2
@@ -100,33 +100,33 @@ Rectangle {
                     rowSpacing: 10
                     columnSpacing: 20
 
-                    FilterCheck { key: "dialogue"; label: (backend.uiTrigger, backend.getTextWithDefault("translate_dialogue_label", "Diyaloglar")) }
-                    FilterCheck { key: "menu"; label: (backend.uiTrigger, backend.getTextWithDefault("translate_menu_label", "Menü Seçenekleri")) }
-                    FilterCheck { key: "buttons"; label: (backend.uiTrigger, backend.getTextWithDefault("translate_buttons_label", "Butonlar")) }
-                    FilterCheck { key: "notifications"; label: (backend.uiTrigger, backend.getTextWithDefault("translate_notifications_label", "Bildirimler")) }
-                    FilterCheck { key: "alt_text"; label: (backend.uiTrigger, backend.getTextWithDefault("translate_alt_text_label", "Alternatif Metinler")) }
-                    FilterCheck { key: "confirmations"; label: (backend.uiTrigger, backend.getTextWithDefault("translate_confirmations_label", "Onay Diyalogları")) }
-                    FilterCheck { key: "input_text"; label: (backend.uiTrigger, backend.getTextWithDefault("translate_input_label", "Giriş Kutuları")) }
-                    FilterCheck { key: "ui"; label: (backend.uiTrigger, backend.getTextWithDefault("translate_ui_label", "UI Metinleri")) }
-                    FilterCheck { key: "gui_strings"; label: (backend.uiTrigger, backend.getTextWithDefault("translate_gui_label", "GUI Stringleri")) }
-                    FilterCheck { key: "style_strings"; label: (backend.uiTrigger, backend.getTextWithDefault("translate_style_label", "Stil Metinleri")) }
-                    FilterCheck { key: "renpy_functions"; label: (backend.uiTrigger, backend.getTextWithDefault("translate_renpy_func_label", "Ren'Py Fonksiyonları")) }
-                    FilterCheck { key: "config_strings"; label: (backend.uiTrigger, backend.getTextWithDefault("translate_config_label", "Config Stringleri")) }
-                    FilterCheck { key: "define_strings"; label: (backend.uiTrigger, backend.getTextWithDefault("translate_define_label", "Define Stringleri")) }
+                    FilterCheck { key: "dialogue"; label: (backend.uiTrigger, backend.getTextWithDefault("translate_dialogue_label", "Dialogues")) }
+                    FilterCheck { key: "menu"; label: (backend.uiTrigger, backend.getTextWithDefault("translate_menu_label", "Menu Options")) }
+                    FilterCheck { key: "buttons"; label: (backend.uiTrigger, backend.getTextWithDefault("translate_buttons_label", "Buttons")) }
+                    FilterCheck { key: "notifications"; label: (backend.uiTrigger, backend.getTextWithDefault("translate_notifications_label", "Notifications")) }
+                    FilterCheck { key: "alt_text"; label: (backend.uiTrigger, backend.getTextWithDefault("translate_alt_text_label", "Alt Texts")) }
+                    FilterCheck { key: "confirmations"; label: (backend.uiTrigger, backend.getTextWithDefault("translate_confirmations_label", "Confirmations")) }
+                    FilterCheck { key: "input_text"; label: (backend.uiTrigger, backend.getTextWithDefault("translate_input_label", "Input Fields")) }
+                    FilterCheck { key: "ui"; label: (backend.uiTrigger, backend.getTextWithDefault("translate_ui_label", "UI Texts")) }
+                    FilterCheck { key: "gui_strings"; label: (backend.uiTrigger, backend.getTextWithDefault("translate_gui_label", "GUI Strings")) }
+                    FilterCheck { key: "style_strings"; label: (backend.uiTrigger, backend.getTextWithDefault("translate_style_label", "Style Strings")) }
+                    FilterCheck { key: "renpy_functions"; label: (backend.uiTrigger, backend.getTextWithDefault("translate_renpy_func_label", "Ren'Py Functions")) }
+                    FilterCheck { key: "config_strings"; label: (backend.uiTrigger, backend.getTextWithDefault("translate_config_label", "Config Strings")) }
+                    FilterCheck { key: "define_strings"; label: (backend.uiTrigger, backend.getTextWithDefault("translate_define_label", "Define Strings")) }
                 }
             }
 
             // ==================== API AYARLARI ====================
             SettingsGroup {
-                title: "🔑 " + (backend.uiTrigger, backend.getTextWithDefault("api_keys", "API Anahtarları"))
+                title: "🔑 " + (backend.uiTrigger, backend.getTextWithDefault("api_keys", "API Keys"))
                 
                 ColumnLayout {
                     Layout.fillWidth: true
                     spacing: 20
                     
                     // Google API Key (Opsiyonel)
-                    ApiField { 
-                        label: (backend.uiTrigger, backend.getTextWithDefault("google_api_title", "Google API Key (Opsiyonel)")); 
+                    ApiField {
+                        label: (backend.uiTrigger, backend.getTextWithDefault("google_api_title", "Google API Key (Optional)")); 
                         text: settingsBackend.getGoogleApiKey ? settingsBackend.getGoogleApiKey() : ""; 
                         onChanged: (newValue) => { if(settingsBackend.setGoogleApiKey) settingsBackend.setGoogleApiKey(newValue) }
                     }
@@ -147,13 +147,13 @@ Rectangle {
                     
                     RowLayout {
                         spacing: 12
-                        Label { text: (backend.uiTrigger, backend.getTextWithDefault("deepl_formality_label", "DeepL Hitap:")); color: root.secondaryTextColor; Layout.preferredWidth: 150 }
+                        Label { text: (backend.uiTrigger, backend.getTextWithDefault("deepl_formality_label", "DeepL Formality:")); color: root.secondaryTextColor; Layout.preferredWidth: 150 }
                         ComboBox {
                             Layout.fillWidth: true
                             model: [
-                                {code: "default", name: (backend.uiTrigger, backend.getTextWithDefault("formality_default", "Varsayılan"))},
-                                {code: "formal", name: (backend.uiTrigger, backend.getTextWithDefault("formality_formal", "Resmi"))},
-                                {code: "informal", name: (backend.uiTrigger, backend.getTextWithDefault("formality_informal", "Samimi"))}
+                                {code: "default", name: (backend.uiTrigger, backend.getTextWithDefault("formality_default", "Default"))},
+                                {code: "formal", name: (backend.uiTrigger, backend.getTextWithDefault("formality_formal", "Formal"))},
+                                {code: "informal", name: (backend.uiTrigger, backend.getTextWithDefault("formality_informal", "Informal"))}
                             ]
                             textRole: "name"
                             valueRole: "code"
@@ -167,7 +167,7 @@ Rectangle {
                     }
 
                     // OpenAI / OpenRouter Section
-                    Label { text: "🤖 OpenAI / OpenRouter / DeepSeek"; font.bold: true; color: root.mainTextColor; Layout.topMargin: 10 }
+                    Label { text: (backend.uiTrigger, backend.getTextWithDefault("openai_section_title", "🤖 OpenAI / OpenRouter / DeepSeek")); font.bold: true; color: root.mainTextColor; Layout.topMargin: 10 }
                     
                     // Preset ComboBox
                     RowLayout {
@@ -189,7 +189,7 @@ Rectangle {
                     
                     ApiField { 
                         id: openaiApiKeyField
-                        label: "API Key"; 
+                        label: (backend.uiTrigger, backend.getTextWithDefault("api_key_label", "API Key")); 
                         text: settingsBackend.getOpenAIApiKey(); 
                         onChanged: (newValue) => settingsBackend.setOpenAIApiKey(newValue) 
                     }
@@ -199,7 +199,7 @@ Rectangle {
                             id: openaiModelField
                             Layout.fillWidth: true
                             Layout.preferredHeight: 40
-                            placeholderText: text.length > 0 ? "" : (backend.uiTrigger, backend.getTextWithDefault("placeholder_openai_model", "Model (örn: gpt-3.5-turbo)"))
+                            placeholderText: text.length > 0 ? "" : (backend.uiTrigger, backend.getTextWithDefault("placeholder_openai_model", "Model (e.g. gpt-3.5-turbo)"))
                             text: settingsBackend.getOpenAIModel()
                             onEditingFinished: settingsBackend.setOpenAIModel(text)
                             leftPadding: 12
@@ -213,7 +213,7 @@ Rectangle {
                             id: openaiBaseUrlField
                             Layout.fillWidth: true
                             Layout.preferredHeight: 40
-                            placeholderText: text.length > 0 ? "" : (backend.uiTrigger, backend.getTextWithDefault("placeholder_openai_base_url", "Base URL (Opsiyonel)"))
+                            placeholderText: text.length > 0 ? "" : (backend.uiTrigger, backend.getTextWithDefault("placeholder_openai_base_url", "Base URL (Optional)"))
                             text: settingsBackend.getOpenAIBaseUrl()
                             onEditingFinished: settingsBackend.setOpenAIBaseUrl(text)
                             leftPadding: 12
@@ -226,9 +226,9 @@ Rectangle {
                     }
 
                     // Gemini Section
-                    Label { text: "✨ Google Gemini"; font.bold: true; color: root.mainTextColor; Layout.topMargin: 10 }
+                    Label { text: (backend.uiTrigger, backend.getTextWithDefault("gemini_section_title", "✨ Google Gemini")); font.bold: true; color: root.mainTextColor; Layout.topMargin: 10 }
                     ApiField { 
-                        label: "Gemini API Key"; 
+                        label: (backend.uiTrigger, backend.getTextWithDefault("gemini_api_key_label", "Gemini API Key")); 
                         text: settingsBackend.getGeminiApiKey(); 
                         onChanged: (newValue) => settingsBackend.setGeminiApiKey(newValue) 
                     }
@@ -237,7 +237,7 @@ Rectangle {
                         TextField {
                             Layout.fillWidth: true
                             Layout.preferredHeight: 40
-                            placeholderText: text.length > 0 ? "" : (backend.uiTrigger, backend.getTextWithDefault("placeholder_gemini_model", "Model (örn: gemini-2.5-flash)"))
+                            placeholderText: text.length > 0 ? "" : (backend.uiTrigger, backend.getTextWithDefault("placeholder_gemini_model", "Model (e.g. gemini-2.1-flash)"))
                             text: settingsBackend.getGeminiModel()
                             onEditingFinished: settingsBackend.setGeminiModel(text)
                             leftPadding: 12
@@ -250,10 +250,10 @@ Rectangle {
                         ComboBox {
                             Layout.preferredWidth: 200
                             model: [
-                                {code: "BLOCK_NONE", name: (backend.uiTrigger, backend.getTextWithDefault("gemini_safety_none", "Kapalı"))},
-                                {code: "BLOCK_ONLY_HIGH", name: (backend.uiTrigger, backend.getTextWithDefault("gemini_safety_high", "Yüksek"))},
-                                {code: "BLOCK_MEDIUM_AND_ABOVE", name: (backend.uiTrigger, backend.getTextWithDefault("gemini_safety_medium", "Orta"))},
-                                {code: "BLOCK_LOW_AND_ABOVE", name: (backend.uiTrigger, backend.getTextWithDefault("gemini_safety_low", "Düşük"))}
+                                {code: "BLOCK_NONE", name: (backend.uiTrigger, backend.getTextWithDefault("gemini_safety_none", "Off"))},
+                                {code: "BLOCK_ONLY_HIGH", name: (backend.uiTrigger, backend.getTextWithDefault("gemini_safety_high", "High"))},
+                                {code: "BLOCK_MEDIUM_AND_ABOVE", name: (backend.uiTrigger, backend.getTextWithDefault("gemini_safety_medium", "Medium"))},
+                                {code: "BLOCK_LOW_AND_ABOVE", name: (backend.uiTrigger, backend.getTextWithDefault("gemini_safety_low", "Low"))}
                             ]
                             textRole: "name"
                             valueRole: "code"
@@ -270,24 +270,24 @@ Rectangle {
 
             // ==================== PERFORMANS & TEKNİK ====================
             SettingsGroup {
-                title: "⚙️ " + (backend.uiTrigger, backend.getTextWithDefault("settings_advanced", "Gelişmiş & Performans"))
+                title: "⚙️ " + (backend.uiTrigger, backend.getTextWithDefault("settings_advanced", "Advanced & Performance"))
                 
                 ColumnLayout {
                     Layout.fillWidth: true
                     spacing: 16
                     
                     RowLayout {
-                        SettingsRow { label: (backend.uiTrigger, backend.getTextWithDefault("batch_size_label", "Batch Boyutu:")); Layout.fillWidth: true;
-                            SpinBox { from: 1; to: 1000; value: settingsBackend.getBatchSize(); onValueChanged: settingsBackend.setBatchSize(value); editable: true }
+                        SettingsRow { label: (backend.uiTrigger, backend.getTextWithDefault("batch_size_label", "Batch Size:")); Layout.fillWidth: true;
+                            SpinBox { from: 1; to: 400; value: settingsBackend.getBatchSize(); onValueChanged: settingsBackend.setBatchSize(value); editable: true }
                         }
-                        SettingsRow { label: (backend.uiTrigger, backend.getTextWithDefault("concurrent_threads_label", "Eş Zamanlı Thread:")); Layout.fillWidth: true;
+                        SettingsRow { label: (backend.uiTrigger, backend.getTextWithDefault("concurrent_threads_label", "Concurrent Threads:")); Layout.fillWidth: true;
                             SpinBox { from: 1; to: 64; value: settingsBackend.getConcurrentThreads(); onValueChanged: settingsBackend.setConcurrentThreads(value); editable: true }
                         }
                     }
 
                     RowLayout {
                          CheckBox { 
-                             text: (backend.uiTrigger, backend.getTextWithDefault("use_multi_endpoint_label", "Çoklu Endpoint Kullan"))
+                             text: (backend.uiTrigger, backend.getTextWithDefault("use_multi_endpoint_label", "Use Multi-Endpoint"))
                              checked: settingsBackend.getUseMultiEndpoint() 
                              onCheckedChanged: settingsBackend.setUseMultiEndpoint(checked) 
                          }
@@ -297,26 +297,26 @@ Rectangle {
                              onCheckedChanged: settingsBackend.setEnableLingvaFallback(checked) 
                          }
                          CheckBox { 
-                             text: (backend.uiTrigger, backend.getTextWithDefault("settings_use_html_protection", "HTML Wrap Koruması (Zenpy-Style)"))
+                             text: (backend.uiTrigger, backend.getTextWithDefault("settings_use_html_protection", "HTML Wrap Protection (Zenpy-Style)"))
                              checked: settingsBackend.getUseHtmlProtection() 
                              onCheckedChanged: settingsBackend.setUseHtmlProtection(checked) 
                              ToolTip.visible: hovered
-                             ToolTip.text: "Placeholderları bozmadan korur. Google Translate'in <span class='notranslate'> etiketini kullanır."
+                             ToolTip.text: (backend.uiTrigger, backend.getTextWithDefault("tooltip_html_protection", "Protects placeholders without breaking them. Uses Google Translate's <span class='notranslate'> tag."))
                          }
                     }
 
                     RowLayout {
-                        SettingsRow { label: (backend.uiTrigger, backend.getTextWithDefault("chunk_size_label", "Bağlam (Context) Sınırı:")); Layout.fillWidth: true;
+                        SettingsRow { label: (backend.uiTrigger, backend.getTextWithDefault("chunk_size_label", "Context Limit:")); Layout.fillWidth: true;
                             SpinBox { from: 0; to: 50; value: settingsBackend.getContextLimit(); onValueChanged: settingsBackend.setContextLimit(value); editable: true }
                         }
-                        SettingsRow { label: (backend.uiTrigger, backend.getTextWithDefault("max_chars_label", "Maksimum Karakter:")); Layout.fillWidth: true;
-                             SpinBox { from: 1000; to: 50000; stepSize: 1000; value: settingsBackend.getMaxCharsPerRequest(); onValueChanged: settingsBackend.setMaxCharsPerRequest(value); editable: true }
+                        SettingsRow { label: (backend.uiTrigger, backend.getTextWithDefault("max_chars_label", "Maximum Characters:")); Layout.fillWidth: true;
+                             SpinBox { from: 1000; to: 2500; stepSize: 100; value: settingsBackend.getMaxCharsPerRequest(); onValueChanged: settingsBackend.setMaxCharsPerRequest(value); editable: true }
                         }
                     }
 
 
                     RowLayout {
-                        SettingsRow { label: (backend.uiTrigger, backend.getTextWithDefault("request_delay_label", "İstek Gecikmesi (sn):")); Layout.fillWidth: true;
+                        SettingsRow { label: (backend.uiTrigger, backend.getTextWithDefault("request_delay_label", "Request Delay (sec):")); Layout.fillWidth: true;
                             // Backend expects float, but SpinBox works with Int. 
                             // Using DoubleSpinBox logic: value 10 = 0.1s
                             DoubleSpinBox { 
@@ -326,89 +326,91 @@ Rectangle {
                                 editable: true 
                             }
                         }
-                        SettingsRow { label: (backend.uiTrigger, backend.getTextWithDefault("timeout_label", "Zaman Aşımı (sn):")); Layout.fillWidth: true;
+                        SettingsRow { label: (backend.uiTrigger, backend.getTextWithDefault("timeout_label", "Timeout (sec):")); Layout.fillWidth: true;
                             SpinBox { from: 5; to: 300; value: settingsBackend.getTimeout(); onValueChanged: settingsBackend.setTimeout(value); editable: true }
                         }
                     }
 
                     RowLayout {
-                        SettingsRow { label: (backend.uiTrigger, backend.getTextWithDefault("max_retries_label", "Maksimum Deneme:")); Layout.fillWidth: true;
+                        SettingsRow { label: (backend.uiTrigger, backend.getTextWithDefault("max_retries_label", "Max Retries:")); Layout.fillWidth: true;
                              SpinBox { from: 0; to: 10; value: settingsBackend.getMaxRetries(); onValueChanged: settingsBackend.setMaxRetries(value); editable: true }
                         }
                     }
 
-                    DescriptiveCheck { 
-                        label: (backend.uiTrigger, backend.getTextWithDefault("deep_scan", "Derin Tarama"))
-                        description: (backend.uiTrigger, backend.getTextWithDefault("deep_scan_desc", ""))
-                        checked: settingsBackend.getEnableDeepScan()
-                        onToggled: (isChecked) => settingsBackend.setEnableDeepScan(isChecked)
-                    }
+                    // Deep Scan ve RPYC Reader artık varsayılan olarak açık ve gizlendi
+                    // DescriptiveCheck { 
+                    //     label: (backend.uiTrigger, backend.getTextWithDefault("deep_scan", "Derin Tarama"))
+                    //     description: (backend.uiTrigger, backend.getTextWithDefault("deep_scan_desc", ""))
+                    //     checked: settingsBackend.getEnableDeepScan()
+                    //     onToggled: (isChecked) => settingsBackend.setEnableDeepScan(isChecked)
+                    // }
                     
-                    DescriptiveCheck { 
-                        label: (backend.uiTrigger, backend.getTextWithDefault("enable_rpyc_reader_label", "RPYC Okuyucu"))
-                        description: (backend.uiTrigger, backend.getTextWithDefault("rpyc_reader_desc", ""))
-                        checked: settingsBackend.getEnableRpycReader()
-                        onToggled: (isChecked) => settingsBackend.setEnableRpycReader(isChecked)
-                    }
+                    // DescriptiveCheck { 
+                    //     label: (backend.uiTrigger, backend.getTextWithDefault("enable_rpyc_reader_label", "RPYC Okuyucu"))
+                    //     description: (backend.uiTrigger, backend.getTextWithDefault("rpyc_reader_desc", ""))
+                    //     checked: settingsBackend.getEnableRpycReader()
+                    //     onToggled: (isChecked) => settingsBackend.setEnableRpycReader(isChecked)
+                    // }
 
                     DescriptiveCheck { 
-                        label: (backend.uiTrigger, backend.getTextWithDefault("scan_rpym_files", ".rpym Dosyalarını Tara"))
+                        label: (backend.uiTrigger, backend.getTextWithDefault("scan_rpym_files", "Scan .rpym Files"))
                         description: (backend.uiTrigger, backend.getTextWithDefault("scan_rpym_files_desc", ""))
                         checked: settingsBackend.getScanRpymFiles()
                         onToggled: (isChecked) => settingsBackend.setScanRpymFiles(isChecked)
                     }
 
                     DescriptiveCheck { 
-                        label: (backend.uiTrigger, backend.getTextWithDefault("use_cache_label", "Çeviri Belleğini Kullan"))
+                        label: (backend.uiTrigger, backend.getTextWithDefault("use_cache_label", "Use Translation Memory"))
                         description: (backend.uiTrigger, backend.getTextWithDefault("use_cache_desc", ""))
                         checked: settingsBackend.getUseCache()
                         onToggled: (isChecked) => settingsBackend.setUseCache(isChecked)
                     }
 
                     DescriptiveCheck { 
-                        label: (backend.uiTrigger, backend.getTextWithDefault("use_global_cache", "Global Çeviri Belleği (Taşınabilir)"))
+                        label: (backend.uiTrigger, backend.getTextWithDefault("use_global_cache", "Global TM (Portable)"))
                         description: (backend.uiTrigger, backend.getTextWithDefault("use_global_cache_desc", ""))
                         checked: settingsBackend.getUseGlobalCache()
                         onToggled: (isChecked) => settingsBackend.setUseGlobalCache(isChecked)
                     }
 
                     DescriptiveCheck { 
-                        label: (backend.uiTrigger, backend.getTextWithDefault("exclude_system_folders", "Sistem Klasörlerini Dışla"))
+                        label: (backend.uiTrigger, backend.getTextWithDefault("exclude_system_folders", "Exclude System Folders"))
                         description: (backend.uiTrigger, backend.getTextWithDefault("exclude_system_folders_desc", ""))
                         checked: settingsBackend.getExcludeSystemFolders()
                         onToggled: (isChecked) => settingsBackend.setExcludeSystemFolders(isChecked)
                     }
                     
                     DescriptiveCheck { 
-                        label: (backend.uiTrigger, backend.getTextWithDefault("aggressive_retry", "Agresif Çeviri"))
+                        label: (backend.uiTrigger, backend.getTextWithDefault("aggressive_retry", "Aggressive Translation"))
                         description: (backend.uiTrigger, backend.getTextWithDefault("aggressive_retry_desc", ""))
                         checked: settingsBackend.getAggressiveRetry()
                         onToggled: (isChecked) => settingsBackend.setAggressiveRetry(isChecked)
                     }
 
-                    DescriptiveCheck { 
-                        label: (backend.uiTrigger, backend.getTextWithDefault("force_runtime", "Zorla Çeviri (Force Translate)"))
-                        description: (backend.uiTrigger, backend.getTextWithDefault("force_runtime_desc", ""))
-                        checked: settingsBackend.getForceRuntime()
-                        onToggled: (isChecked) => settingsBackend.setForceRuntime(isChecked)
-                    }
+                    // Runtime Hook artık varsayılan açık ve gizli (Kritik özellik)
+                    // DescriptiveCheck { 
+                    //    label: (backend.uiTrigger, backend.getTextWithDefault("force_runtime", "Zorla Çeviri (Force Translate)"))
+                    //    description: (backend.uiTrigger, backend.getTextWithDefault("force_runtime_desc", ""))
+                    //    checked: settingsBackend.getForceRuntime()
+                    //    onToggled: (isChecked) => settingsBackend.setForceRuntime(isChecked)
+                    // }
 
                     DescriptiveCheck { 
-                        label: (backend.uiTrigger, backend.getTextWithDefault("show_debug_engines", "Geliştirici Araçlarını Göster"))
+                        label: (backend.uiTrigger, backend.getTextWithDefault("show_debug_engines", "Show Debug Engines"))
                         description: (backend.uiTrigger, backend.getTextWithDefault("show_debug_engines_desc", ""))
                         checked: settingsBackend.getShowDebugEngines()
                         onToggled: (isChecked) => settingsBackend.setShowDebugEngines(isChecked)
                     }
 
                     DescriptiveCheck {
-                        label: (backend.uiTrigger, backend.getTextWithDefault("auto_hook_gen", "Çeviri Sonrası Otomatik Oluştur"))
+                        label: (backend.uiTrigger, backend.getTextWithDefault("auto_hook_gen", "Auto-Generate Hook After Translation"))
                         description: (backend.uiTrigger, backend.getTextWithDefault("auto_hook_gen_desc", ""))
                         checked: settingsBackend.getAutoHook()
                         onToggled: (isChecked) => settingsBackend.setAutoHook(isChecked)
                     }
 
                     DescriptiveCheck { 
-                        label: (backend.uiTrigger, backend.getTextWithDefault("auto_unren", "Otomatik RPA Çıkarımı"))
+                        label: (backend.uiTrigger, backend.getTextWithDefault("auto_unren", "Automatic RPA Extraction"))
                         description: (backend.uiTrigger, backend.getTextWithDefault("auto_unren_desc", ""))
                         checked: settingsBackend.getAutoUnren()
                         onToggled: (isChecked) => settingsBackend.setAutoUnren(isChecked)
@@ -418,18 +420,18 @@ Rectangle {
 
             // ==================== PROXY AYARLARI ====================
             SettingsGroup {
-                title: "🌐 " + (backend.uiTrigger, backend.getTextWithDefault("group_proxy", "Proxy Ayarları"))
+                title: "🌐 " + (backend.uiTrigger, backend.getTextWithDefault("group_proxy", "Proxy Settings"))
                 ColumnLayout {
                     Layout.fillWidth: true; spacing: 12
                     DescriptiveCheck { 
-                        label: (backend.uiTrigger, backend.getTextWithDefault("proxy_enabled", "Proxy Kullan"))
+                        label: (backend.uiTrigger, backend.getTextWithDefault("proxy_enabled", "Use Proxy"))
                         description: (backend.uiTrigger, backend.getTextWithDefault("enable_proxy_tooltip", ""))
                         checked: settingsBackend.getProxyEnabled()
                         onToggled: (isChecked) => settingsBackend.setProxyEnabled(isChecked)
                     }
                     TextField {
                         Layout.fillWidth: true
-                        placeholderText: "Örn: http://user:pass@host:port"
+                        placeholderText: (backend.uiTrigger, backend.getTextWithDefault("proxy_url_placeholder", "e.g. http://user:pass@host:port"))
                         text: settingsBackend.getProxyUrl()
                         onEditingFinished: settingsBackend.setProxyUrl(text)
                         leftPadding: 12
@@ -445,7 +447,7 @@ Rectangle {
 
                     // Manual Proxies
                     Label { 
-                        text: (backend.uiTrigger, backend.getTextWithDefault("manual_proxies", "Manuel Proxyler (Her satıra bir tane):")) 
+                        text: (backend.uiTrigger, backend.getTextWithDefault("manual_proxies", "Manual Proxies (one per line):")) 
                         color: "#ccc"
                         Layout.fillWidth: true
                         wrapMode: Text.Wrap
@@ -489,10 +491,10 @@ Rectangle {
                     RowLayout {
                         Button {
                             id: proxyRefreshBtn
-                            text: (backend.uiTrigger, backend.getTextWithDefault("refresh_proxies", "Proxy Listesini Yenile"))
+                            text: (backend.uiTrigger, backend.getTextWithDefault("refresh_proxies", "Refresh Proxy List"))
                             onClicked: {
                                 enabled = false
-                                proxyStatusLabel.text = "Yenileniyor..."
+                                proxyStatusLabel.text = (backend.uiTrigger, backend.getTextWithDefault("log_proxy_refreshing", "Refreshing..."))
                                 proxyStatusLabel.color = "#f39c12" // orange
                                 settingsBackend.refreshProxies()
                             }
@@ -519,7 +521,7 @@ Rectangle {
             // ==================== YEREL LLM ====================
             // ... (Already mostly there, but adding some layout polish)
             SettingsGroup {
-                title: "🖥️ " + (backend.uiTrigger, backend.getTextWithDefault("settings_local_llm_title", "Yerel LLM Ayarları"))
+                title: "🖥️ " + (backend.uiTrigger, backend.getTextWithDefault("settings_local_llm_title", "Local LLM Settings"))
                 ColumnLayout {
                     Layout.fillWidth: true; spacing: 15
                     RowLayout {
@@ -542,7 +544,7 @@ Rectangle {
                         Layout.preferredHeight: 40
                         text: settingsBackend.getLocalLLMUrl(); 
                         onEditingFinished: settingsBackend.setLocalLLMUrl(text); 
-                        placeholderText: text.length > 0 ? "" : "Sunucu URL"
+                        placeholderText: text.length > 0 ? "" : (backend.uiTrigger, backend.getTextWithDefault("local_llm_url_placeholder", "Server URL"))
                         leftPadding: 12; rightPadding: 12; color: root.mainTextColor
                         verticalAlignment: TextInput.AlignVCenter
                         background: Rectangle { radius: 8; color: root.inputBackground; border.color: root.borderColor }
@@ -554,7 +556,7 @@ Rectangle {
                         Layout.preferredHeight: 40
                         text: settingsBackend.getLocalLLMModel(); 
                         onEditingFinished: settingsBackend.setLocalLLMModel(text); 
-                        placeholderText: text.length > 0 ? "" : "Model Adı"
+                        placeholderText: text.length > 0 ? "" : (backend.uiTrigger, backend.getTextWithDefault("local_llm_model_placeholder", "Model Name"))
                         leftPadding: 12; rightPadding: 12; color: root.mainTextColor
                         verticalAlignment: TextInput.AlignVCenter
                         background: Rectangle { radius: 8; color: root.inputBackground; border.color: root.borderColor }
@@ -562,13 +564,13 @@ Rectangle {
                     }
                     
                     RowLayout {
-                        SettingsRow { label: (backend.uiTrigger, backend.getTextWithDefault("local_llm_timeout_label", "Zaman Aşımı (sn):")); Layout.fillWidth: true;
+                        SettingsRow { label: (backend.uiTrigger, backend.getTextWithDefault("local_llm_timeout_label", "Timeout (sec):")); Layout.fillWidth: true;
                             SpinBox { from: 10; to: 600; value: settingsBackend.getLocalLLMTimeout(); onValueChanged: settingsBackend.setLocalLLMTimeout(value); editable: true }
                         }
                     }
 
                     Button {
-                        text: "🔌 " + (backend.uiTrigger, backend.getTextWithDefault("test_local_llm_connection", "Bağlantıyı Test Et"))
+                        text: "🔌 " + (backend.uiTrigger, backend.getTextWithDefault("test_local_llm_connection", "Test Connection"))
                         Layout.fillWidth: true; highlighted: true
                         onClicked: testResultLabel.text = settingsBackend.testLocalLLMConnection()
                     }
@@ -578,7 +580,7 @@ Rectangle {
 
             // ==================== AI MODEL PARAMETRELERİ ====================
             SettingsGroup {
-                title: "🎛️ AI " + (backend.uiTrigger, backend.getTextWithDefault("settings_ai_model_params", "Model Parametreleri"))
+                title: "🎛️ AI " + (backend.uiTrigger, backend.getTextWithDefault("settings_ai_model_params", "Model Parameters"))
                 
                 ColumnLayout {
                     Layout.fillWidth: true
@@ -596,9 +598,9 @@ Rectangle {
                             id: warningCol
                             anchors.left: parent.left; anchors.right: parent.right; anchors.top: parent.top; anchors.margins: 8
                             spacing: 4
-                            Label { text: (backend.uiTrigger, backend.getTextWithDefault("ai_hallucination_warning", "⚠️ DİKKAT: Küçük modeller halüsinasyon gösterebilir.")); color: "#e74c3c"; font.pixelSize: 12; wrapMode: Text.Wrap }
-                            Label { text: (backend.uiTrigger, backend.getTextWithDefault("ai_vram_warning", "⚠️ DİKKAT: Yerel LLM için 4GB+ VRAM önerilir.")); color: "#e74c3c"; font.pixelSize: 12; wrapMode: Text.Wrap }
-                            Label { text: (backend.uiTrigger, backend.getTextWithDefault("ai_source_lang_warning", "💡 İPUCU: Kaynak dili belirtmek çeviri kalitesini artırır.")); color: "#3498db"; font.pixelSize: 12; wrapMode: Text.Wrap }
+                            Label { text: (backend.uiTrigger, backend.getTextWithDefault("ai_hallucination_warning", "⚠️ WARNING: Small models may hallucinate.")); color: "#e74c3c"; font.pixelSize: 12; wrapMode: Text.Wrap }
+                            Label { text: (backend.uiTrigger, backend.getTextWithDefault("ai_vram_warning", "⚠️ WARNING: 4GB+ VRAM recommended for Local LLM.")); color: "#e74c3c"; font.pixelSize: 12; wrapMode: Text.Wrap }
+                            Label { text: (backend.uiTrigger, backend.getTextWithDefault("ai_source_lang_warning", "💡 TIP: Specifying source language improves quality.")); color: "#3498db"; font.pixelSize: 12; wrapMode: Text.Wrap }
                         }
                     }
                     
@@ -606,7 +608,7 @@ Rectangle {
                     ColumnLayout {
                         Layout.fillWidth: true
                         RowLayout {
-                             Label { text: (backend.uiTrigger, backend.getTextWithDefault("ai_creativity_label", "Yaratıcılık (Temperature):")); color: "#ccc" }
+                             Label { text: (backend.uiTrigger, backend.getTextWithDefault("ai_creativity_label", "Creativity (Temperature):")); color: "#ccc" }
                              Label { text: tempSlider.value.toFixed(1); color: Material.accent; font.bold: true }
                         }
                         Slider {
@@ -624,14 +626,14 @@ Rectangle {
                         SettingsRow { label: (backend.uiTrigger, backend.getTextWithDefault("ai_tokens_short", "Max Tokens:")); Layout.fillWidth: true;
                             SpinBox { from: 256; to: 128000; stepSize: 256; value: settingsBackend.getAIMaxTokens(); onValueChanged: settingsBackend.setAIMaxTokens(value); editable: true }
                         }
-                        SettingsRow { label: (backend.uiTrigger, backend.getTextWithDefault("local_llm_timeout_label", "Zaman Aşımı (sn):")); Layout.fillWidth: true;
+                        SettingsRow { label: (backend.uiTrigger, backend.getTextWithDefault("local_llm_timeout_label", "Timeout (sec):")); Layout.fillWidth: true;
                             SpinBox { from: 10; to: 300; value: settingsBackend.getAITimeout(); onValueChanged: settingsBackend.setAITimeout(value); editable: true }
                         }
                     }
 
                     // AI Batch & Concurrency (New!)
                     RowLayout {
-                        SettingsRow { label: (backend.uiTrigger, backend.getTextWithDefault("ai_batch_important_label", "AI Batch Boyutu:")); Layout.fillWidth: true;
+                        SettingsRow { label: (backend.uiTrigger, backend.getTextWithDefault("ai_batch_important_label", "AI Batch Size:")); Layout.fillWidth: true;
                             SpinBox { 
                                 from: 1; to: 100; 
                                 value: settingsBackend.getAIBatchSize(); 
@@ -639,13 +641,13 @@ Rectangle {
                                 editable: true 
                             }
                         }
-                        SettingsRow { label: (backend.uiTrigger, backend.getTextWithDefault("ai_parallel_label", "AI Paralel İstek:")); Layout.fillWidth: true;
+                        SettingsRow { label: (backend.uiTrigger, backend.getTextWithDefault("ai_parallel_label", "AI Parallel Requests:")); Layout.fillWidth: true;
                             SpinBox { from: 1; to: 10; value: settingsBackend.getAIConcurrency(); onValueChanged: settingsBackend.setAIConcurrency(value); editable: true }
                         }
                     }
 
                     RowLayout {
-                         SettingsRow { label: (backend.uiTrigger, backend.getTextWithDefault("ai_request_delay_label_sec", "AI İstek Gecikmesi (sn):")); Layout.fillWidth: true;
+                         SettingsRow { label: (backend.uiTrigger, backend.getTextWithDefault("ai_request_delay_label_sec", "AI Request Delay (sec):")); Layout.fillWidth: true;
                             DoubleSpinBox { 
                                 from: 0; to: 2000; stepSize: 10 
                                 value: settingsBackend.getAIRequestDelay() * 100 
@@ -660,7 +662,7 @@ Rectangle {
                         Layout.fillWidth: true
                         spacing: 8
                         Label { 
-                            text: (backend.uiTrigger, backend.getTextWithDefault("settings_ai_prompt_title", "Özel Sistem Promptu (Opsiyonel):"))
+                            text: (backend.uiTrigger, backend.getTextWithDefault("settings_ai_prompt_title", "Custom System Prompt (Optional):"))
                             color: "#ccc" 
                             font.bold: true
                         }
@@ -679,7 +681,7 @@ Rectangle {
                                 TextArea {
                                     text: settingsBackend.getAISystemPrompt()
                                     onEditingFinished: settingsBackend.setAISystemPrompt(text)
-                                    placeholderText: (backend.uiTrigger, backend.getTextWithDefault("settings_ai_prompt_desc", "AI için varsayılan talimatları geçersiz kıl..."))
+                                    placeholderText: (backend.uiTrigger, backend.getTextWithDefault("settings_ai_prompt_desc", "Override default instructions for AI..."))
                                     color: root.mainTextColor
                                     font.pixelSize: 13
                                     wrapMode: TextEdit.Wrap
@@ -699,7 +701,7 @@ Rectangle {
 
             // Reset Button
             Button {
-                text: (backend.uiTrigger, backend.getTextWithDefault("restore_defaults_full", "♻️ Tüm Ayarları Varsayılana Döndür"))
+                text: (backend.uiTrigger, backend.getTextWithDefault("restore_defaults_full", "♻️ Restore All Settings to Default"))
                 Layout.alignment: Qt.AlignRight
                 flat: true; Material.foreground: Material.Red
                 onClicked: {

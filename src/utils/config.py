@@ -115,6 +115,7 @@ class TranslationSettings:
     enable_proxy: bool = False  # Disabled by default
     max_retries: int = 3
     timeout: int = 30
+    enable_runtime_hook: bool = True
     # Multi-endpoint Google Translator settings (v2.1.0)
     use_multi_endpoint: bool = True  # Birden fazla Google mirror kullan
     enable_lingva_fallback: bool = True  # Lingva fallback (ücretsiz, API key gerektirmez)
@@ -126,18 +127,18 @@ class TranslationSettings:
     # Type-based translation filters
     translate_dialogue: bool = True
     translate_menu: bool = True
-    translate_ui: bool = False
-    translate_config_strings: bool = False
-    translate_gui_strings: bool = False
-    translate_style_strings: bool = False
-    translate_renpy_functions: bool = False
+    translate_ui: bool = True
+    translate_config_strings: bool = True
+    translate_gui_strings: bool = True
+    translate_style_strings: bool = True
+    translate_renpy_functions: bool = True
     # NEW: Extended text type filters (v2.2.0)
     translate_buttons: bool = True  # textbutton metinleri
     translate_alt_text: bool = True  # imagebutton/hotspot/hotbar alt metinleri (erişilebilirlik)
     translate_input_text: bool = True  # input default/prefix/suffix metinleri
     translate_notifications: bool = True  # Notify() ve renpy.notify() metinleri
     translate_confirmations: bool = True  # Confirm() ve renpy.confirm() metinleri
-    translate_define_strings: bool = False  # define statements ile tanımlanan stringler
+    translate_define_strings: bool = True  # define statements ile tanımlanan stringler
     
     # Advanced Syntax Guard Settings
     # DEPRECATED: Fuzzy match özelliği v2.5.1+ sürümlerinde kaldırıldı
@@ -171,10 +172,10 @@ class TranslationSettings:
     ai_request_delay: float = 1.5  # NEW: Delay between AI requests (seconds)
     ai_custom_system_prompt: str = ""  # User-defined system prompt (empty = use built-in)
     # Aggressive Translation Retry: Retry unchanged translations with Lingva/alt endpoints (slower but more thorough)
-    aggressive_retry_translation: bool = False  # Default off for speed
+    aggressive_retry_translation: bool = False  # Default off for speed (user can enable)
     # NEW: Directory & File filtering (v2.5.2)
     exclude_system_folders: bool = True  # Automatically skip renpy/, cache/, saves/, etc.
-    scan_rpym_files: bool = False       # Skip .rpym and .rpymc files by default (usually technical)
+    scan_rpym_files: bool = False  # Changed to False to save API usage/time       # Skip .rpym and .rpymc files by default (usually technical)
     auto_generate_hook: bool = True     # Automatically generate Runtime Hook after translation
     # NEW: Cache Management (v2.5.3)
     use_global_cache: bool = True       # Global cache (keeps translations in program folder for portability)

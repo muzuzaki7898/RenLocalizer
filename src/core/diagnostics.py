@@ -118,7 +118,9 @@ class DiagnosticReport:
     def write(self, path: str):
         p = Path(path)
         try:
-            p.parent.mkdir(parents=True, exist_ok=True)
-            p.write_text(json.dumps(self.to_dict(), ensure_ascii=False, indent=2), encoding='utf-8')
+            from src.utils.encoding import save_text_safely
+            content = json.dumps(self.to_dict(), ensure_ascii=False, indent=2)
+            save_text_safely(p, content, encoding='utf-8')
         except Exception:
             pass
+
