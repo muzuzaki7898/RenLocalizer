@@ -2,6 +2,22 @@
 
 # RenLocalizer Changelog
 
+## [2.6.5] - 2026-02-06
+### 🛡️ Critical Fixes & Stability Overhaul
+- **Ren'Py 7 Compatibility:** Added `_renlocalizer_safe_translate` wrapper to handle `AttributeError` when `renpy.translate_string` is missing in older Ren'Py 7.x versions.
+- **Smart RPA Extraction:** Improved UnRPA logic to trigger extraction even if some `.rpy` files exist. This ensures full data access in games that store main scripts inside `.rpa` while leaving a few helper script files outside.
+- **Parser Stability Fix:** Resolved `AttributeError: get_context_line` by implementing state-tracking and proper method exposure in `RenPyParser`.
+- **Atomic & Smart Cache System:**
+  - **Atomicity:** Implemented temp-file based atomic save strategy for `translation_cache.json` to prevent corruption.
+  - **Smart Lookup:** Handles `auto` source language detection correctly and allows **Cross-Engine reuse** of translations.
+  - **Efficiency:** Reduced disk I/O by saving cache every 500 entries instead of after every batch.
+- **Simplified Language Forcing:** Re-engineered `zzz_[lang]_language.rpy` to use a cleaner direct assignment (`config.default_language` & `_preferences.language`) for reliable first-launch application.
+- **Ren'Py 7 Hook Compatibility:** Fixed a critical crash in the Runtime Hook (`zzz_renlocalizer_runtime.rpy`) on Ren'Py 7.x games where `renpy.translate_string` was not found.
+- **Atomic Config Saving:** Implemented temp-file based atomic save strategy for `config.json`.
+- **Permission Checking:** Added proactive write permission validation for settings and logs at startup.
+- **Config Persistence:** Improved `save_config` with proactive permission checks and detailed logging to prevent silent failures.
+- **Atomic File Operations:** Fixed a potential resource leak in atomic file writing on Windows where temporary files were not correctly cleaned up on failure.
+
 ## [2.6.4] - 2026-02-06
 ### ✨ New Features & Improvements
 - **LLM XML Protection:**
@@ -48,6 +64,8 @@
   - This solves the long-standing "untranslated variables" issue where strings like `Old "%(var)s"` failed to match `New "Bob"`.
 
 - **Build System Hardening:**
+  - Standardized environment initialization for PyInstaller builds.
+  - Improved `run.py` to be more robust across different Windows locales.
   - **Windows Multiprocessing Safety:** Added `freeze_support()` and increased AST recursion limits to 5000 in `run.py` to prevent "Spawn Bomb" crashes on Windows systems.
   - **Dependency Cleanup:** Removed obsolete `PyQt6-Fluent-Widgets` and `darkdetect` libraries from the build specification, significantly reducing the final executable size (Pure QML architecture).
   - **Theme Isolation:** Enforced strict isolation from system themes to guarantee consistent application appearance.

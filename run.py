@@ -18,7 +18,7 @@ from src.utils.logger import setup_logger
 sys.setrecursionlimit(5000)
 
 # Default version fallback
-VERSION = "2.6.4"
+VERSION = "2.6.5"
 
 try:
     from src.version import VERSION as _v

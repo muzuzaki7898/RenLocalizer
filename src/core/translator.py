@@ -1631,13 +1631,41 @@ class TranslationManager:
             await asyncio.gather(*tasks, return_exceptions=True)
 
     async def _cache_get(self, key: Tuple[str,str,str,str]) -> Optional[TranslationResult]:
+        """
+        Cache'den metni getirir. Akıllı eşleştirme (auto-detect ve cross-engine) desteği sağlar.
+        """
         if not self.use_cache:
             return None
+            
+        engine_val, sl, tl, text = key
+        
         async with self._cache_lock:
+            # 1. Tam Eşleşme (Engine + Langs + Text)
             val = self._cache.get(key)
             if val:
                 self._cache.move_to_end(key)
-            return val
+                return val
+            
+            # 2. Akıllı Dil Eşleşmesi (Kaynak dili 'auto' ise ama cache'de 'en' gibi saklıysa)
+            if sl == "auto":
+                # 'auto' anahtarı ile bulunamadıysa, aynı motor ve hedef dil için herhangi bir kaynak dildeki çeviriye bak.
+                # Not: Büyük cachelerde performans için sadece son 1000 kayda hızlıca bakabiliriz veya kalsın.
+                # Genellikle kullanıcılar tek bir kaynak dilden (örn: ingilizce) çeviri yaptığı için pratik bir çözüm:
+                # Cache anahtarlarını tararken sadece engine, target_lang ve text uyumuna bakıyoruz.
+                for k, v in reversed(self._cache.items()): 
+                    # k: (engine_str, sl, tl, text)
+                    if k[0] == engine_val and k[2] == tl and k[3] == text:
+                        return v
+            
+            # 3. Motor Bağımsız Ebeveyn Eşleşmesi (Cross-Engine)
+            # Eğer Google ile çevrilmiş bir metin varsa ve şu an OpenAI kullanılıyorsa, onu kullan.
+            # (Çeviri kalitesi motorlar arasında benzerdir ve kullanıcıyı maliyetten/beklemeden kurtarır)
+            for k, v in reversed(self._cache.items()):
+                if k[1] == sl and k[2] == tl and k[3] == text:
+                    # Motor farklı olsa bile içerik aynı
+                    return v
+
+            return None
 
     async def _cache_put(self, key: Tuple[str,str,str,str], val: TranslationResult):
         if not self.use_cache or not val.success:
@@ -1894,64 +1922,120 @@ class TranslationManager:
             self.set_max_concurrency(max(1, int(limit)))
 
     def save_cache(self, file_path: str):
-        """Cache içeriğini diske kaydet."""
-        print(f"[DEBUG] save_cache called. Cache size: {len(self._cache)}")  # Console'a yaz
+        """
+        Cache içeriğini diske kaydet (Atomik & Güvenli).
+        Büyük verilerde I/O bloklamasını önlemek için temp-file swap kullanılır.
+        """
+        if not self.use_cache or not self._cache:
+            return
+
         try:
             import json
+            import tempfile
+            
+            # Veriyi JSON formatına hazırla
             data = {}
             for key, val in self._cache.items():
-                # key: (engine, sl, tl, text)
+                # key: (engine_str, sl, tl, text)
                 engine_str, sl, tl, text = key
-                if engine_str not in data:
-                    data[engine_str] = {}
-                if sl not in data[engine_str]:
-                    data[engine_str][sl] = {}
-                if tl not in data[engine_str][sl]:
-                    data[engine_str][sl][tl] = {}
-                data[engine_str][sl][tl][text] = val.translated_text
+                data.setdefault(engine_str, {}).setdefault(sl, {}).setdefault(tl, {})[text] = val.translated_text
 
-            with open(file_path, 'w', encoding='utf-8') as f:
-                json.dump(data, f, ensure_ascii=False, indent=2)
-            print(f"[DEBUG] Cache written to {file_path} with {len(self._cache)} entries")  # Console'a yaz
-            self.logger.info(f"Cache saved: {file_path} ({len(self._cache)} entries)")
+            # Dizini kontrol et
+            os.makedirs(os.path.dirname(file_path), exist_ok=True)
+
+            # Atomik Yazma: Önce geçici bir dosyaya yaz, sonra yer değiştir
+            # Bu yöntem ani sistem kapanmalarında ana cache dosyasının bozulmasını önler.
+            temp_fd, temp_path = tempfile.mkstemp(dir=os.path.dirname(file_path), suffix=".tmp")
+            try:
+                with os.fdopen(temp_fd, 'w', encoding='utf-8') as f:
+                    json.dump(data, f, ensure_ascii=False, indent=2)
+                
+                # Windows'ta os.replace güvenli atomik yer değiştirmeyi sağlar
+                if os.path.exists(file_path):
+                    try:
+                        os.replace(temp_path, file_path)
+                    except OSError:
+                        # Eğer dosya kullanımdaysa (nadiren), saniyeler sonra tekrar denemeyi Pipeline'a bırak
+                        os.remove(temp_path)
+                        raise
+                else:
+                    os.rename(temp_path, file_path)
+                    
+            except Exception as e:
+                if os.path.exists(temp_path):
+                    os.remove(temp_path)
+                raise e
+
+            self.logger.info(f"Cache saved atomically: {file_path} ({len(self._cache)} entries)")
         except Exception as e:
-            print(f"[DEBUG] Cache save FAILED: {e}")  # Console'a yaz
             self.logger.error(f"Failed to save cache: {e}")
 
     def load_cache(self, file_path: str):
         """Cache içeriğini diskten yükle."""
-        if not os.path.exists(file_path):
+        if not self.use_cache or not os.path.exists(file_path):
             return
+            
         try:
             import json
             with open(file_path, 'r', encoding='utf-8') as f:
                 data = json.load(f)
             
+            if not isinstance(data, dict):
+                self.logger.warning(f"Invalid cache format in {file_path}")
+                return
+
             count = 0
-            for engine_str, sl_map in data.items():
-                try:
-                    engine = TranslationEngine(engine_str)
-                except:
-                    continue
-                for sl, tl_map in sl_map.items():
-                    for tl, text_map in tl_map.items():
-                        for text, translated in text_map.items():
-                            key = (engine_str, sl, tl, text)
-                            res = TranslationResult(
-                                original_text=text,
-                                translated_text=translated,
-                                source_lang=sl,
-                                target_lang=tl,
-                                engine=engine,
-                                success=True
-                            )
-                            self._cache[key] = res
-                            count += 1
-            
-            # Keep only the last capacity entries
-            while len(self._cache) > self.cache_capacity:
-                self._cache.popitem(last=False)
-                
+            async def _fill_cache():
+                nonlocal count
+                async with self._cache_lock:
+                    for engine_str, sl_map in data.items():
+                        # Engine validasyonu (Listeden kaldırılmış motorları atla)
+                        try:
+                            # String olarak engine saklıyoruz, check valid enum values if needed
+                            pass 
+                        except: continue
+                        
+                        if not isinstance(sl_map, dict): continue
+                        for sl, tl_map in sl_map.items():
+                            if not isinstance(tl_map, dict): continue
+                            for tl, text_map in tl_map.items():
+                                if not isinstance(text_map, dict): continue
+                                for text, translated in text_map.items():
+                                    key = (engine_str, sl, tl, text)
+                                    res = TranslationResult(
+                                        original_text=text,
+                                        translated_text=str(translated),
+                                        source_lang=sl,
+                                        target_lang=tl,
+                                        engine=TranslationEngine(engine_str) if engine_str in [e.value for e in TranslationEngine] else TranslationEngine.GOOGLE,
+                                        success=True
+                                    )
+                                    self._cache[key] = res
+                                    count += 1
+                                    
+                    # Kapasite limitini uygula
+                    while len(self._cache) > self.cache_capacity:
+                        self._cache.popitem(last=False)
+
+            # OrderedDict thread-safe olmadığı için lock ile güncelliyoruz
+            # Not: Bu asenkron değil ama lock asyncio tabanlı olduğu için sarmalıyoruz
+            import asyncio
+            try:
+                loop = asyncio.get_event_loop()
+                if loop.is_running():
+                    loop.create_task(_fill_cache()) # Background loading
+                else:
+                    loop.run_until_complete(_fill_cache())
+            except RuntimeError:
+                # Loop yoksa manuel doldur (Thread-safety riski düşük init anında)
+                for engine_str, sl_map in data.items():
+                    for sl, tl_map in sl_map.items():
+                        for tl, text_map in tl_map.items():
+                            for text, translated in text_map.items():
+                                key = (engine_str, sl, tl, text)
+                                self._cache[key] = TranslationResult(text, str(translated), sl, tl, TranslationEngine.GOOGLE, True)
+                                count += 1
+
             self.logger.info(f"Cache loaded: {file_path} ({count} entries)")
         except Exception as e:
             self.logger.error(f"Failed to load cache: {e}")

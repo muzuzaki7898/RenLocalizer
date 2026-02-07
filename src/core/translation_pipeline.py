@@ -421,7 +421,9 @@ class TranslationPipeline(QObject):
         
         # 2. UnRen/UnRPA (gerekirse) - .rpyc VEYA .rpa dosyası varsa çalıştır
         # Platform-aware: Windows uses UnRen batch, Linux/macOS uses unrpa
-        needs_extraction = not has_rpy and has_rpa and self.auto_unren
+        # DÜZELTME: .rpy olsa bile .rpa varsa (ve auto_unren açıksa) extraction yapılmalı.
+        # Çünkü dışarıdaki .rpy dosyaları eksik/yardımcı olabilir, asıl veri .rpa içindedir.
+        needs_extraction = has_rpa and self.auto_unren
         needs_decompile = not has_rpy and has_rpyc and self.auto_unren
         
         if needs_extraction or needs_decompile:
@@ -832,6 +834,20 @@ init 1501 python:
     if not hasattr(store, '_renlocalizer_old_say_filter'):
         store._renlocalizer_old_say_filter = config.say_menu_text_filter
 
+    def _renlocalizer_safe_translate(s):
+        if not s: return s
+        try:
+            # Try primary Ren'Py API
+            if hasattr(renpy, 'translate_string'):
+                return renpy.translate_string(s)
+            # Try older Ren'Py 7 namespace
+            import renpy.translation
+            if hasattr(renpy.translation, 'translate_string'):
+                return renpy.translation.translate_string(s)
+        except:
+            pass
+        return s
+
     def _renlocalizer_say_filter(s):
         # 1. Run original filter first (if any)
         if store._renlocalizer_old_say_filter:
@@ -841,8 +857,7 @@ init 1501 python:
         
         # 2. Force Translation of the RAW string
         if s:
-            # Check if translation exists for this exact string
-            translated = renpy.translate_string(s)
+            translated = _renlocalizer_safe_translate(s)
             if translated and translated != s:
                 return translated
         return s
@@ -863,7 +878,7 @@ init 1501 python:
         
         # 2. Force Translation (Fallback for UI)
         if s:
-            translated = renpy.translate_string(s)
+            translated = _renlocalizer_safe_translate(s)
             if translated and translated != s:
                 return translated
         return s
@@ -935,16 +950,12 @@ init 1501 python:
                 self.log_message.emit("info", self.config.get_ui_text("pipeline_lang_init_update"))
 
             # Sade ve dinamik baslaticinin icerigi
+            # Sade ve dinamik baslaticinin icerigi (User Request: Simplified forcing)
             content = (
                 f"# Auto-generated language initializer by RenLocalizer\n"
                 f"init 1500 python:\n"
-                f"    # Ensure the game switches to this language upon first install or change\n"
-                f"    # Using late init (1500) to overwrite other scripts safely\n"
-                f"    if getattr(persistent, 'renlocalizer_target_lang', None) != \"{language_code}\":\n"
-                f"        persistent.renlocalizer_target_lang = \"{language_code}\"\n"
-                f"        _preferences.language = \"{language_code}\"\n"
-                f"\n"
-                f"define config.default_language = \"{language_code}\"\n"
+                f"    config.default_language = \"{language_code}\"\n"
+                f"    _preferences.language = \"{language_code}\"\n"
             )
 
             save_text_safely(Path(init_file), content, encoding='utf-8-sig', newline='\n')
@@ -2295,11 +2306,9 @@ init 1501 python:
                         except Exception:
                             pass
                 
-                # Her batch çevirisinden sonra cache kaydet (Daha güvenli checkpoint)
-                self.translation_manager.save_cache(cache_file)
-                
-                # Sadece her 50 metinde bir "Checkpoint saved" logu bas (log kirliliğini önlemek için)
-                if current % 50 == 0:
+                # Cache kaydet (Performans için her 500 metinde bir checkpoint al)
+                if current % 500 == 0:
+                    self.translation_manager.save_cache(cache_file)
                     self.emit_log("debug", f"Checkpoint saved: {cache_file} (Progress: {current}/{total})")
 
                 if stop_quota:

@@ -234,6 +234,9 @@ class RenPyParser:
         # Initialize v2.4.1 patterns
         self._init_new_patterns()
         
+        # State tracking for context-aware filtering
+        self._current_context_line = ""
+        
     # ========== NEW PATTERNS FOR BETTER EXTRACTION (v2.4.1) ==========
     # These are initialized in __init__ but need class-level declarations
     nvl_narrator_re = None
@@ -1082,6 +1085,10 @@ class RenPyParser:
     ) -> Optional[Dict[str, Any]]:
         if not text:
             return None
+        
+        # Set state for context-aware filtering used in following checks
+        self._current_context_line = context_line or ""
+        
         if not self.is_meaningful_text(text):
             return None
         
@@ -1390,6 +1397,10 @@ class RenPyParser:
         return any(ch.isalpha() for ch in text) and len(text.strip()) >= 2
 
 
+
+    def get_context_line(self) -> str:
+        """Returns the current line being processed for context-aware filtering."""
+        return self._current_context_line or ""
 
     def determine_text_type(
         self,

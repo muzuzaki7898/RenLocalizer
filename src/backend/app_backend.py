@@ -862,6 +862,20 @@ init 1501 python:
     if not hasattr(store, '_renlocalizer_old_say_filter'):
         store._renlocalizer_old_say_filter = config.say_menu_text_filter
 
+    def _renlocalizer_safe_translate(s):
+        if not s: return s
+        try:
+            # Try primary Ren'Py API
+            if hasattr(renpy, 'translate_string'):
+                return renpy.translate_string(s)
+            # Try older Ren'Py 7 namespace
+            import renpy.translation
+            if hasattr(renpy.translation, 'translate_string'):
+                return renpy.translation.translate_string(s)
+        except:
+            pass
+        return s
+
     def _renlocalizer_say_filter(s):
         # 1. Run original filter first (if any)
         if store._renlocalizer_old_say_filter:
@@ -871,8 +885,7 @@ init 1501 python:
         
         # 2. Force Translation of the RAW string
         if s:
-            # Check if translation exists for this exact string
-            translated = renpy.translate_string(s)
+            translated = _renlocalizer_safe_translate(s)
             if translated and translated != s:
                 return translated
         return s
@@ -893,7 +906,7 @@ init 1501 python:
         
         # 2. Force Translation (Fallback for UI)
         if s:
-            translated = renpy.translate_string(s)
+            translated = _renlocalizer_safe_translate(s)
             if translated and translated != s:
                 return translated
         return s

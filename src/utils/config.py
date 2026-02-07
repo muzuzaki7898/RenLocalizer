@@ -276,32 +276,44 @@ class ConfigManager:
                     'proxy_settings': asdict(self.proxy_settings)
                 }
                 
+                # Check for write permissions proactively
+                dir_name = self.config_file.parent.absolute()
+                if not os.access(dir_name, os.W_OK):
+                    self.logger.error(f"Cannot save config: Directory {dir_name} is not writable. Settings will not be persisted.")
+                    return False
+
                 # Atomic Write Strategy: Write to temp -> Rename
                 # This prevents file corruption if write fails or power is lost
                 import tempfile
                 import shutil
                 
-                dir_name = self.config_file.parent.absolute()
                 # Create temp file in same directory to ensure atomic move works
-                with tempfile.NamedTemporaryFile('w', dir=str(dir_name), delete=False, encoding='utf-8') as tf:
-                    json.dump(config_data, tf, indent=4, ensure_ascii=False)
-                    temp_name = tf.name
-                
-                # Atomic replace
+                temp_fd, temp_path = tempfile.mkstemp(dir=str(dir_name), text=True)
                 try:
-                    shutil.move(temp_name, str(self.config_file))
+                    with os.fdopen(temp_fd, 'w', encoding='utf-8') as tf:
+                        json.dump(config_data, tf, indent=4, ensure_ascii=False)
+                    
+                    # Atomic replace
+                    shutil.move(temp_path, str(self.config_file))
                     self.logger.info("Configuration saved successfully (Atomic)")
                     return True
-                except Exception as move_err:
-                    self.logger.error(f"Atomic move failed, trying direct write: {move_err}")
-                    # Fallback to unsecured write if rename fails (e.g. permissions)
+                except Exception as e:
+                    if os.path.exists(temp_path):
+                        os.remove(temp_path)
+                    raise e
+                    
+            except PermissionError:
+                self.logger.error(f"Permission denied: Could not save configuration to {self.config_file}")
+                return False
+            except Exception as e:
+                self.logger.error(f"Error saving configuration: {e}")
+                # Fallback to direct write if atomic fails for other reasons
+                try:
                     with open(self.config_file, 'w', encoding='utf-8') as f:
                         json.dump(config_data, f, indent=4, ensure_ascii=False)
                     return True
-                    
-            except Exception as e:
-                self.logger.error(f"Error saving configuration: {e}")
-                return False
+                except Exception:
+                    return False
     
     def _filter_config_data(self, dataclass_type, data):
         """Filter dictionary keys to match dataclass fields to avoid __init__ errors."""
