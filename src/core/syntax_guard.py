@@ -10,7 +10,7 @@ Architecture & Optimizations (v2.6.4+):
 ---------------------------------------
 1. **Hybrid Protection Strategy:**
    - **Wrapper Tags:** Dış katmandaki tagler ({i}...{/i}) tamamen kesilip alınır (Token tasarrufu + Güvenlik).
-   - **Internal Tokens:** İçerideki değişkenler ([var], %s) `XRPYX` formatlı placeholder'lara dönüştürülür.
+   - **Internal Tokens:** İçerideki değişkenler ([var], %s) HTML TOKEN formatlı placeholder'lara dönüştürülür.
    
 2. **Regex Pooling:**
    - Tüm regex'ler modül seviyesinde derlenir (Pre-compiled).
@@ -37,132 +37,203 @@ RENPY_TAG_PATTERN = re.compile(r'\{([^\{\}]+)\}')  # {tag}
 # =============================================================================
 # Base building blocks for protection regexes
 _PAT_PCT = r'%%'                             # Literal % (double percent)
-_PAT_ESC = r'\{\{|\}\}|\[\[|\]\]'            # Escaped braces/brackets: {{, }}, [[, ]]
+# v2.6.6: CRITICAL FIX - Handle escaped brackets properly
+# Strategy: Only match COMPLETE escaped pairs [[...]] or {{...}} to protect content atomically
+# For incomplete cases like [[Phone], let normal [...]  matching handle the content
+# This prevents incomplete [[  from breaking subsequent [variable] patterns
+_PAT_ESC_COMPLETE = r'\[\[.*?\]\]|\{\{.*?\}\}'  # Complete pairs only: [[...]] or {{...}}
+_PAT_ESC_INCOMPLETE = r'\}\}|\]\]'              # Only closing brackets as fallback (not opening)
+_PAT_ESC = f"({_PAT_ESC_COMPLETE}|{_PAT_ESC_INCOMPLETE})"  # Complete pairs first, then singles
 _PAT_TAG = r'\{[^\}]+\}'                     # {tag} (greedy match inside braces)
-# _PAT_VAR: Matches [variable], [obj.attr], and [list[index]] (1-level nesting)
-# Logic: Starts with [, contains either non-brackets OR a paired [...] set, ends with ]
-_PAT_VAR = r'\[+(?:[^\[\]\n]|\[[^\[\]\n]*\])+\]+'
+# _PAT_DISAMBIG: Disambiguation tags like {#comment}, {#game} - MUST be preserved exactly
+_PAT_DISAMBIG = r'\{#[^}]+\}'
+# _PAT_VAR: Matches [variable], [obj.attr], [list[index]], and [var!t] (translatable flag)
+# OPTIMIZED v2.6.6: Prevents catastrophic backtracking on deeply nested brackets
+# Uses non-backtracking approach: Match content inside [...] but avoid complex alternation
+# Old pattern had catastrophic backtracking: r"\[(?:[^\[\]\n'\"]+|'[^']*'|\"[^\"]*\"|\[[^\[\]\n]*\])+\]"
+# New: Simpler but safer - matches [...] with anything inside (more lenient, less prone to hang)
+_PAT_VAR = r"\[[^\[\]]*(?:\[[^\[\]]*\][^\[\]]*)*\]"
 _PAT_FMT = r'%\([^)]+\)[sdfi]|%[sdfi]'       # Python formatting: %(var)s or %s (Support for s, d, f, i)
 _PAT_QMK = r'\?[A-Za-z]\d{3}\?'              # ?A000? style
 _PAT_UNI = r'\u27e6[^\u27e7]+\u27e7'         # ⟦...⟧ style
 
 # Combined pattern string (Order matters: most specific/longest first)
-_PROTECT_PATTERN_STR = f"({_PAT_VAR}|{_PAT_TAG}|{_PAT_FMT}|{_PAT_ESC}|{_PAT_PCT}|{_PAT_QMK}|{_PAT_UNI})"
+# v2.6.6: Complete escaped pairs MUST match before variables to prevent partial breakage
+# Example: [[Phone]] matches as atomic esc pair; bare [[Phone] won't match as [[ so [Phone] matches normally
+_PROTECT_PATTERN_STR = f"({_PAT_DISAMBIG}|{_PAT_ESC}|{_PAT_TAG}|{_PAT_FMT}|{_PAT_PCT}|{_PAT_QMK}|{_PAT_UNI}|{_PAT_VAR})"
 
 # Pre-compiled Regexes (Module Level Optimization)
 PROTECT_RE = re.compile(_PROTECT_PATTERN_STR)
 
 # Specific Regexes for protect_renpy_syntax logic (Tag extraction)
 # These capture the wrapper tags to identify them
+# Ren'Py 8 tag list: https://www.renpy.org/doc/html/text.html#text-tags
 _OPEN_TAG_RE = re.compile(
-    r'^(\{(?:i|b|u|s|plain|fast|nw|w(?:=[\d.]+)?|p(?:=[\d.]+)?|cps(?:=\*?[\d.]+)?|'
+    r'^(\{(?:'
+    # Style tags
+    r'i|b|u|s|plain|'
+    # Control tags
+    r'fast|nw|done|'
+    # Timing tags
+    r'w(?:=[\d.]+)?|p(?:=[\d.]+)?|cps(?:=\*?[\d.]+)?|'
+    # Visual style tags
     r'color(?:=[^}]+)?|size(?:=[^}]+)?|font(?:=[^}]+)?|outlinecolor(?:=[^}]+)?|'
-    r'alpha(?:=[^}]+)?|k(?:=[^}]+)?|rb|rt|space(?:=[^}]+)?|vspace(?:=[^}]+)?|'
-    r'image(?:=[^}]+)?|a(?:=[^}]+)?)\})+'
+    r'alpha(?:=[^}]+)?|k(?:=[^}]+)?|'
+    # Ruby text (furigana) tags
+    r'rb|rt|'
+    # Spacing tags
+    r'space(?:=[^}]+)?|vspace(?:=[^}]+)?|'
+    # Image/Link tags
+    r'image(?:=[^}]+)?|a(?:=[^}]+)?|'
+    # Accessibility tags (Ren'Py 8)
+    r'alt(?:=[^}]+)?|noalt|'
+    # Shader/Transform tags (Ren'Py 8)
+    r'shader(?:=[^}]+)?|transform(?:=[^}]+)?|'
+    # Clear tag (Ren'Py 8)
+    r'clear'
+    r')\})+'
 )
 
 _CLOSE_TAG_RE = re.compile(
-    r'(\{/(?:i|b|u|s|plain|color|size|font|outlinecolor|alpha|a)\})+$'
+    r'(\{/(?:i|b|u|s|plain|color|size|font|outlinecolor|alpha|a|rb|rt|alt|shader|transform)\})+$'
 )
 
 # Aggressive spaced pattern for restoration (handles AI adding spaces)
+# Aggressive spaced pattern for restoration (handles AI adding spaces)
 # Pattern: X R P Y X [CORE with spaces] X R P Y X
-SPACED_RE_TEMPLATE = r'X\s*R\s*P\s*Y\s*X\s*{core_spaced}\s*X\s*R\s*P\s*Y\s*X'
+# OPTIMIZATION: Use \s* between major tokens (for Google's multi-spaces) but \s? inside chars
+SPACED_RE_TEMPLATE = r'X\s?R\s?P\s?Y\s?X\s*{core_spaced}\s*X\s?R\s?P\s?Y\s?X'
 
 def _make_spaced_core_pattern(core: str) -> str:
-    """Convert 'VAR0' to 'V\\s*A\\s*R\\s*0' for flexible matching."""
-    return r'\s*'.join(re.escape(c) for c in core)
+    """Convert 'VAR0' to 'V\\s?A\\s?R\\s?0' for flexible matching."""
+    # OPTIMIZATION: Use \s? instead of \s* for performance
+    return r'\s?'.join(re.escape(c) for c in core)
 
+
+# Unicode PUA Markers - These characters are in the Private Use Area
+# and will generally be ignored/preserved by translation engines like Google Translate
+# DEPRECATED BUT KEPT FOR FALLBACK
+PUA_START = '\uE000'  # Marker for start/end of a placeholder (VAR, TAG, etc)
+ESC_OPEN  = '\uE001'  # Marker for [[
+ESC_CLOSE = '\uE002'  # Marker for ]]
 
 def protect_renpy_syntax(text: str) -> Tuple[str, Dict[str, str]]:
     """
-    Ren'Py sözdizimini AKILLI HİBRİT yöntemle korur.
+    Ren'Py sözdizimini HTML TOKEN + WRAPPER yöntemiyle korur (v2.6.7+).
     
-    AKILLI HİBRİT STRATEJİ (v2.6.3+):
-    1. WRAPPER TAGLER (tüm cümleyi kaplayan) → Çıkarılır, hafızada tutulur
-       - Örnek: "{i}Hello world{/i}" → {i} ve {/i} çıkarılır
-       - Koşul: Açılış başta, kapanış sonda olmalı
-       - Bu tagler güvenle çıkarılabilir çünkü tüm cümleyi kapsıyorlar
-       
-    2. PARTIAL TAGLER (cümle içinde) → Placeholder olarak korunur
-       - Örnek: "Hello {i}beautiful{/i} world" → {i} ve {/i} placeholder olur
-       - Bu tagler konumları önemli olduğu için metinde kalmalı
-       
-    3. DEĞİŞKENLER ([var]) → Placeholder ile korunur (XRPYXVAR0XRPYX)
+    STRATEJİ:
+    1. WRAPPER TAGLER → Çıkarılır ve pair'ler (açılış, kapalış) atomik olarak saklanır.
+    2. TOKENİZASYON → [var], {tag}, [[ vb. yapılar "VAR0", "ESC_OPEN" gibi tokenlara dönüştürülür.
+    3. INNER CLOSING TAGS → Wrapper'ın dışında kapalış tag'ler normal token olarak çalışır,
+       ama wrapper içi kapalış tag'ler skip edilir (confusion'ı önlemek için).
     
-    Bu yaklaşım:
-    - Çeviri kalitesini korur (partial tagler yerinde)
-    - Wrapper tag bozulma riskini %0'a indirir
-    - Token tasarrufu sağlar
-    
-    Args:
-        text (str): Korunacak metin
-        
-    Returns:
-        Tuple[str, Dict[str, str]]: (Korunan metin, placeholder/tag -> orijinal değer sözlüğü)
+    v2.6.7+ FIX: Wrapper pair tracking - closing tag'ler ayrı token olarak sayılmaz.
     """
     placeholders: Dict[str, str] = {}
     result_text = text
     
-    # AŞAMA 1: Wrapper tag'leri tespit et ve çıkar
-    # Wrapper = Açılış tag başta + Kapanış tag sonda (tüm cümleyi kaplıyor)
-    wrapper_opening = []  # Başta bulunan açılış tagleri
-    wrapper_closing = []  # Sonda bulunan kapanış tagleri
+    # AŞAMA 1: Wrapper tag pair'lerini tespit et ve çıkar (START AND END ONLY)
+    wrapper_pairs = []  # List of (open_tag, close_tag) tuples
     
-    # Başta açılış tag'leri var mı?
+    # Extract opening wrapper tags from START of string
+    opening_tags = []
     opening_match = _OPEN_TAG_RE.match(result_text)
     if opening_match:
         wrapper_opening_str = opening_match.group(0)
-        result_text = result_text[len(wrapper_opening_str):]
-        # Tek tek tag'lere ayır
+        result_text = result_text[len(wrapper_opening_str):]  # Remove opening tags from start
         for tag_match in re.finditer(r'\{[^}]+\}', wrapper_opening_str):
-            wrapper_opening.append(tag_match.group(0))
+            opening_tags.append(tag_match.group(0))
     
-    # Sonda kapanış tag'leri var mı?
+    # Extract closing wrapper tags from END of string
+    closing_tags = []
     closing_match = _CLOSE_TAG_RE.search(result_text)
     if closing_match:
         wrapper_closing_str = closing_match.group(0)
-        result_text = result_text[:closing_match.start()]
-        # Tek tek tag'lere ayır
+        result_text = result_text[:closing_match.start()]  # Remove closing tags from end
         for tag_match in re.finditer(r'\{/[^}]+\}', wrapper_closing_str):
-            wrapper_closing.append(tag_match.group(0))
+            closing_tags.append(tag_match.group(0))
+        closing_tags.reverse()  # Match them in correct order
     
-    # Wrapper tag'leri hafızaya kaydet
-    if wrapper_opening:
-        placeholders["__WRAPPER_OPEN__"] = wrapper_opening  # Liste olarak
-    if wrapper_closing:
-        placeholders["__WRAPPER_CLOSE__"] = wrapper_closing  # Liste olarak
+    # FIX v2.6.7+: Create wrapper pairs instead of separate lists
+    # This prevents confusion when inner closing tags are in the content
+    if opening_tags and closing_tags:
+        # Pair each opening tag with its corresponding closing tag
+        for i, open_tag in enumerate(opening_tags):
+            if i < len(closing_tags):
+                close_tag = closing_tags[i]
+                wrapper_pairs.append((open_tag, close_tag))
+                # Store wrapper pairs as __WRAPPER_PAIR_0__, __WRAPPER_PAIR_1__, etc.
+                placeholders[f"__WRAPPER_PAIR_{i}__"] = (open_tag, close_tag)
     
-    # Wrapper çıkarıldıktan sonra baştaki/sondaki boşlukları temizle
+    # Handle whitespace around content
+    if opening_tags and result_text and result_text[0].isspace():
+        result_text = result_text.lstrip()
+        
+    if closing_tags and result_text and result_text[-1].isspace():
+        result_text = result_text.rstrip()
+        
     result_text = result_text.strip()
     
-    # AŞAMA 2: Kalan tüm syntax'ı placeholder'a çevir
-    # Bu aşamada: partial tagler, değişkenler, escaped karakterler, python formatları
-    # (Global PROTECT_RE kullanılıyor)
-    
+    # AŞAMA 2: Syntax Koruması (TOKEN mode, HTML NOT)
     counter = 0
     out_parts: List[str] = []
     last = 0
+    
+    # Inner closing tag pattern for skipping (v2.6.7+ fix)
+    # These are closing tags that are part of wrapper pairs
+    inner_closing_tags = {tag for _, tag in wrapper_pairs}
     
     for m in PROTECT_RE.finditer(result_text):
         start, end = m.start(), m.end()
         out_parts.append(result_text[last:start])
         
         token = m.group(0)
-        if token == '%%':
-            prefix = 'PCT'
+        
+        # SKIP inner closing tags from wrapper pairs (v2.6.7+ fix)
+        # This prevents them from becoming separate TAG tokens
+        if token in inner_closing_tags:
+            out_parts.append(token)  # Keep as-is, don't tokenize
+            last = end
+            continue
+        
+        # Token Tipi Belirleme ve İsimlendirme
+        # v2.6.6: Check for full escaped bracket/brace PAIRS first (now matched atomically)
+        if (token.startswith('[[') and token.endswith(']]')) or (token.startswith('{{') and token.endswith('}}')):
+            # Full escaped pair like [[Phone]] or {{comment}} (v2.6.6 atomic matching)
+            key_content = f"ESC_PAIR{counter}"
+            counter += 1
+        elif token == '[[':
+            # Legacy: Single [[ without closing ]] (shouldn't happen with new pattern)
+            key_content = "ESC_OPEN"
+        elif token == ']]':
+            # Legacy: Single ]] without opening [[ (shouldn't happen with new pattern)
+            key_content = "ESC_CLOSE"
+        elif token == '%%':
+            key_content = f"PCT{counter}"
+            counter += 1
         elif token in ('{{', '}}'):
-            prefix = 'ESC'
+            # Legacy: Individual braces (shouldn't happen with new pattern)
+            key_content = f"ESC{counter}"
+            counter += 1
+        elif token.startswith('{#'):
+            key_content = f"DIS{counter}"
+            counter += 1
         elif token.startswith('{') and token.endswith('}'):
-            prefix = 'TAG'
+            key_content = f"TAG{counter}"
+            counter += 1
+        elif token.startswith('[') and token.endswith(']'):
+            key_content = f"VAR{counter}"
+            counter += 1
         else:
-            prefix = 'VAR'
+            key_content = f"VAR{counter}"
+            counter += 1
             
-        key = f"XRPYX{prefix}{counter}XRPYX"
-        placeholders[key] = token
-        # Placeholder etrafına boşluk ekle (Google'ın ayrı kelime algılaması için)
-        out_parts.append(f" {key} ")
-        counter += 1
+        # Placeholders map'e kaydet (Token -> Orijinal)
+        placeholders[key_content] = token
+        
+        # Metne SADECE token'ı ekle (HTML yok)
+        out_parts.append(key_content)
+            
         last = end
         
     out_parts.append(result_text[last:])
@@ -176,211 +247,228 @@ def protect_renpy_syntax(text: str) -> Tuple[str, Dict[str, str]]:
 
 def restore_renpy_syntax(text: str, placeholders: Dict[str, str]) -> str:
     """
-    Placeholder'ları ve wrapper tag'leri orijinal değerleriyle değiştirir.
+    Tokenları (VAR0, TAG1...) ve eski formatları geri yükler.
     
-    AKILLI HİBRİT RESTORE STRATEJİSİ (v2.6.3+):
-    1. Placeholder'ları geri yükle (XRPYXVAR0XRPYX → [variable])
-    2. Wrapper tag'leri başa/sona ekle (__WRAPPER_OPEN/CLOSE__)
-    
-    Geri Yükleme Aşamaları:
-    1. Tam eşleşme (hızlı) - Çoğu durumda bu yeterli
-    2. Case-insensitive eşleşme (AI büyük/küçük harf değiştirmiş olabilir)
-    3. Boşluklu eşleşme (AI boşluk eklemiş olabilir)
-    4. Wrapper tag'leri geri yerleştir (başa açılış, sona kapanış)
-    
-    Args:
-        text (str): Geri yüklenecek metin
-        placeholders (Dict[str, str]): placeholder/tag -> orijinal değer sözlüğü
-        
-    Returns:
-        str: Orijinal değerleri geri yüklenmiş metin
+    STRATEJİ:
+    1. Tokenları Geri Yükle (VAR0 -> [var])
+    2. HTML Span temizliği (Eğer yanlışlıkla HTML gönderildiyse)
+    3. Eski sistemler (PUA, XRPYX) için fallback desteği
+    4. Wrapper tagleri geri ekle (v2.6.7+ pair-based system)
     """
     if not text or not placeholders:
         return text
     
     # Wrapper tag'leri ve normal placeholder'ları ayır
-    wrapper_open = placeholders.get("__WRAPPER_OPEN__", [])
-    wrapper_close = placeholders.get("__WRAPPER_CLOSE__", [])
+    # v2.6.7+ FIX: Support both new wrapper pair system and old separate lists
+    wrapper_pairs = []
     
-    # Normal placeholder'ları filtrele (wrapper hariç)
+    # Try new wrapper pair system first (v2.6.7+)
+    for key, value in placeholders.items():
+        if key.startswith("__WRAPPER_PAIR_"):
+            if isinstance(value, tuple) and len(value) == 2:
+                wrapper_pairs.append(value)
+    
+    # Fallback to old system for backwards compatibility
+    if not wrapper_pairs:
+        wrapper_open = placeholders.get("__WRAPPER_OPEN__", [])
+        wrapper_close = placeholders.get("__WRAPPER_CLOSE__", [])
+        if wrapper_open and wrapper_close:
+            # Pair them up: first open with first close, etc.
+            for i, open_tag in enumerate(wrapper_open):
+                if i < len(wrapper_close):
+                    wrapper_pairs.append((open_tag, wrapper_close[i]))
+    
+    # Normal placeholder'ları filtrele
     vars_only = {k: v for k, v in placeholders.items() 
                  if not k.startswith("__WRAPPER_") and not k.startswith("__TAG_")}
     
-    # Eski __TAG_ sistemi için de destek (geriye uyumluluk)
+    # Eski __TAG_ sistemi için destek
     old_tags = {k: v for k, v in placeholders.items() if k.startswith("__TAG_")}
         
     result = text
-    remaining_placeholders = []
     
-    # AŞAMA 1: Hızlı tam eşleşme (regex ile boşluk temizleme)
-    # Placeholder etrafındaki fazla boşlukları da temizle
-    for placeholder, original in vars_only.items():
-        # Tuple değerleri atla (eski tag sistemi kalıntısı)
-        if isinstance(original, tuple):
-            continue
-            
-        if placeholder in result:
-            # Placeholder + etrafındaki opsiyonel boşlukları bul ve orijinalle değiştir
-            # Bu, protect aşamasında eklenen boşlukları düzgün temizler
-            # Placeholder'ı sadece kendisiyle değiştir (etrafındaki boşlukları YUTMA)
-            # Daha önce regex r'\s*' + ph + r'\s*' kullanıyorduk, bu da çevirideki boşlukları siliyordu.
-            # Artık sadece placeholder değişimine güveniyoruz. Google'dan dönen çift boşluklar (koruma için eklediğimiz) 
-            # kalabilir ama yapışık metinden (ör: "is[var]") çok daha iyidir.
-            pattern = re.compile(re.escape(placeholder))
-            result = pattern.sub(original, result)
-        else:
-            remaining_placeholders.append((placeholder, original))
-    
-    # Eğer tüm placeholder'lar bulunduysa ve wrapper yoksa, doğrudan dön
-    if not remaining_placeholders and not wrapper_open and not wrapper_close and not old_tags:
-        return result
-    
-    # AŞAMA 2: Kalan placeholder'lar için regex tabanlı arama
-    # (Sadece bozulmuş placeholder'lar için)
-    still_remaining = []
-    for placeholder, original in remaining_placeholders:
-        if placeholder.startswith("XRPYX") and placeholder.endswith("XRPYX"):
-            core = placeholder[5:-5]  # VAR0, TAG1, ESC2, etc.
-            
-            # Case-insensitive basit regex
-            pattern = re.compile(re.escape(placeholder), re.IGNORECASE)
-            result = pattern.sub(original, result)
-            
-            # Eğer hala bulamadıysa boşluklu halini dene
-            if original not in result:
-                core_spaced = _make_spaced_core_pattern(core)
-                spaced_pattern = re.compile(
-                    SPACED_RE_TEMPLATE.format(core_spaced=core_spaced), 
-                    re.IGNORECASE
-                )
-                result = spaced_pattern.sub(original, result)
-                
-            # Hala bulamadıysak kalan listeye ekle
-            if original not in result:
-                still_remaining.append((placeholder, original, core))
-        else:
-            # Fallback: basit case-insensitive
-            pattern = re.compile(re.escape(placeholder), re.IGNORECASE)
-            result = pattern.sub(original, result)
-    
-    # AŞAMA 3: Fuzzy Recovery - Yaygın bozulma kalıpları
-    # Google Translate bazen placeholder'ları bozuyor:
-    # - XRPYCTAG0 (X→C), XRPYXTAG3XRPY (sonunda X eksik), XRPYXXTAG0 (çift X)
-    # - {i}XRPYXTAG1XRPy (orijinal tag kalmış + küçük harf)
-    for placeholder, original, core in still_remaining:
-        # Core örneği: TAG0, VAR1, ESC2
-        core_type = ''.join(c for c in core if c.isalpha())  # TAG, VAR, ESC
-        core_num = ''.join(c for c in core if c.isdigit())   # 0, 1, 2
+    # AŞAMA 0.5: Spaced Token Cleanup (Google Translate corruption fix)
+    # Google Translate sık sık "VAR 0" -> "VAR0" türü space ekliyor
+    # Bunu pre-process'te düzeltmeliyiz
+    if vars_only:
+        # Spaced token pattern: VAR + optional spaces + digits
+        spaced_pattern = re.compile(r'(VAR|TAG|ESC_OPEN|ESC_CLOSE|XRPYX[A-Z]*)\s+(\d+|[A-Z_]*)')
         
-        # Boşluklu core pattern (T A G 0 gibi)
-        spaced_type = r'\s*'.join(core_type)
-        spaced_num = r'\s*'.join(core_num) if core_num else ''
-        spaced_core = spaced_type + r'\s*' + spaced_num if core_num else spaced_type
+        def fix_spaced(match):
+            prefix = match.group(1)
+            suffix = match.group(2)
+            original_token = prefix + suffix
+            if original_token in vars_only:
+                return original_token
+            return match.group(0)
         
-        # Bozuk kalıpları yakala (en spesifikten en genele)
-        fuzzy_patterns = [
-            # XRPYXX (çift X) + herhangi sonlandırma
-            rf'XRPYXX\s*{spaced_core}(?:\s*XRPY[A-Z]?)?',
-            # XRPYX...XRPy (küçük y ile biten)
-            rf'XRPYX\s*{spaced_core}\s*XRPY',
-            # Sadece başlangıç XRPY ve core (sonlandırma eksik)
-            rf'XRPY[A-Z]?\s*{spaced_core}(?:\s*XRPY)?(?![A-Z])',
-            # Son harfi yanlış olanlar (XRPYC, XRPYY vs)
-            rf'XRPY[A-Z]\s*{spaced_core}\s*XRPY[A-Z]?',
-            # Boşluklu tam pattern
-            rf'X\s*R\s*P\s*Y\s*X?\s*{spaced_core}\s*(?:X\s*R\s*P\s*Y\s*X?)?',
-            # XVAR0XRPYX (XRPYX kısaltılmış, XVAR0 olarak başlamış)
-            rf'X\s*{spaced_core}\s*XRPY[A-Z]?',
-        ]
+        result = spaced_pattern.sub(fix_spaced, result)
+
+    # AŞAMA 1: Token Geri Yükleme (VAR0, ESC_OPEN vb.)
+    # Performans için: Önce metinde var mı diye hızlıca bak
+    # Tüm keyleri tek bir regex ile aramak en hızlısıdır
+    if vars_only:
+        # Keyleri uzunluklarına göre sırala
+        sorted_keys = sorted(vars_only.keys(), key=len, reverse=True)
         
-        for fp in fuzzy_patterns:
-            try:
-                fuzzy_re = re.compile(fp, re.IGNORECASE)
-                new_result = fuzzy_re.sub(original, result)
-                if new_result != result:  # Değişiklik olduysa
-                    result = new_result
-                    if original in result:
-                        break  # Bulunduysa diğer pattern'leri deneme
-            except re.error:
-                continue
+        # Regex: Tokenları ara (word boundaries YOK - ESC_OPEN, ESC_CLOSE underscore içerdiği için)
+        # Underscore ve digits word characters olduğu için \b çalışmıyor
+        # Örnek: "ESC_OPENtext" yazılı olduğunda \b sınırı H'den önceki sınırı tanıyor
+        pattern_str = '(' + '|'.join(re.escape(k) for k in sorted_keys) + ')'
+        token_pattern = re.compile(pattern_str)
+        
+        def token_replacer(match):
+            return vars_only.get(match.group(1), match.group(0))
+            
+        result = token_pattern.sub(token_replacer, result)
+
+    # AŞAMA 2: HTML Span İçindeki Tokenları Geri Yükle (Fallback)
+    # Eğer bir şekilde HTML span içinde token geldiyse (<span...>VAR0</span>)
+    # Yukarıdaki adım token'ı değiştirmiş olabilir ama span kalmış olabilir.
+    # Yani <span...> [player] </span> olmuş olabilir.
+    # Cleaner: Remove spanning tags if they wrap restored content?
+    # Better: Just clean spans if explicit tokens were wrapped.
     
-    # AŞAMA 4: Wrapper tag'leri geri yerleştir
-    # Wrapper açılış tagleri başa, kapanış tagleri sona eklenir
-    if wrapper_open:
-        # Açılış taglerini TERS sırayla başa ekle ki orijinal sıra korunsun
-        # Örn: ["{i}", "{color}"] -> Önce {color} eklenir, sonra {i} -> Sonuç: "{i}{color}..."
-        for tag in reversed(wrapper_open):
-            result = tag + result
+    # PUA Fallbacks and cleanups...
+    if PUA_START in result:
+        pua_pattern = re.compile(rf"{PUA_START}\s*(.*?)\s*{PUA_START}")
+        result = pua_pattern.sub(lambda m: vars_only.get(m.group(1).strip(), m.group(0)), result)
+
+    if ESC_OPEN in result.replace("[[", ""): # Check if raw ESC_OPEN string remains
+        result = result.replace(ESC_OPEN, placeholders.get(ESC_OPEN, '[['))
+    if ESC_CLOSE in result.replace("]]", ""):
+        result = result.replace(ESC_CLOSE, placeholders.get(ESC_CLOSE, ']]'))
+        
+    # XRPYX Fallback
+    if "XRPYX" in result:
+             for k, v in vars_only.items():
+                 if "XRPYX" in k and k in result:
+                     result = result.replace(k, v)
+
+    # AŞAMA 4: Wrapper tag pair'lerini geri yerleştir (v2.6.7+ fix)
+    # Now using atomic wrapper pairs to prevent confusion
+    if wrapper_pairs:
+        for open_tag, close_tag in reversed(wrapper_pairs):
+            result = open_tag + result + close_tag
     
-    if wrapper_close:
-        # Kapanış taglerini sırayla sona ekle
-        for tag in wrapper_close:
-            result = result + tag
-    
-    # Eski __TAG_ sistemi için geriye uyumluluk
+    # Eski __TAG_ sistemi uyumluluğu
     if old_tags:
-        # Eski tag'leri pozisyonlarına göre sırala
         sorted_tags = sorted(old_tags.items(), key=lambda x: x[1][1] if isinstance(x[1], tuple) else 0)
-        
         opening_tags = []
         closing_tags = []
-        
         for tag_key, tag_data in sorted_tags:
-            if isinstance(tag_data, tuple):
-                tag_value, _ = tag_data
-            else:
-                tag_value = tag_data
-            
+            tag_value = tag_data[0] if isinstance(tag_data, tuple) else tag_data
             if tag_value.startswith('{/'):
                 closing_tags.append(tag_value)
             elif tag_value.startswith('{') and not tag_value.startswith('{{'):
                 opening_tags.append(tag_value)
-        
         for tag in reversed(opening_tags):
             result = tag + result
-        
         for tag in closing_tags:
             result = result + tag
     
-    # AŞAMA 5: Final Syntax Cleanup (Google "Improvement" Reversal)
-    # Google Translate parantezlerin arasına boşluk koymayı çok sever.
-    # Bu adımlar, Ren'Py syntax'ını bozan bu "güzellikleri" geri alır.
-
-    # 1. Parantez Tamiri: Google boşluk atmaya bayılır -> [ [ S ] ] -> [[S]]
-    # Açılışları birleştir: [ [ -> [[ , [  [ -> [[
+    # AŞAMA 5: Final Temizlik (Google Hallucinations)
     result = re.sub(r'\[\s*\[', '[[', result)
-    # Kapanışları birleştir: ]  ] -> ]]
     result = re.sub(r'\]\s*\]', ']]', result)
-    
-    # 2. Değişken İçi Boşlukları Temizle: [ var ] -> [var]
-    # Sadece tek kelime (variable) veya sayı içerenleri hedefle.
     result = re.sub(r'\[\s+([a-zA-Z0-9_]+)\s+\]', r'[\1]', result)
-    
-    # 3. Dizi/Liste Erişimi Temizliği: [var [ 1 ] ] -> [var[1]]
-    # Önce içteki [ 1 ] -> [1]
     result = re.sub(r'\[\s*(\d+)\s*\]', r'[\1]', result)
     
-    # Şimdi dıştaki boşlukları al: [var [1]] -> [var[1]]
-    # Veya yanyana erişim: list [1] -> list[1] (Daha riskli, dikkatli olmalıyız)
-    # En güvenlisi: sadece iç içe olanları (nested placeholders) düzeltmek.
-    result = re.sub(r'\[\s*([a-zA-Z0-9_]+)\s+(\[\d+\])\s*\]', r'[\1\2]', result)
-    
-    # 4. Genel "Google Hallucination" Temizliği (Atomik Onarım)
-    # Google bazen placeholder'ı parçalar: XRPYX VAR 0 XRPYX -> XRPYXVAR0XRPYX
-    # Hatta bazen: X R P Y X  VAR  0  X R P Y X  yapar.
-    def _fix_shattered_placeholder(m):
-        # Boşlukları temizle ve büyük harfe zorla
-        return re.sub(r'\s+', '', m.group(0)).upper()
+    # Tag Nesting Repair
+    result = _repair_broken_tag_nesting(result)
 
-    # X\s*R\s*P\s*Y\s*X yapısını ve arasındaki VAR/TAG içeriğini yakala (Case-insensitive)
-    shattered_re = re.compile(r'X\s*R\s*P\s*Y\s*X\s*[A-Z0-9\s_]+\s*X\s*R\s*P\s*Y\s*X', re.IGNORECASE)
-    result = shattered_re.sub(_fix_shattered_placeholder, result)
-    
-    # Parantez etrafındaki gereksiz boşlukları (placeholder dışı kalmışsa) temizle
-    result = re.sub(r'\[\s*(\[[A-Z0-9_]+\])', r'\1', result)
-    result = re.sub(r'(\[[A-Z0-9_]+\])\s*\]', r'\1', result)
+    # Decode HTML entities
+    result = result.replace('&lt;', '<').replace('&gt;', '>').replace('&amp;', '&').replace('&quot;', '"').replace('&#39;', "'")
 
     return result
+
+
+def _repair_broken_tag_nesting(text: str) -> str:
+    """
+    Ren'Py taglerinin ({i}, {b}, {color}...) iç içe geçme sırasını onarır.
+    v2.6.6 OPTIMIZATION: Added safety checks to prevent hangs on pathological input.
+    """
+    try:
+        if not text or '{' not in text:
+            return text
+        if '/' not in text: 
+            return text
+        
+        # Safety: Skip if text is too long (prevent pathological cases)
+        # Most realistic game text is < 1000 chars; if longer, skip repair
+        if len(text) > 5000:
+            return text
+
+        # Regex: Matches {{...}} OR {...} using character classes to avoid JSON escape issues
+        tag_re = re.compile(r'([{][{].*?[}][}]|[{][^{}]+[}])')
+        
+        tokens = tag_re.split(text)
+        
+        # Safety: If too many tokens, skip (might be pathological)
+        if len(tokens) > 200:
+            return text
+        
+        stack = []
+        broken_indices = set()
+        
+        nesting_tags = {'b', 'i', 'u', 's', 'plain', 'font', 'color', 'size', 'alpha', 'k', 'rt', 'rb', 'a', 'cps', 'shader', 'transform'}
+        
+        for i, token in enumerate(tokens):
+            # Skip empty tokens or non-tags
+            if not token or not token.startswith('{'):
+                continue
+                
+            if token.startswith('{{'):
+                continue
+                
+            try:
+                # Remove { and } and strip whitespaces
+                content = token[1:-1].strip()
+                if not content: continue
+                
+                is_closing = content.startswith('/')
+                
+                if is_closing:
+                    # Remove / and get tag name
+                    tag_name_part = content[1:].strip()
+                    tag_name = tag_name_part.split()[0] if tag_name_part else ""
+                else:
+                     # Get tag name before = or space
+                    tag_name = content.split('=')[0].split()[0]
+                
+                tag_name = tag_name.lower().strip()
+                
+                if tag_name not in nesting_tags:
+                    continue
+                    
+                if not is_closing:
+                    stack.append((i, tag_name))
+                else:
+                    if not stack:
+                        # ORPHAN CLOSING TAG -> DELETE IT
+                        broken_indices.add(i)
+                    else:
+                        last_idx, last_name = stack[-1]
+                        if last_name == tag_name:
+                            stack.pop()
+                        else:
+                            # MISMATCHED NESTING -> DELETE CLOSING
+                            broken_indices.add(i)
+            except Exception:
+                continue
+                
+        if not broken_indices:
+            return text
+            
+        new_tokens = []
+        for i, token in enumerate(tokens):
+            if i not in broken_indices:
+                new_tokens.append(token)
+            
+        return "".join(new_tokens)
+        
+    except Exception:
+        # Failsafe: Return original text if anything goes wrong
+        return text
 
 
 
@@ -431,12 +519,17 @@ def validate_translation_integrity(text: str, placeholders: Dict[str, str]) -> L
         clean_original = original.replace(" ", "").lower()
         if clean_original not in clean_text:
             missing.append(original)
-                 
+                  
     # Strict bracket check (unbalanced brackets at end)
     stripped = text.strip()
     if stripped.endswith('[') or stripped.endswith('{'):
         missing.append("UNBALANCED_BRACKET_END")
         
+    # Tag Nesting Check (Post-repair validation)
+    # Eğer repair fonksiyonu çalışmasına rağmen hala sorun varsa
+    if clean_text: # Lazy computed check re-use
+        pass # Şimdilik sadece structural check yeterli, derin nesting analizi pahalı olabilir.
+
     return missing
 
 

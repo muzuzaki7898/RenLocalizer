@@ -11,11 +11,10 @@ import time
 import urllib.parse
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple, Callable
 from abc import ABC, abstractmethod
 from collections import OrderedDict, deque, Counter
 import random
-
 
 from .syntax_guard import (
     protect_renpy_syntax,
@@ -26,7 +25,15 @@ from .syntax_guard import (
     RENPY_VAR_PATTERN,
     RENPY_TAG_PATTERN
 )
-    
+
+from src.core.constants import (
+    GOOGLE_ENDPOINTS,
+    LINGVA_INSTANCES,
+    USER_AGENTS,
+    MIRROR_MAX_FAILURES,
+    MIRROR_BAN_TIME
+)
+
 class TranslationEngine(Enum):
     GOOGLE = "google"
     DEEPL = "deepl"
@@ -72,12 +79,7 @@ class BaseTranslator(ABC):
         self._session: Optional[aiohttp.ClientSession] = None
         self._connector: Optional[aiohttp.TCPConnector] = None
         self._session_lock = asyncio.Lock() # Mutex for thread-safe session creation checks
-        self.user_agents = [
-            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-            'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-            'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36', 
-            'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:109.0) Gecko/20100101 Firefox/121.0'
-        ]
+        self.user_agents = USER_AGENTS
 
     def emit_log(self, level: str, message: str):
         """Emits log to both standard logger and UI status callback."""
@@ -204,31 +206,9 @@ class GoogleTranslator(BaseTranslator):
     with Lingva Translate as a free fallback when Google fails.
     """
     
-    # Multiple Google endpoints for parallel requests
-    google_endpoints = [
-        "https://translate.googleapis.com/translate_a/single",
-        "https://translate.google.com/translate_a/single",
-        "https://translate.google.com.tr/translate_a/single",
-        "https://translate.google.co.uk/translate_a/single",
-        "https://translate.google.de/translate_a/single",
-        "https://translate.google.fr/translate_a/single",
-        "https://translate.google.ru/translate_a/single",
-        "https://translate.google.jp/translate_a/single",
-        "https://translate.google.ca/translate_a/single",
-        "https://translate.google.com.au/translate_a/single",
-        "https://translate.google.pl/translate_a/single",
-        "https://translate.google.es/translate_a/single",
-        "https://translate.google.it/translate_a/single",
-        # Gerekirse aşağıdaki satırları silebilirsiniz
-    ]
-    
-    # Lingva instances (free, no API key needed)
-    lingva_instances = [
-        "https://lingva.lunar.icu",         # Often fastest
-        "https://lingva.garudalinux.org",   # Very stable
-        "https://translate.plausibility.cloud", 
-        "https://lingva.ml",                # Official (put last due to traffic/downtime)
-    ]
+    # Use imported constants instead of hardcoded lists
+    google_endpoints = GOOGLE_ENDPOINTS
+    lingva_instances = LINGVA_INSTANCES
     
     # Default values (can be overridden from config)
     multi_q_concurrency = 16  # Paralel endpoint istekleri
@@ -238,8 +218,8 @@ class GoogleTranslator(BaseTranslator):
     enable_lingva_fallback = True  # Lingva fallback aktif
 
     # Mirror Health Check Settings
-    MIRROR_MAX_FAILURES = 5   # Max failures before temp ban
-    MIRROR_BAN_TIME = 300     # Ban duration in seconds (5 min)
+    MIRROR_MAX_FAILURES = MIRROR_MAX_FAILURES   # Max failures before temp ban
+    MIRROR_BAN_TIME = MIRROR_BAN_TIME     # Ban duration in seconds (2 min)
 
     def __init__(self, *args, config_manager=None, **kwargs):
         super().__init__(*args, **kwargs)
@@ -264,10 +244,13 @@ class GoogleTranslator(BaseTranslator):
             self.max_slice_chars = getattr(ts, 'max_chars_per_request', 2000)
             self.max_texts_per_slice = getattr(ts, 'max_batch_size', 200)  # Use general batch size for Google
             self.aggressive_retry = getattr(ts, 'aggressive_retry_translation', False)
-            self.use_html_protection = getattr(ts, 'use_html_protection', False)
+            # HTML Protection: default True (v2.6.7)
+            # Uses <span translate="no"> tags instead of token masking
+            # More reliable against Google Translate corruption than token-based protection
+            self.use_html_protection = getattr(ts, 'use_html_protection', True)
         else:
             self.aggressive_retry = False
-            self.use_html_protection = False
+            self.use_html_protection = True  # Enable by default - HTML mode is more robust
             
         # Keep a baseline to restore when proxy adaptasyonu devre dışı
         self._base_multi_q_concurrency = self.multi_q_concurrency
@@ -351,7 +334,8 @@ class GoogleTranslator(BaseTranslator):
                 'sl':request.source_lang,
                 'tl':request.target_lang,
                 'dt':'t',
-                'q':protected_text
+                'q':protected_text,
+                'format':'html'  # IMPORTANT: Now using HTML tokens by default!
             }
         
         # Try Google endpoints first (parallel race)
@@ -403,7 +387,7 @@ class GoogleTranslator(BaseTranslator):
                 if endpoint in self._endpoint_health:
                     if self._endpoint_health[endpoint]['fails'] >= self.MIRROR_MAX_FAILURES:
                          self._endpoint_health[endpoint]['banned_until'] = time.time() + self.MIRROR_BAN_TIME
-                         self.logger.warning(f"Google Mirror BANNED temporarily (5min): {endpoint}")
+                         self.logger.warning(f"Google Mirror BANNED temporarily (2min): {endpoint}")
                          return None # Stop retrying this endpoint if banned
 
             return None
@@ -588,12 +572,18 @@ class GoogleTranslator(BaseTranslator):
                          lingva_success = False
                          if self.enable_lingva_fallback:
                              try:
+                                 # Lingva may not support HTML format well, force token protection
+                                 if self.use_html_protection:
+                                     lingva_input, lingva_map = protect_renpy_syntax(request.text)
+                                 else:
+                                     lingva_input, lingva_map = protected_text, placeholders
+
                                  lingva_result = await self._translate_via_lingva(
-                                     protected_text, request.source_lang, request.target_lang
+                                     lingva_input, request.source_lang, request.target_lang
                                  )
                                  if lingva_result:
-                                     lingva_final = restore_renpy_syntax(lingva_result, placeholders)
-                                     if not validate_translation_integrity(lingva_final, placeholders):
+                                     lingva_final = restore_renpy_syntax(lingva_result, lingva_map)
+                                     if not validate_translation_integrity(lingva_final, lingva_map):
                                          final_text = lingva_final
                                          retry_success = True
                                          lingva_success = True
@@ -611,11 +601,17 @@ class GoogleTranslator(BaseTranslator):
                     
                     # Try Lingva
                     if self.enable_lingva_fallback:
+                        # Prepare Lingva input correctly
+                        if self.use_html_protection:
+                            lingva_input, lingva_map = protect_renpy_syntax(request.text)
+                        else:
+                            lingva_input, lingva_map = protected_text, placeholders
+
                         lingva_result = await self._translate_via_lingva(
-                            protected_text, request.source_lang, request.target_lang
+                            lingva_input, request.source_lang, request.target_lang
                         )
                         if lingva_result:
-                            lingva_final = restore_renpy_syntax(lingva_result, placeholders)
+                            lingva_final = restore_renpy_syntax(lingva_result, lingva_map)
                             
                             # Validation
                             if not validate_translation_integrity(lingva_final, placeholders):
@@ -650,17 +646,24 @@ class GoogleTranslator(BaseTranslator):
         # All Google endpoints failed, try Lingva fallback (if enabled)
         if self.enable_lingva_fallback:
             self.logger.debug("Google endpoints failed, trying Lingva fallback...")
+
+            # Prepare Lingva input correctly
+            if self.use_html_protection:
+                 lingva_input, lingva_map = protect_renpy_syntax(request.text)
+            else:
+                 lingva_input, lingva_map = protected_text, placeholders
+
             lingva_result = await self._translate_via_lingva(
-                protected_text, request.source_lang, request.target_lang
+                lingva_input, request.source_lang, request.target_lang
             )
             
             if lingva_result:
                 # Ren'Py değişkenlerini geri koy
-                final_text = restore_renpy_syntax(lingva_result, placeholders)
+                final_text = restore_renpy_syntax(lingva_result, lingva_map)
                 
                 # BÜTÜNLÜK KONTROLÜ
                 # validate_translation_integrity returns list of missing vars. If list is not empty, integrity failed.
-                if placeholders and validate_translation_integrity(final_text, placeholders):
+                if lingva_map and validate_translation_integrity(final_text, lingva_map):
                         self.logger.warning(f"Integrity check failed (Lingva): Placeholders missing in translation. Using original text.")
                         final_text = request.text
 
@@ -684,13 +687,18 @@ class GoogleTranslator(BaseTranslator):
                 data2 = resp.json()
                 if data2 and isinstance(data2, list) and data2[0]:
                     text = ''.join(part[0] for part in data2[0] if part and part[0])
-                    # Ren'Py değişkenlerini geri koy
-                    final_text = restore_renpy_syntax(text, placeholders)
                     
-                    # BÜTÜNLÜK KONTROLÜ
-                    if placeholders and validate_translation_integrity(final_text, placeholders):
-                        self.logger.warning(f"Integrity check failed (Fallback): Placeholders missing. Using original text.")
-                        final_text = request.text
+                    if self.use_html_protection:
+                        # Restore using HTML method
+                        final_text = restore_renpy_syntax_html(text)
+                        # HTML mode is safer by default
+                    else:
+                        # Ren'Py değişkenlerini geri koy
+                        final_text = restore_renpy_syntax(text, placeholders)
+                        # BÜTÜNLÜK KONTROLÜ
+                        if placeholders and validate_translation_integrity(final_text, placeholders):
+                             self.logger.warning(f"Integrity check failed (Fallback): Placeholders missing. Using original text.")
+                             final_text = request.text
 
                     return TranslationResult(
                         request.text, final_text, request.source_lang, request.target_lang,
@@ -1063,7 +1071,7 @@ class GoogleTranslator(BaseTranslator):
                             self._endpoint_health[endpoint]['fails'] += 1
                             if self._endpoint_health[endpoint]['fails'] >= self.MIRROR_MAX_FAILURES:
                                 self._endpoint_health[endpoint]['banned_until'] = time.time() + self.MIRROR_BAN_TIME
-                                self.logger.warning(f"Google Mirror BANNED temporarily (5min): {endpoint}")
+                                self.logger.warning(f"Google Mirror BANNED temporarily (2min): {endpoint}")
                         self.logger.debug(f"Batch-sep {endpoint}: HTTP {resp.status}")
                         return None
                     
@@ -1099,7 +1107,7 @@ class GoogleTranslator(BaseTranslator):
                     self._endpoint_health[endpoint]['fails'] += 1
                     if self._endpoint_health[endpoint]['fails'] >= self.MIRROR_MAX_FAILURES:
                         self._endpoint_health[endpoint]['banned_until'] = time.time() + self.MIRROR_BAN_TIME
-                        self.logger.warning(f"Google Mirror BANNED temporarily (5min): {endpoint} ({str(e)[:50]})")
+                        self.logger.warning(f"Google Mirror BANNED temporarily (2min): {endpoint} ({str(e)[:50]})")
                 self.logger.debug(f"Batch-sep failed on {endpoint}: {e}")
                 return None
         
@@ -1336,10 +1344,21 @@ class PseudoTranslator(BaseTranslator):
         
         # Split by placeholders (both Ren'Py and Glossary ones)
         # Pattern matches XRPYX...XRPYX
-        parts = re.split(r'(XRPYX[A-Z0-9]+XRPYX)', protected_text)
+        # Pattern matches XRPYX...XRPYX OR New Tokens (VAR0, TAG1, ESC_OPEN, etc.) inside spans or naked
+        # We need to capture the delimiter to keep it
+        parts = re.split(r'((?:<span[^>]*>)?(?:XRPYX[A-Z0-9]+XRPYX|VAR\d+|TAG\d+|ESC_[A-Z]+|PCT\d+|DIS\d+)(?:</span>)?)', protected_text)
         new_parts = []
         for part in parts:
-            if part.startswith('XRPYX') and part.endswith('XRPYX'):
+            if not part: continue
+            
+            # Check if it's a placeholder (Token or XRPYX)
+            is_placeholder = False
+            if 'XRPYX' in part: is_placeholder = True
+            elif 'VAR' in part or 'TAG' in part or 'ESC_' in part or 'PCT' in part or 'DIS' in part:
+                 # Simple check, robust enough for this context
+                 is_placeholder = True
+
+            if is_placeholder:
                 # It's a placeholder, keep it as is
                 new_parts.append(part)
             else:
@@ -1629,6 +1648,32 @@ class TranslationManager:
                 tasks.append(t.close())
         if tasks:
             await asyncio.gather(*tasks, return_exceptions=True)
+    
+    def close_all_sessions(self):
+        """
+        Synchronous wrapper to close all translator sessions.
+        Called during app shutdown to prevent asyncio cleanup errors.
+        """
+        try:
+            # Try to get existing event loop
+            try:
+                loop = asyncio.get_event_loop()
+                if loop and not loop.is_closed():
+                    loop.run_until_complete(self.close_all())
+                    return
+            except RuntimeError:
+                pass
+            
+            # If no loop exists, create a temporary one
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            try:
+                loop.run_until_complete(self.close_all())
+            finally:
+                loop.close()
+        except Exception as e:
+            # Silent fail - we're shutting down anyway
+            self.logger.debug(f"Session cleanup warning: {e}")
 
     async def _cache_get(self, key: Tuple[str,str,str,str]) -> Optional[TranslationResult]:
         """
@@ -1985,56 +2030,35 @@ class TranslationManager:
                 return
 
             count = 0
-            async def _fill_cache():
-                nonlocal count
-                async with self._cache_lock:
-                    for engine_str, sl_map in data.items():
-                        # Engine validasyonu (Listeden kaldırılmış motorları atla)
-                        try:
-                            # String olarak engine saklıyoruz, check valid enum values if needed
-                            pass 
-                        except: continue
-                        
-                        if not isinstance(sl_map, dict): continue
-                        for sl, tl_map in sl_map.items():
-                            if not isinstance(tl_map, dict): continue
-                            for tl, text_map in tl_map.items():
-                                if not isinstance(text_map, dict): continue
-                                for text, translated in text_map.items():
-                                    key = (engine_str, sl, tl, text)
-                                    res = TranslationResult(
-                                        original_text=text,
-                                        translated_text=str(translated),
-                                        source_lang=sl,
-                                        target_lang=tl,
-                                        engine=TranslationEngine(engine_str) if engine_str in [e.value for e in TranslationEngine] else TranslationEngine.GOOGLE,
-                                        success=True
-                                    )
-                                    self._cache[key] = res
-                                    count += 1
+            # Init aşamasında concurrency olmadığı için lock gerekmez.
+            # Doğrudan senkron olarak yükle.
+            for engine_str, sl_map in data.items():
+                if not isinstance(sl_map, dict): continue
+                for sl, tl_map in sl_map.items():
+                    if not isinstance(tl_map, dict): continue
+                    for tl, text_map in tl_map.items():
+                        if not isinstance(text_map, dict): continue
+                        for text, translated in text_map.items():
+                            key = (engine_str, sl, tl, text)
+                            # Basit validasyon
+                            engine_enum = TranslationEngine.GOOGLE
+                            if engine_str in [e.value for e in TranslationEngine]:
+                                engine_enum = TranslationEngine(engine_str)
+                                
+                            res = TranslationResult(
+                                original_text=text,
+                                translated_text=str(translated),
+                                source_lang=sl,
+                                target_lang=tl,
+                                engine=engine_enum,
+                                success=True
+                            )
+                            self._cache[key] = res
+                            count += 1
                                     
-                    # Kapasite limitini uygula
-                    while len(self._cache) > self.cache_capacity:
-                        self._cache.popitem(last=False)
-
-            # OrderedDict thread-safe olmadığı için lock ile güncelliyoruz
-            # Not: Bu asenkron değil ama lock asyncio tabanlı olduğu için sarmalıyoruz
-            import asyncio
-            try:
-                loop = asyncio.get_event_loop()
-                if loop.is_running():
-                    loop.create_task(_fill_cache()) # Background loading
-                else:
-                    loop.run_until_complete(_fill_cache())
-            except RuntimeError:
-                # Loop yoksa manuel doldur (Thread-safety riski düşük init anında)
-                for engine_str, sl_map in data.items():
-                    for sl, tl_map in sl_map.items():
-                        for tl, text_map in tl_map.items():
-                            for text, translated in text_map.items():
-                                key = (engine_str, sl, tl, text)
-                                self._cache[key] = TranslationResult(text, str(translated), sl, tl, TranslationEngine.GOOGLE, True)
-                                count += 1
+            # Kapasite limitini uygula
+            while len(self._cache) > self.cache_capacity:
+                self._cache.popitem(last=False)
 
             self.logger.info(f"Cache loaded: {file_path} ({count} entries)")
         except Exception as e:

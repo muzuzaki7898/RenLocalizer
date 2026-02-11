@@ -8,6 +8,7 @@ Now powered by Qt Quick (QML)
 import os
 import sys
 import warnings
+import asyncio
 import multiprocessing
 from pathlib import Path
 from src.utils.logger import setup_logger
@@ -18,7 +19,7 @@ from src.utils.logger import setup_logger
 sys.setrecursionlimit(5000)
 
 # Default version fallback
-VERSION = "2.6.5"
+VERSION = "2.7.0"
 
 try:
     from src.version import VERSION as _v
@@ -402,7 +403,39 @@ def main() -> int:
             app.processEvents()
 
         print("[OK] UI loaded successfully. Entering event loop.")
-        return app.exec()
+        exit_code = app.exec()
+        
+        # ============================================================
+        # CLEANUP: Graceful asyncio shutdown (Windows WinError 10022 fix)
+        # ============================================================
+        try:
+            # Close any open aiohttp sessions before event loop cleanup
+            if hasattr(backend, 'translation_manager'):
+                backend.translation_manager.close_all_sessions()
+            
+            # Get the current event loop if it exists
+            try:
+                loop = asyncio.get_event_loop()
+                if loop and not loop.is_closed():
+                    # Cancel all pending tasks
+                    pending = asyncio.all_tasks(loop)
+                    for task in pending:
+                        task.cancel()
+                    
+                    # Wait for tasks to complete cancellation
+                    if pending:
+                        loop.run_until_complete(asyncio.gather(*pending, return_exceptions=True))
+                    
+                    # Close the loop gracefully
+                    loop.close()
+            except RuntimeError:
+                # No event loop exists, which is fine
+                pass
+        except Exception as cleanup_error:
+            # Silent fail - cleanup errors shouldn't crash the app
+            logger.debug(f"Asyncio cleanup warning: {cleanup_error}")
+        
+        return exit_code
 
     except Exception as e:
         error_msg = f"Error starting RenLocalizer V2: {e}"

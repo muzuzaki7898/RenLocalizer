@@ -139,6 +139,7 @@ class TranslationSettings:
     translate_notifications: bool = True  # Notify() ve renpy.notify() metinleri
     translate_confirmations: bool = True  # Confirm() ve renpy.confirm() metinleri
     translate_define_strings: bool = True  # define statements ile tanımlanan stringler
+    translate_character_names: bool = False # NEW: Character("Name") isimleri
     
     # Advanced Syntax Guard Settings
     # DEPRECATED: Fuzzy match özelliği v2.5.1+ sürümlerinde kaldırıldı
@@ -186,10 +187,10 @@ class TranslationSettings:
     force_runtime_translation: bool = False  # Oyun içi metinleri zorla çevir (eksik !t flagleri için)
     # Debug/Development settings
     show_debug_engines: bool = False  # Pseudo-Localization gibi debug motorlarını ana listede göster
-    # NEW: HTML Wrap Protection (v2.6.3) - translate="no" attribute protection
-    # Default: False - Ücretsiz Google endpoint'leri HTML modunu tam desteklemiyor
-    # Kullanıcı ayarlardan açabilir (experimental)
-    use_html_protection: bool = False
+    # HTML Wrap Protection (v2.6.7) - <span translate="no"> tag protection
+    # Default: True - Google Translate'e HTML span'ları göz ardı etmesini söyler
+    # Modern approach (v2.6.7): Token'lar yerine HTML span'lar daha güvenilir
+    use_html_protection: bool = True
 
 @dataclass
 class ApiKeys:

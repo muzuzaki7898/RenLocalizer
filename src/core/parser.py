@@ -47,6 +47,32 @@ STANDARD_RENPY_STRINGS = {
     "Clipboard Voicing", "Text Speed", "Auto-Forward Time"
 }
 
+# =============================================================================
+# TEXT TYPE CONSTANTS (v2.6.6 - Eliminates magic strings)
+# =============================================================================
+class TextType:
+    """Constants for text extraction types - prevents typos and enables IDE autocomplete."""
+    DIALOGUE = 'dialogue'
+    NARRATION = 'narration'
+    MENU_CHOICE = 'menu_choice'
+    SCREEN_TEXT = 'screen_text'
+    UI_ACTION = 'ui_action'
+    SHOW_TEXT = 'show_text'
+    WINDOW_TEXT = 'window_text'
+    HIDDEN_ARG = 'hidden_arg'
+    IMMEDIATE_TRANSLATION = 'immediate_translation'
+    RENPY_FUNC = 'renpy_func'
+    CONFIG_TEXT = 'config_text'
+    DEFINE_TEXT = 'define_text'
+
+# Shared regex pattern for quoted strings (DRY principle)
+# Matches: "text", 'text', r"text", f'text', rf"text", etc.
+_QUOTED_STRING_PATTERN = r'(?:[rRuUbBfF]{,2})?(?P<quote>"(?:[^"\\]|\\.)*"|\'(?:[^\\\']|\\.)*\')'
+
+# Safety limits to prevent ReDoS attacks
+MAX_LINE_LENGTH = 10000  # Lines longer than this skip regex processing
+EMPTY_CHARACTER = ''     # Constant for empty character name in dedup key
+
 
 @dataclass
 class ContextNode:
@@ -138,6 +164,60 @@ class RenPyParser:
         self.ast_technical_types = {
             'Store', 'Config', 'Style', 'Layout', 'ImageButton', 'Hotspot', 'Hotbar', 'Slider', 'Viewport', 'ScrollBar', 'Action', 'Confirm', 'Notify', 'Input', 'Frame', 'Window', 'Vbox', 'Hbox', 'Side', 'Caption', 'Title', 'Label', 'Tooltip', 'TextButton'
         }
+
+        # Dosya uzantıları ve yol belirteçleri (Crash önleyici)
+        # Bu uzantılara sahip stringler ASLA çevrilmemeli.
+        self.file_extensions = {
+            '.png', '.jpg', '.jpeg', '.webp', '.avif', '.bmp', '.gif', '.ico',
+            '.mp3', '.ogg', '.wav', '.flac', '.opus', '.m4a',
+            '.rpy', '.rpyc', '.rpym', '.rpymc', '.py', '.xml', '.json', '.yaml', '.txt',
+            '.ttf', '.otf', '.woff', '.woff2'
+        }
+        self.path_indicators = {'/', '\\', 'http://', 'https://', 'www.'}
+
+        # COMPILATION: Technical Keywords and Patterns (Optimization for O(1) matching)
+        # Using re.compile dramatically speeds up checks inside loops
+        technical_patterns = [
+            r'^#[0-9a-fA-F]+$',
+            r'\.ttf$|\.otf$|\.woff2?$',
+            r'^%s[%\s]*$',
+            r'fps|renderer|ms$',
+            r'^[0-9.]+$',
+            r'game_menu|sync|input|overlay',
+            r'vertical|horizontal|linear',
+            r'touch_keyboard|subtitle|empty',
+            r'\*\*?/\*\*?', # Glob patterns
+            r'\.old$|\.new$|\.bak$',
+            r'^[a-z0-9_]+\.[a-z0-9_.]+$', # module.sub.attr
+            r'^[a-z0-9_]+=[^=]+$', # Assignment without double equals
+            r'^(?:config|gui|preferences|style)\.[a-z0-9_.]+$', # Internal variables
+            r'\b(?:uniform|attribute|varying|vec[234]|mat[234]|gl_FragColor|sampler2D|gl_Position|texture2D|v_tex_coord|a_tex_coord|a_position|u_transform|u_lod_bias)\b', # Shader/GLSL keywords
+            r'^--?[a-z0-9_\-]+$', # Command line arguments (e.g. --force, -o)
+            r'^[a-z0-9_/.]+\.(?:png|jpg|mp3|ogg|wav|webp|ttf|otf|woff2?|rpyc?|rpa)$', # Asset paths
+            r'^[a-zA-Z0-9_]+/[a-zA-Z0-9_/.\-]+$', # Path fragments (folder/file)
+            r'^\s*(?:jump|call|show|hide|scene|play|stop|queue)\s+\w+', # Ren'Py commands as strings
+            r'^\s*(?:if|elif|else|while|for)\s+', # Control flow
+            r'^\s*\$?\s*[a-zA-Z_]\w*\s*=\s*',  # Variable assignment
+            r'^[\w\-. ]+(?:/[\w\-. ]+)+$',     # Strict path (e.g. audio/bgm.ogg)
+        ]
+        # Combine patterns into one regex: (?:pattern1)|(?:pattern2)|...
+        # Using IgnoreCase flag for broad matching
+        self.technical_re = re.compile(r'(?:' + r')|(?:'.join(technical_patterns) + r')', re.IGNORECASE)
+
+        code_patterns = [
+            r'renpy\.\w+',           # renpy.store, renpy.config, etc.
+            r'\w+\s*=\s*\[',         # list assignment
+            r'\w+\s*=\s*\{',         # dict assignment
+            r'for\s+\w+\s+in\s+',    # for loop
+            r'if\s+\w+\s+in\s+',     # if x in y
+            r'\w+\[\w+\]',           # dict/list access
+            r'km\[',                 # keymap access
+            r'_\w+\s*\(',            # private function call
+            r'True\b|False\b|None\b', # Python literals
+            r'import\s+|from\s+\w+\s+import', # imports
+        ]
+        self.code_patterns_re = re.compile(r'(?:' + r')|(?:'.join(code_patterns) + r')')
+
         # --- Core regex patterns and registries (ensure attributes exist for tests) ---
         # Common quoted-string pattern (handles optional prefixes like r, u, b, f)
         self._quoted_string = r'(?:[rRuUbBfF]{,2})?(?P<quote>"(?:[^"\\]|\\.)*"|\'(?:[^\\\']|\\.)*\')'
@@ -213,9 +293,109 @@ class RenPyParser:
 
         # Actions and Input Prompts (v2.6.4 Extension)
         # Matches: Confirm("Text"), Notify("Text"), renpy.input("Text")
+        # Optimized with non-greedy matching and _QUOTED_STRING_PATTERN
         self.action_call_re = re.compile(
-            r'.*\b(?:Confirm|Notify|Tooltip|MouseTooltip|Help|renpy\.input)\s*\(\s*(?:.*?(?:prompt|message|value)\s*=\s*)?(?:_\s*\(\s*)?(?P<quote>"(?:[^"\\]|\\.)*"|\'(?:[^\\\']|\\.)*\')'
+            rf'.*?\b(?:Confirm|Notify|Tooltip|MouseTooltip|Help|renpy\.input)\s*\(\s*(?:.*?(?:prompt|message|value)\s*=\s*)?(?:_\s*\(\s*)?{_QUOTED_STRING_PATTERN}'
         )
+
+        # Show Text Statement (v2.6.6): Captures temporary text displays
+        # Example: show text "Loading..." at truecenter
+        # This is commonly used for loading screens, notifications, etc.
+        # Uses _QUOTED_STRING_PATTERN for DRY compliance
+        self.show_text_re = re.compile(
+            rf'^\s*show\s+text\s+(?:_\s*\(\s*)?{_QUOTED_STRING_PATTERN}(?:\s*\))?'
+        )
+
+        # Window Show/Hide with Text (v2.6.6): Captures window transition text
+        # Example: window show "Narrator speaking..."
+        # Less common but used in some visual novels
+        # Extended to include 'window auto' which can also take text
+        self.window_text_re = re.compile(
+            rf'^\s*window\s+(?:show|hide|auto)\s+{_QUOTED_STRING_PATTERN}'
+        )
+
+        # Hidden Arguments (v2.6.6): Captures what_prefix, what_suffix, etc.
+        # Example: e "Hello" (what_prefix="{i}", what_suffix="{/i}")
+        # These are often missed but contain translatable formatting text
+        # Extended to include color, size, font arguments that may contain translatable values
+        self.hidden_args_re = re.compile(
+            rf'\(\s*(?:what_prefix|what_suffix|who_prefix|who_suffix|what_color|what_size|what_font|what_outlinecolor|what_text_align)\s*=\s*{_QUOTED_STRING_PATTERN}'
+        )
+
+        # Triple Underscore Immediate Translation (v2.6.6): ___("text")
+        # Example: text ___("Hello [player]")
+        # Translates AND interpolates variables immediately
+        self.triple_underscore_re = re.compile(
+            rf'___\s*\(\s*{_QUOTED_STRING_PATTERN}\s*\)'
+        )
+        # ============================================================
+        # V2.6.7: NEW PATTERNS FROM REN'PY DOCUMENTATION RESEARCH
+        # ============================================================
+        
+        # 1. Double Underscore Immediate Translation: __("text")
+        # Example: text __("Translate immediately")
+        # Similar to _() but translates at definition time
+        # FALSE POSITIVE PREVENTION: Must not be inside comments or technical assignments
+        self.double_underscore_re = re.compile(
+            rf'__\s*\(\s*{_QUOTED_STRING_PATTERN}\s*\)'
+        )
+        
+        # 2. String Interpolation with !t Flag: [variable!t]
+        # Example: "I'm feeling [mood!t]."
+        # The !t flag marks the variable for translation lookup
+        # FALSE POSITIVE PREVENTION: Only extract if the string contains actual text, not just the variable
+        # We'll handle this in post-processing, not regex
+        self.interpolation_t_flag_re = re.compile(
+            r'\[(\w+)!t\]'
+        )
+        
+        # 3. Python Block Translatable Strings: python: ... = _("text")
+        # Example: python:\n    message = _("Hello")
+        # FALSE POSITIVE PREVENTION: Must be inside python block, not in comments
+        # This is context-aware, handled in extraction logic
+        self.python_translatable_re = re.compile(
+            rf'^\s*(?:[a-zA-Z_]\w*\s*=\s*)?_\s*\(\s*{_QUOTED_STRING_PATTERN}\s*\)'
+        )
+        
+        # 4. ATL Text Blocks: show text "..." at position
+        # Already covered by show_text_re, but add ATL-specific patterns
+        # Example: show text "Fading..." at truecenter with dissolve
+        # FALSE POSITIVE PREVENTION: Must have 'show text' prefix, not 'show image'
+        # (Already handled by show_text_re above)
+        
+        # 5. NVL Mode Dialogue: nvl "text" or nvl clear "text"
+        # Example: nvl "This is NVL dialogue"
+        # FALSE POSITIVE PREVENTION: Must start with 'nvl' keyword
+        self.nvl_dialogue_re = re.compile(
+            rf'^\s*nvl\s+(?:clear\s+)?{_QUOTED_STRING_PATTERN}'
+        )
+        
+        # 6. Screen Parameter Text: screen my_screen(param):
+        # Example: screen message_box(title, message):
+        #              text title
+        #              text message
+        # FALSE POSITIVE PREVENTION: Only extract if parameter is used with 'text' or similar display element
+        # This requires context tracking - we'll mark parameters and track their usage
+        self.screen_param_usage_re = re.compile(
+            r'^\s*(?:text|label|tooltip)\s+([a-zA-Z_]\w*)(?:\s|$)'
+        )
+        
+        # 7. Image Text Overlays: image name = Text("text")
+        # Example: image my_text = Text("Overlay text")
+        # FALSE POSITIVE PREVENTION: Must be 'Text()' constructor, not 'text' element
+        # Also check for common Text() parameters like size, color to avoid false positives
+        self.image_text_overlay_re = re.compile(
+            rf'^\s*image\s+\w+\s*=\s*Text\s*\(\s*{_QUOTED_STRING_PATTERN}'
+        )
+        
+        # 8. String Substitution Context: Detect strings that will use !t flag
+        # This helps us understand which strings might be interpolated
+        # Example: $ mood = _("happy")  ->  "I feel [mood!t]"
+        # We'll track these in a separate pass
+        self.substitution_var_re = re.compile(
+            r'^\s*\$?\s*([a-zA-Z_]\w*)\s*=\s*_\s*\('
+        )
+
 
         self.layout_text_re = re.compile(r'^\s*layout\.[a-zA-Z0-9_]+\s*=\s*' + self._quoted_string)
         self.store_text_re = re.compile(r'^\s*store\.[a-zA-Z0-9_]+\s*=\s*' + self._quoted_string)
@@ -229,6 +409,8 @@ class RenPyParser:
         self.python_block_re = re.compile(r'^(?:init(?:\s+[-+]?\d+)?\s+)?python\b.*:')
         # Label definition (ensure present for tests)
         self.label_def_re = re.compile(r'^label\s+([A-Za-z_][\w\.]*)\s*(?!hide):')
+        # Hidden label definition (label xxx hide:) - these should be skipped
+        self.hidden_label_re = re.compile(r'^label\s+[A-Za-z_][\w\.]*\s+hide\s*:')
         # -------------------------------------------------------------------------
         
         # Initialize v2.4.1 patterns
@@ -317,6 +499,13 @@ class RenPyParser:
             {'regex': self.gui_variable_re, 'type': 'gui'},
             # REMOVED: renpy_show_re
             # Actions now handled in Secondary Pass (v2.6.4)
+            
+            
+            # V2.6.7: NEW PATTERNS FROM REN'PY DOCUMENTATION RESEARCH
+            {'regex': self.double_underscore_re, 'type': TextType.IMMEDIATE_TRANSLATION},  # __("text")
+            {'regex': self.python_translatable_re, 'type': 'translatable_string'},  # Python block _()
+            {'regex': self.nvl_dialogue_re, 'type': TextType.DIALOGUE},  # NVL mode dialogue
+            {'regex': self.image_text_overlay_re, 'type': TextType.SCREEN_TEXT},  # image = Text("text")
             
             # NEW v2.4.1 patterns
             {'regex': self.default_translatable_re, 'type': 'translatable_string'},
@@ -467,7 +656,7 @@ class RenPyParser:
                     pass
                 # Use canonical for deduplication to collapse "Text" and "Text\n" and "Text"
                 # But keep original context for reconstruction if needed
-                key = (canonical, tuple(ctx))
+                key = (canonical, entry.get('character', ''), tuple(ctx))
                 
                 # Check if we already have this text in this context (ignore line number differences)
                 if key not in seen_texts:
@@ -498,7 +687,7 @@ class RenPyParser:
                     canonical = bytes(canonical, 'utf-8').decode('unicode_escape')
                 except Exception:
                     pass
-                key = (canonical, token.line_number or 0, tuple(ctx))
+                key = (canonical, token.character or '', tuple(ctx))
                 if key not in seen_texts:
                     entry = self._record_entry(
                         text=token.text,
@@ -507,6 +696,7 @@ class RenPyParser:
                         context_line=token.context_line,
                         text_type=token.text_type,
                         context_path=list(ctx),
+                        character=token.character or '',
                         file_path=str(file_path),
                     )
                     if entry:
@@ -516,33 +706,49 @@ class RenPyParser:
             self.logger.debug(f"TokenStream extraction unavailable or failed: {e}")
 
         # 2. Regex ile context-aware extraction (UI, screen, python _() fonksiyonları)
-        current_context = []
+        context_stack: List[ContextNode] = []
+        
         for idx, raw_line in enumerate(lines):
-            stripped_line = raw_line.strip()
-            # Context stack güncelle (screen, label, python, vb.)
-            if stripped_line.startswith('screen '):
-                screen_name = stripped_line.split()[1].split(':')[0]
-                current_context.append(f'screen:{screen_name}')
-            elif stripped_line.startswith('label '):
-                label_name = stripped_line.split()[1].split(':')[0]
-                current_context.append(f'label:{label_name}')
-            elif stripped_line.startswith('menu'):
-                current_context.append('menu')
-            elif stripped_line.startswith('python') or stripped_line.startswith('init python'):
-                current_context.append('python')
-            elif stripped_line.endswith(':') and not (stripped_line.startswith('menu') or stripped_line.startswith('if') or stripped_line.startswith('else')):
-                # Diğer bloklar (ör. window, frame, vbox, hbox)
-                block_name = stripped_line.split()[0]
-                current_context.append(block_name)
-            # Blok sonu (indentation ile daha iyi yapılabilir)
-            if not stripped_line and current_context:
-                current_context.pop()
-            if not stripped_line or stripped_line.startswith('#'):
+            if not raw_line or raw_line.isspace():
                 continue
+                
+            stripped_line = raw_line.strip()
+            indent = self._calculate_indent(raw_line)
+            
+            # --- Indentation-based Context Management ---
+            # 1. Pop context nodes that are no longer active (shallower than current indent)
+            self._pop_contexts(context_stack, indent)
+            
+            # 2. Detect if this line starts a new context (label, screen, menu, python)
+            new_node = self._detect_new_context(stripped_line, indent)
+            
+            # Skip comments early
+            if stripped_line.startswith('#'):
+                if new_node: # Should not happen with current _detect_new_context but just in case
+                    context_stack.append(new_node)
+                continue
+
+            # Build current path for the entries found on this line
+            # If a new node is starting, it is part of the context for any string on this line
+            current_path = self._build_context_path(context_stack, new_node)
+            
+            # 3. If it's a new context node, push it to stack AFTER building path for current strings 
+            # (unless it's a one-line block? Ren'Py usually isn't)
+            if new_node:
+                context_stack.append(new_node)
+            
+            # --- String Extraction ---
+            # ReDoS Prevention: Skip overly long lines before ANY regex processing
+            if len(raw_line) > MAX_LINE_LENGTH:
+                if self.logger.isEnabledFor(logging.WARNING):
+                     self.logger.warning(f"Skipping line {idx+1} in {file_path} due to excessive length ({len(raw_line)})")
+                continue
+
             for descriptor in self.pattern_registry:
                 match = descriptor['regex'].match(raw_line)
                 if not match:
                     continue
+                
                 quotes = [
                     match.group(name)
                     for name in match.groupdict()
@@ -552,65 +758,246 @@ class RenPyParser:
                     quote_value = match.groupdict().get('quote')
                     if quote_value:
                         quotes = [quote_value]
+                
                 if not quotes:
                     continue
+                
                 character = ""
                 char_group = descriptor.get('character_group')
                 if char_group and match.groupdict().get(char_group):
                     character = match.group(char_group)
+                
                 for quote in quotes:
                     # preserve both raw and unescaped variants for exact matching and ID generation
-                    # idx is current line index (idx)
                     raw, text = self._extract_string_raw_and_unescaped(quote, start_line=idx, lines=lines)
-                    key = (text, idx + 1, tuple(current_context))
+                    key = (text, character, tuple(current_path))
+                    
                     if key in seen_texts:
                         continue
+                    
                     text_type = descriptor.get('type') or self.determine_text_type(
-                        text, stripped_line, current_context
+                        text, stripped_line, current_path
                     )
+                    
                     entry = self._record_entry(
                         text=text,
                         raw_text=raw,
                         line_number=idx + 1,
                         context_line=stripped_line,
                         text_type=text_type,
-                        context_path=list(current_context),
+                        context_path=list(current_path),
                         character=character,
                         file_path=str(file_path),
                     )
+                    
                     if entry:
                         entries.append(entry)
                         seen_texts.add(key)
-                        # Log: UI/screen extraction
-                        log_line = f"{file_path}:{idx+1} [{text_type}] ctx={current_context} text={text}"
+                        log_line = f"{file_path}:{idx+1} [{text_type}] ctx={current_path} text={text}"
                         self.logger.info(f"[ENTRY] {log_line}")
                 break
 
             # --- V2.6.4: Secondary Pass for Actions (Confirm, Notify, Input) ---
             # This runs independently so we can capture BOTH the button text AND the action prompt on the same line.
+            # CRITICAL FIX (v2.6.6): Now uses helper method with proper unescaped text check
             action_match = self.action_call_re.match(raw_line)
-            if action_match and self.is_meaningful_text(action_match.group('quote')):
-                quote_raw = action_match.group('quote')
-                raw, text = self._extract_string_raw_and_unescaped(quote_raw, start_line=idx, lines=lines)
-                key = (text, idx + 1, tuple(current_context))
-                
-                # Deduplication check
-                if key not in seen_texts:
-                    entry = self._record_entry(
-                        text=text,
-                        raw_text=raw,
-                        line_number=idx + 1,
-                        context_line=stripped_line,
-                        text_type='ui_action',
-                        context_path=list(current_context),
-                        character='',
-                        file_path=str(file_path),
-                    )
-                    if entry:
-                        entries.append(entry)
-                        seen_texts.add(key)
-                        self.logger.info(f"[ENTRY+ACTION] {file_path}:{idx+1} [ui_action] text={text}")
+            if action_match:
+                self._process_secondary_extraction(
+                    match=action_match,
+                    text_type=TextType.UI_ACTION,
+                    raw_line=raw_line,
+                    idx=idx,
+                    lines=lines,
+                    stripped_line=stripped_line,
+                    current_path=current_path,
+                    seen_texts=seen_texts,
+                    entries=entries,
+                    file_path=file_path
+                )
+
+            # --- V2.6.6: Secondary Pass for Show Text Statement ---
+            # Captures: show text "Loading..." at truecenter
+            show_text_match = self.show_text_re.match(raw_line)
+            if show_text_match:
+                self._process_secondary_extraction(
+                    match=show_text_match,
+                    text_type=TextType.SHOW_TEXT,
+                    raw_line=raw_line,
+                    idx=idx,
+                    lines=lines,
+                    stripped_line=stripped_line,
+                    current_path=current_path,
+                    seen_texts=seen_texts,
+                    entries=entries,
+                    file_path=file_path
+                )
+
+            # --- V2.6.6: Secondary Pass for Window Show/Hide Text ---
+            # Captures: window show "Narrator speaking..."
+            window_match = self.window_text_re.match(raw_line)
+            if window_match:
+                self._process_secondary_extraction(
+                    match=window_match,
+                    text_type=TextType.WINDOW_TEXT,
+                    raw_line=raw_line,
+                    idx=idx,
+                    lines=lines,
+                    stripped_line=stripped_line,
+                    current_path=current_path,
+                    seen_texts=seen_texts,
+                    entries=entries,
+                    file_path=file_path
+                )
+
+            # --- V2.6.6: Secondary Pass for Hidden Arguments ---
+            # Captures: e "Hello" (what_prefix="{i}", what_suffix="{/i}")
+            # Note: This can match multiple times per line (prefix AND suffix)
+            for hidden_match in self.hidden_args_re.finditer(raw_line):
+                self._process_secondary_extraction(
+                    match=hidden_match,
+                    text_type=TextType.HIDDEN_ARG,
+                    raw_line=raw_line,
+                    idx=idx,
+                    lines=lines,
+                    stripped_line=stripped_line,
+                    current_path=current_path,
+                    seen_texts=seen_texts,
+                    entries=entries,
+                    file_path=file_path
+                )
+
+            # --- V2.6.6: Secondary Pass for Triple Underscore Translation ---
+            # Captures: text ___("Hello [player]")
+            # Note: Can appear multiple times per line
+            for triple_match in self.triple_underscore_re.finditer(raw_line):
+                self._process_secondary_extraction(
+                    match=triple_match,
+                    text_type=TextType.IMMEDIATE_TRANSLATION,
+                    raw_line=raw_line,
+                    idx=idx,
+                    lines=lines,
+                    stripped_line=stripped_line,
+                    current_path=current_path,
+                    seen_texts=seen_texts,
+                    entries=entries,
+                    file_path=file_path
+                )
+
+            # --- V2.6.7: Secondary Pass for Double Underscore Translation ---
+            # Captures: text __("Translate immediately")
+            # Note: Can appear multiple times per line
+            for double_match in self.double_underscore_re.finditer(raw_line):
+                self._process_secondary_extraction(
+                    match=double_match,
+                    text_type=TextType.IMMEDIATE_TRANSLATION,
+                    raw_line=raw_line,
+                    idx=idx,
+                    lines=lines,
+                    stripped_line=stripped_line,
+                    current_path=current_path,
+                    seen_texts=seen_texts,
+                    entries=entries,
+                    file_path=file_path
+                )
+
+            # --- V2.6.7: Secondary Pass for NVL Dialogue ---
+            # Captures: nvl "text" or nvl clear "text"
+            nvl_match = self.nvl_dialogue_re.match(raw_line)
+            if nvl_match:
+                self._process_secondary_extraction(
+                    match=nvl_match,
+                    text_type=TextType.DIALOGUE,
+                    raw_line=raw_line,
+                    idx=idx,
+                    lines=lines,
+                    stripped_line=stripped_line,
+                    current_path=current_path,
+                    seen_texts=seen_texts,
+                    entries=entries,
+                    file_path=file_path
+                )
+
+            # --- V2.6.7: Secondary Pass for Image Text Overlays ---
+            # Captures: image name = Text("text")
+            image_text_match = self.image_text_overlay_re.match(raw_line)
+            if image_text_match:
+                self._process_secondary_extraction(
+                    match=image_text_match,
+                    text_type=TextType.SCREEN_TEXT,
+                    raw_line=raw_line,
+                    idx=idx,
+                    lines=lines,
+                    stripped_line=stripped_line,
+                    current_path=current_path,
+                    seen_texts=seen_texts,
+                    entries=entries,
+                    file_path=file_path
+                )
         return entries
+
+    def _process_secondary_extraction(
+        self,
+        match,
+        text_type: str,
+        raw_line: str,
+        idx: int,
+        lines: List[str],
+        stripped_line: str,
+        current_path: List[str],
+        seen_texts: Set[Tuple],
+        entries: List[Dict[str, Any]],
+        file_path: Union[str, Path],
+    ) -> None:
+        """
+        Helper method for secondary extraction passes (v2.6.6).
+        Eliminates code duplication across show_text, window_text, hidden_arg, and triple_underscore passes.
+        
+        Features:
+        - Exception handling for robustness
+        - Early exit on empty/invalid text
+        - Deduplication with seen_texts set
+        - Optimized logging with level check
+        """
+        try:
+            quote_raw = match.group('quote')
+            raw, text = self._extract_string_raw_and_unescaped(quote_raw, start_line=idx, lines=lines)
+            
+            # Early exit: Skip empty or non-meaningful text
+            if not text or not self.is_meaningful_text(text):
+                return
+            
+            # Deduplication key: (text, character, context_path)
+            key = (text, EMPTY_CHARACTER, tuple(current_path) if current_path else ())
+            
+            if key in seen_texts:
+                return
+            
+            entry = self._record_entry(
+                text=text,
+                raw_text=raw,
+                line_number=idx + 1,
+                context_line=stripped_line,
+                text_type=text_type,
+                context_path=list(current_path) if current_path else [],
+                character=EMPTY_CHARACTER,
+                file_path=str(file_path),
+            )
+            
+            if entry:
+                entries.append(entry)
+                seen_texts.add(key)
+                # Optimized logging: Only format string if logging is enabled
+                if self.logger.isEnabledFor(logging.INFO):
+                    self.logger.info(f"[ENTRY+{text_type.upper()}] {file_path}:{idx+1} [{text_type}] text={text}")
+                    
+        except (ValueError, IndexError, UnicodeDecodeError, AttributeError) as e:
+            # Log extraction error but continue processing
+            if self.logger.isEnabledFor(logging.WARNING):
+                self.logger.warning(f"Secondary extraction failed at {file_path}:{idx+1} [{text_type}]: {e}")
+        except Exception as e:
+            # Catch-all for unexpected errors
+            if self.logger.isEnabledFor(logging.ERROR):
+                self.logger.error(f"Unexpected error in secondary extraction at {file_path}:{idx+1}: {e}")
 
     def extract_from_json(self, file_path: Path) -> List[Dict[str, Any]]:
         """
@@ -928,8 +1315,8 @@ class RenPyParser:
 
         menu_match = self.menu_def_re.match(stripped_line)
         if menu_match:
-            # ... (menu context logic, if any) ...
-            pass
+            menu_name = menu_match.group(1) or menu_match.group(2) or ''
+            return ContextNode(indent=indent, kind='menu', name=menu_name)
 
         screen_match = self.screen_def_re.match(stripped_line)
         if screen_match:
@@ -1143,25 +1530,52 @@ class RenPyParser:
         if not quoted_string:
             return ''
         import re
+        
         # Match optional prefixes (r, u, b, f, fr, rf, etc.) and quoted content
-        m = re.match(r"^(?P<prefix>[rRuUbBfF]{,2})?(?P<quoted>\"\"\"[\s\S]*?\"\"\"|\'\'\'[\s\S]*?\'\'\'|\"(?:[^\"\\]|\\.)*\"|\'(?:[^'\\]|\\.)*\')$", quoted_string, flags=re.S)
-        if m:
-            content_raw = m.group('quoted')
-            # Remove quotes
-            if content_raw.startswith('"""') and content_raw.endswith('"""'):
-                content = content_raw[3:-3]
-            elif content_raw.startswith("'''") and content_raw.endswith("'''"):
-                content = content_raw[3:-3]
-            elif content_raw.startswith('"') and content_raw.endswith('"'):
-                content = content_raw[1:-1]
-            elif content_raw.startswith("'") and content_raw.endswith("'"):
-                content = content_raw[1:-1]
-            else:
-                content = content_raw
+        # Using a more robust regex for prefixes and various string types
+        m = re.match(
+            r"^(?P<prefix>[rRuUbBfF]{,2})"
+            r"(?P<quoted>\"\"\"[\s\S]*?\"\"\"|'''[\s\S]*?'''|\"(?:[^\"\\]|\\.)*\"|'(?:[^'\\]|\\.)*')\s*$",
+            quoted_string, 
+            flags=re.S
+        )
+        
+        if not m:
+            return quoted_string
+            
+        prefix = (m.group('prefix') or '').lower()
+        content_raw = m.group('quoted')
+        
+        # Strip quotes based on type
+        if content_raw.startswith(('"""', "'''")):
+            content = content_raw[3:-3]
         else:
-            content = quoted_string
-        content = content.replace('\\"', '"').replace("\\'", "'")
-        content = content.replace('\\n', '\n').replace('\\t', '\t')
+            content = content_raw[1:-1]
+            
+        # If it's a raw string (r or rf or rb), we don't process escapes (mostly)
+        if 'r' in prefix:
+            # Even in raw strings, Ren'Py/Python handles some sequences like \" or \' 
+            # if they were used to escape the delimiter.
+            if content_raw.startswith('"'):
+                content = content.replace('\\"', '"')
+            else:
+                content = content.replace("\\'", "'")
+            return content
+            
+        # Standard string unescaping
+        # Handle common Ren'Py/Python escapes
+        # We avoid using ast.literal_eval for safety and because we already have the stripped content
+        try:
+            # Replace literal newlines with \n for escape_decode/unicode_escape
+            content_for_decode = content.replace('\n', '\\n').replace('\r', '\\r')
+            
+            # Using unicode_escape to handle \n, \t, and unicode points
+            content = content_for_decode.encode('utf-8').decode('unicode_escape')
+        except Exception:
+            # Failsafe: fall back to manual replacement if decoding fails
+            content = content.replace('\\"', '"').replace("\\'", "'")
+            content = content.replace('\\n', '\n').replace('\\t', '\t')
+            
         return content
 
     def _extract_string_raw_and_unescaped(self, quoted_string: str, start_line: int = None, lines: List[str] = None) -> Tuple[str, str]:
@@ -1200,10 +1614,26 @@ class RenPyParser:
         return raw, unescaped
 
     def is_meaningful_text(self, text: str) -> bool:
-        if not text or len(text.strip()) < 2:
+        """
+        Check if text is suitable for translation using heuristics and filters.
+        """
+        # Optimization: Prevent regex engine freeze (ReDoS) on massive strings
+        if not text or len(text) > 4096:
+            return False
+            
+        # Crash Prevention: Reject file paths, URLs, and asset names immediately
+        # Using fast string checks before regex
+        if any(ind in text for ind in self.path_indicators):
+            return False
+            
+        text_lower = text.lower().strip()
+            
+        # Extension Check (Case-insensitive)
+        if any(text_lower.endswith(ext) for ext in self.file_extensions):
             return False
 
-        text_lower = text.lower().strip()
+        if len(text.strip()) < 2:
+            return False
         text_strip = text.strip()
 
 
@@ -1234,8 +1664,39 @@ class RenPyParser:
         if self.technical_id_re.match(text_strip):
             return False
 
-        if re.fullmatch(r"\s*(\[[^\]]+\]|\{[^}]+\}|%s|%\([^)]+\)[sdif])\s*", text):
+        # FIX v2.6.6: Improved placeholder detection
+        # Old pattern rejected even non-technical text in brackets like "[Привет]"
+        # New logic: Only reject technical placeholders, not user text
+        if re.fullmatch(r"%s", text) or re.fullmatch(r"%\([^)]+\)[sdif]", text):
+            # These are definitely Python format strings - reject them
             return False
+        
+        # For bracketed content, check if it's a technical placeholder
+        bracket_match = re.fullmatch(r"\s*\[([^\]]+)\]\s*", text)
+        if bracket_match:
+            inner = bracket_match.group(1).strip()
+            # ALWAYS reject if contains technical markers
+            if any(c in inner for c in '._=' ) or any(c.isdigit() for c in inner):
+                return False  # It's a technical placeholder
+            # Multiple words likely technical (command.param, function args, etc)
+            if len(inner.split()) > 1:
+                return False
+            # Single word: only reject if it looks like English variable/keyword
+            # (not Cyrillic, CJK, or other user language text)
+            if not re.search(r'[а-яА-ЯёЁ\u4e00-\u9fff\u3040-\u30ff\u0600-\u06ff]', inner):
+                # No non-Latin script detected - likely technical English placeholder
+                # Examples: [item], [player], [inventory] - common game variables
+                return False
+            # Has non-Latin script (Cyrillic, CJK, Arabic) - it's user text, not technical
+            # Keep it for translation
+        
+        # For brace content (e.g., {color=...})
+        brace_match = re.fullmatch(r"\s*\{([^}]+)\}\s*", text)
+        if brace_match:
+            inner = brace_match.group(1).strip()
+            # If it contains = or other format markers, it's technical
+            if '=' in inner or any(c in inner for c in '#:_'):
+                return False  # It's a technical tag
         
         # Skip Python format strings like {:,}, {:3d}, {}, {}Attitude:{} {}, etc.
         # These are used for number/string formatting and should not be translated
@@ -1254,28 +1715,9 @@ class RenPyParser:
                 if format_count >= 2 and len(remaining) < 10:
                     return False
 
-        technical_patterns = [
-            r'^#[0-9a-fA-F]+$',
-            r'\.ttf$|\.otf$|\.woff2?$',
-            r'^%s[%\s]*$',
-            r'fps|renderer|ms$',
-            r'^[0-9.]+$',
-            r'game_menu|sync|input|overlay',
-            r'vertical|horizontal|linear',
-            r'touch_keyboard|subtitle|empty',
-            r'\*\*?/\*\*?', # Glob patterns
-            r'\.old$|\.new$|\.bak$',
-            r'^[a-z0-9_]+\.[a-z0-9_.]+$', # module.sub.attr
-            r'^[a-z0-9_]+=[^=]+$', # Assignment without double equals
-            r'^(?:config|gui|preferences|style)\.[a-z0-9_.]+$', # Internal variables
-            r'\b(?:uniform|attribute|varying|vec[234]|mat[234]|gl_FragColor|sampler2D|gl_Position|texture2D|v_tex_coord|a_tex_coord|a_position|u_transform|u_lod_bias)\b', # Shader/GLSL keywords
-            r'^--?[a-z0-9_\-]+$', # Command line arguments (e.g. --force, -o)
-            r'^[a-z0-9_/.]+\.(?:png|jpg|mp3|ogg|wav|webp|ttf|otf|woff2?|rpyc?|rpa)$', # Asset paths
-            r'^[a-zA-Z0-9_]+/[a-zA-Z0-9_/.\-]+$', # Path fragments (folder/file)
-        ]
-        for pattern in technical_patterns:
-            if re.search(pattern, text_lower):
-                return False
+        # --- O(1) Optimization: Use Pre-compiled Regex ---
+        if self.technical_re.search(text_lower):
+             return False
 
         if any(ext in text_lower for ext in ['.png', '.jpg', '.mp3', '.ogg']):
             return False
@@ -1301,7 +1743,13 @@ class RenPyParser:
             # Count "broken" or very unusual characters for a translation string
             # (Outside standard Latin, Cyrillic, CJK, and common punctuation)
             # Many obfuscated games use ranges that look like junk.
-            strange_chars = len(re.findall(r'[^\x20-\x7E\s\u0400-\u04FF\u4E00-\u9FFF\u3040-\u30FF\uAC00-\uD7AF\u00A0-\u00FF]', text_strip))
+            # Updated to include:
+            # - Latin Extended-A/B (Turkish, Viet, etc.): \u0100-\u024F
+            # - Cyrillic Supplement: \u0400-\u052F
+            # - General Punctuation (Em dash, quotes): \u2000-\u206F
+            # - Arabic/Farsi: \u0600-\u06FF
+            # - Hebrew: \u0590-\u05FF
+            strange_chars = len(re.findall(r'[^\x20-\x7E\s\u00A0-\u024F\u0400-\u052F\u0590-\u05FF\u0600-\u06FF\u2000-\u206F\u4E00-\u9FFF\u3040-\u30FF\uAC00-\uD7AF]', text_strip))
             if strange_chars > len(text_strip) * 0.4:
                 return False
             
@@ -1311,25 +1759,12 @@ class RenPyParser:
             alpha_count = sum(1 for ch in text_strip if ch.isalpha())
             if alpha_count < len(text_strip) * 0.2 and len(text_strip) > 10:
                 return False
-            
             # High unique character variety in non-alpha strings is a sign of entropy (encryption/junk)
             if alpha_count < len(text_strip) * 0.4:
                 unique_chars = len(set(text_strip))
                 if unique_chars > len(text_strip) * 0.7:
                     return False
         # -------------------------------------------------------------
-
-        if re.match(r'^\d+(?:\.\d+)+$', text.strip()):
-            return True
-
-        # Büyük harfle başlayan ve boşluk içeren metinleri kontrol et
-        if text[0].isupper() and ' ' in text:
-            return True  # %99 metindir
-
-        # Küçük harf ve boşluksuz metinleri kontrol et (Rusça gibi dillerde 2 harf yeterli olabilir)
-        if text.islower() and ' ' not in text:
-            if len(text_strip) < (2 if re.search(r'[а-яА-ЯёЁ]', text_strip) else 3):
-                return False
 
         # FIX: Reject strings that are actually code wrappers captured by mistake
         # e.g. '_("Text")' or "_('Text')"
@@ -1363,36 +1798,74 @@ class RenPyParser:
             if re.search(r'\bdef\s+\w+\s*\(|\bclass\s+\w+', text_strip):
                 return False
             # Check for common Python/Ren'Py code patterns
-            code_patterns = [
-                r'renpy\.\w+',           # renpy.store, renpy.config, etc.
-                r'\w+\s*=\s*\[',         # list assignment
-                r'\w+\s*=\s*\{',         # dict assignment
-                r'for\s+\w+\s+in\s+',    # for loop
-                r'if\s+\w+\s+in\s+',     # if x in y
-                r'\w+\[\w+\]',           # dict/list access
-                r'km\[',                 # keymap access
-                r'_\w+\s*\(',            # private function call
-                r'True\b|False\b|None\b', # Python literals
-                r'import\s+|from\s+\w+\s+import', # imports
-            ]
-            for pattern in code_patterns:
-                if re.search(pattern, text_strip):
-                    return False
+            # O(1) Optimization: Use Pre-compiled Regex
+            if self.code_patterns_re.search(text_strip):
+                 return False
+            
             # General tech word count
             tech_word_count = sum(1 for word in text_lower.split() if word in self.renpy_technical_terms)
             if tech_word_count >= 2 or 'python' in text_lower or 'return' in text_lower:
                 return False
 
         # Remove placeholders/tags like [who.name] or {color=...} and check remaining content
+        # BUT: Only apply this check if there's meaningful content after removal
+        # If text is ONLY brackets with valid content inside (e.g., "[Привет]"), it should pass
         try:
             cleaned = re.sub(r'(\[[^\]]+\]|\{[^}]+\})', '', text_strip).strip()
-            alpha_count = sum(1 for ch in cleaned if ch.isalpha())
-            # Russian "Я" (I), "Да" (Yes) are 1-2 chars.
-            min_alpha = 1 if re.search(r'[а-яА-ЯёЁ]', cleaned) else 2
-            if alpha_count < min_alpha:
-                return False
+            
+            # If cleaned is empty, check if original text was ONLY brackets with content
+            # In that case, it's already validated by earlier checks
+            if not cleaned:
+                # Original text is only brackets/braces - allow it if it passed earlier checks
+                # (It would have failed earlier if it was a technical placeholder)
+                pass
+            else:
+                # Text contains content after removing placeholders/tags
+                # Ensure remaining content is meaningful
+                alpha_count = sum(1 for ch in cleaned if ch.isalpha())
+                # Russian "Я" (I), "Да" (Yes) are 1-2 chars.
+                min_alpha = 1 if re.search(r'[а-яА-ЯёЁ]', cleaned) else 2
+                if alpha_count < min_alpha:
+                    return False
         except Exception:
             pass
+
+        # ============================================================
+        # V2.6.6: FALSE POSITIVE PREVENTION FOR NEW PATTERNS
+        # ============================================================
+        
+        # 1. Reject single-word parameter names (screen parameters)
+        # Example: "title", "message", "player_name" - these are variable names, not text
+        # ALLOW: Multi-word strings or strings with spaces
+        if len(text_strip.split()) == 1 and text_strip.replace('_', '').isalnum():
+            # It's a valid identifier-like string (variable name) - likely a parameter, not text
+            # BUT: Allow if it's a common translatable word (checked below)
+            common_params = {
+                'title', 'message', 'text', 'label', 'caption', 'tooltip',
+                'header', 'footer', 'content', 'description', 'name', 'value',
+                'prompt', 'placeholder', 'default', 'prefix', 'suffix', 'hint'
+            }
+            if text_strip.lower() in common_params and len(text_strip) < 15:
+                # Single-word common parameter - likely a variable name
+                return False
+        
+        # 2. Reject strings that are only interpolation placeholders
+        # Example: "[mood!t]" without surrounding text
+        # ALLOW: "I'm feeling [mood!t]." - has actual text
+        if re.fullmatch(r'\s*\[\w+!t\]\s*', text_strip):
+            return False
+        
+        # 3. Reject Text() constructor technical parameters
+        # Example: "size=24", "color=#fff", "font=DejaVuSans.ttf"
+        # ALLOW: Actual text content in Text()
+        if '=' in text_strip and re.search(r'\b(size|color|font|outlines|xalign|yalign|xpos|ypos|style|textalign)\s*=', text_strip, re.IGNORECASE):
+            return False
+        
+        # 4. Reject NVL mode technical commands
+        # Example: "clear", "show", "hide" when used alone
+        nvl_commands = {'clear', 'show', 'hide', 'menu', 'nvl'}
+        if text_strip.lower() in nvl_commands:
+            return False
 
         return any(ch.isalpha() for ch in text) and len(text.strip()) >= 2
 

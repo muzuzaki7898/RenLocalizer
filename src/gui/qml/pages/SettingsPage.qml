@@ -113,6 +113,7 @@ Rectangle {
                     FilterCheck { key: "renpy_functions"; label: (backend.uiTrigger, backend.getTextWithDefault("translate_renpy_func_label", "Ren'Py Functions")) }
                     FilterCheck { key: "config_strings"; label: (backend.uiTrigger, backend.getTextWithDefault("translate_config_label", "Config Strings")) }
                     FilterCheck { key: "define_strings"; label: (backend.uiTrigger, backend.getTextWithDefault("translate_define_label", "Define Strings")) }
+                    FilterCheck { key: "character_names"; label: (backend.uiTrigger, backend.getTextWithDefault("translate_char_label", "Character Names")) }
                 }
             }
 

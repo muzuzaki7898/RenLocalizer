@@ -20,6 +20,7 @@ from enum import Enum
 from pathlib import Path
 import shutil  # En tepeye ekleyin
 from src.utils.encoding import normalize_to_utf8_sig, read_text_safely, save_text_safely
+from src.core.runtime_hook_template import RUNTIME_HOOK_TEMPLATE
 
 from PyQt6.QtCore import QObject, pyqtSignal, QThread
 
@@ -34,7 +35,7 @@ from src.core.translator import (
     GoogleTranslator,
     DeepLTranslator,
 )
-from src.core.ai_translator import OpenAITranslator, GeminiTranslator
+from src.core.ai_translator import OpenAITranslator, GeminiTranslator, LocalLLMTranslator
 from src.core.output_formatter import RenPyOutputFormatter
 from src.core.diagnostics import DiagnosticReport
 
@@ -114,40 +115,46 @@ class TranslationPipeline(QObject):
 
     def _extract_strings_from_rpymc_ast(self, ast_root) -> list:
         """
-        AST'den stringleri çıkarır. Tüm metin tiplerini (tek satır, çok satır, uzun paragraflar dahil) eksiksiz yakalar.
-        Özellikle 'text', 'content', 'value', 'caption', 'label', 'description' gibi alanları öncelikli kontrol eder.
+        AST'den stringleri çıkarır (İteratif & Güvenli).
+        Recursion yerine Stack kullanarak derin nested yapılarda çökme riskini (StackOverflow) önler.
         """
         strings = set()
-        PRIORITY_KEYS = ['text', 'content', 'value', 'caption', 'label', 'description', 'message', 'body']
-        def walk(node):
+        # Set kullanarak O(1) lookup performansı (Red Flag 4 Fix)
+        PRIORITY_KEYS = {'text', 'content', 'value', 'caption', 'label', 'description', 'message', 'body'}
+        
+        # Iterative Stack Approach
+        stack = [ast_root]
+        
+        # Safety: Aşırı derin döngüler veya milyarlarca node ihtimaline karşı bir sayaç eklenebilir
+        # ancak iteratif yığın Pythonda bellek bitene kadar çökmez (Recursion limitine takılmaz).
+        
+        while stack:
+            node = stack.pop()
+            
             if isinstance(node, str):
                 s = node.strip()
-                if len(s) > 2 and not all(c in '\n\r\t ' for c in s):
+                # 2 karakterden uzun ve sadece boşluk olmayan metinleri al
+                if len(s) > 2 and not s.isspace():
                     strings.add(s)
+            
             elif isinstance(node, (list, tuple)):
-                for item in node:
-                    walk(item)
+                # Listeyi stack'e ekle (Ters sıra ile eklersek orijinal sırayla işleriz ama Set için sıra önemsiz)
+                stack.extend(node)
+                
             elif isinstance(node, dict):
-                # Önce öncelikli anahtarları gez
-                for key in PRIORITY_KEYS:
-                    if key in node:
-                        walk(node[key])
-                # Sonra kalanları gez
-                for k, v in node.items():
-                    if k not in PRIORITY_KEYS:
-                        walk(v)
+                # Dict değerlerini stack'e at
+                for key, value in node.items():
+                    # Key 'text' gibi öncelikli bir alansa, yine de stack'e atıp işliyoruz.
+                    stack.append(value)
+                    
             elif hasattr(node, '__dict__'):
-                d = vars(node)
-                for key in PRIORITY_KEYS:
-                    if key in d:
-                        walk(d[key])
-                for k, v in d.items():
-                    if k not in PRIORITY_KEYS:
-                        walk(v)
-        walk(ast_root)
+                # Nesne özelliklerini gez
+                for value in vars(node).values():
+                    stack.append(value)
+
         result = list(strings)
-        for i, s in enumerate(result[:3]):
-            self.log_message.emit('debug', f".rpymc sample string {i+1}: {repr(s)[:120]}")
+        if result:
+            self.log_message.emit('debug', f".rpymc extracted {len(result)} unique strings.")
         return result
     
     # Signals
@@ -619,6 +626,11 @@ class TranslationPipeline(QObject):
             stats = get_translation_stats(tl_files)
             if game_dir and os.path.isdir(game_dir):
                 self._create_language_init_file(str(game_dir))
+                
+                # strings.json oluştur (Agresif kanca için)
+                lang_dir = os.path.join(tl_path, renpy_lang)
+                self._generate_strings_json(tl_files, lang_dir)
+                
                 self._manage_runtime_hook()
             return PipelineResult(
                 success=True,
@@ -702,6 +714,11 @@ class TranslationPipeline(QObject):
         # Hedef dil icin dil baslatici dosyasi olustur
         if game_dir and os.path.isdir(game_dir):
             self._create_language_init_file(str(game_dir))
+            
+            # strings.json oluştur (Agresif kanca için)
+            lang_dir = os.path.join(tl_path, renpy_lang)
+            self._generate_strings_json(tl_files_updated, lang_dir)
+            
             self._manage_runtime_hook()
 
         self._set_stage(PipelineStage.COMPLETED, self.config.get_ui_text("stage_completed"))
@@ -768,10 +785,37 @@ class TranslationPipeline(QObject):
                 self.log_message.emit("warning", self.config.get_log_text('encoding_normalize_failed', path=file_path, error=str(e)))
         return normalized
     
+    def _generate_strings_json(self, tl_files: List[TranslationFile], lang_dir: str):
+        """
+        Tüm çevirileri strings.json dosyasına aktarır.
+        Agresif substring çeviri motoru için gereklidir.
+        """
+        try:
+            import json
+            mapping = {}
+            for tfile in tl_files:
+                for entry in tfile.entries:
+                    if entry.original_text and entry.translated_text:
+                        # Skip technical/empty/same
+                        orig = entry.original_text.strip()
+                        trans = entry.translated_text.strip()
+                        if not orig or not trans or orig == trans:
+                            continue
+                        mapping[orig] = trans
+            
+            if mapping:
+                json_path = os.path.join(lang_dir, "strings.json")
+                with open(json_path, 'w', encoding='utf-8') as f:
+                    json.dump(mapping, f, ensure_ascii=False, indent=4)
+                self.log_message.emit('info', self.config.get_log_text('log_strings_json_generated', count=len(mapping)))
+        except Exception as e:
+            self.logger.warning(f"Failed to generate strings.json: {e}")
+
     def _manage_runtime_hook(self):
         """
         Manages the presence of the runtime translation hook script based on settings.
         Generated by RenLocalizer to force translation of untagged strings.
+        v2.7.0: Loads ALL mappings from ALL .rpy files in tl directory.
         """
         if not self.project_path:
             return
@@ -789,7 +833,10 @@ class TranslationPipeline(QObject):
                 if old.name != hook_filename:
                     old.unlink(missing_ok=True)
 
-            should_exist = getattr(self.config.translation_settings, 'force_runtime_translation', False)
+            # Settings check: auto_generate_hook OR force_runtime_translation
+            auto_gen = getattr(self.config.translation_settings, 'auto_generate_hook', True)
+            force_run = getattr(self.config.translation_settings, 'force_runtime_translation', False)
+            should_exist = auto_gen or force_run
             
             # Hedef dili al
             target_lang = getattr(self, 'target_language', None) or getattr(self.config.translation_settings, 'target_language', 'turkish') or 'turkish'
@@ -798,100 +845,18 @@ class TranslationPipeline(QObject):
             renpy_lang = reverse_lang_map.get(target_lang.lower(), target_lang)
             
             if should_exist:
-                content = f'''# RenLocalizer Runtime Translation Hook
-# This script forces translation lookup for all text displayed by Ren'Py,
-# solving issues where developers missed the !t flag on interpolated strings.
-# Press Shift+L to manually switch to the translated language.
-# Generated by RenLocalizer.
-
-# Set default language at first run (before init blocks)
-# define config.default_language = "{renpy_lang}"  <-- REMOVED: Managed by zzz_{renpy_lang}_language.rpy
-
-init 1501 python:
-    # =========================================================================
-    # LANGUAGE HOTKEY: Shift+L
-    # =========================================================================
-    def _renlocalizer_switch_lang():
-        target = "{renpy_lang}"
-        renpy.change_language(target)
-        persistent.renlocalizer_target_lang = target
-        renpy.notify("RenLocalizer: Language -> {renpy_lang.title()}")
-        renpy.restart_interaction()
-
-    # Register Shift+L as language toggle
-    config.underlay.append(renpy.Keymap(shift_K_l=_renlocalizer_switch_lang))
-
-    # =========================================================================
-    # RUNTIME TEXT TRANSLATION HOOK (HYBRID MODE)
-    # =========================================================================
-    # We use a Hybrid Approach to catch ALL strings:
-    # 1. say_menu_text_filter: Translates Dialogue/Menus BEFORE variable substitution.
-    #    This catches strings like "%(name)s wins!" -> "%(name)s kazandı!".
-    # 2. replace_text: Translates Screens/UI AFTER substitution.
-    #    This catches UI text that doesn't go through the say statement.
-    
-    # --- Hook 1: Say/Menu Filter (Pre-Substitution) ---
-    if not hasattr(store, '_renlocalizer_old_say_filter'):
-        store._renlocalizer_old_say_filter = config.say_menu_text_filter
-
-    def _renlocalizer_safe_translate(s):
-        if not s: return s
-        try:
-            # Try primary Ren'Py API
-            if hasattr(renpy, 'translate_string'):
-                return renpy.translate_string(s)
-            # Try older Ren'Py 7 namespace
-            import renpy.translation
-            if hasattr(renpy.translation, 'translate_string'):
-                return renpy.translation.translate_string(s)
-        except:
-            pass
-        return s
-
-    def _renlocalizer_say_filter(s):
-        # 1. Run original filter first (if any)
-        if store._renlocalizer_old_say_filter:
-            s_orig = store._renlocalizer_old_say_filter(s)
-            if s_orig is not None:
-                s = s_orig
-        
-        # 2. Force Translation of the RAW string
-        if s:
-            translated = _renlocalizer_safe_translate(s)
-            if translated and translated != s:
-                return translated
-        return s
-
-    config.say_menu_text_filter = _renlocalizer_say_filter
-
-    # --- Hook 2: Replace Text (Post-Substitution / Screens) ---
-    if not hasattr(store, '_renlocalizer_old_replace_text'):
-        try:
-            store._renlocalizer_old_replace_text = config.replace_text
-        except:
-            store._renlocalizer_old_replace_text = lambda s: s
-
-    def _renlocalizer_force_translate(s):
-        # 1. Run original replace_text first
-        if store._renlocalizer_old_replace_text:
-            s = store._renlocalizer_old_replace_text(s)
-        
-        # 2. Force Translation (Fallback for UI)
-        if s:
-            translated = _renlocalizer_safe_translate(s)
-            if translated and translated != s:
-                return translated
-        return s
-
-    config.replace_text = _renlocalizer_force_translate
-'''
+                content = (
+                    RUNTIME_HOOK_TEMPLATE.replace("{renpy_lang}", renpy_lang)
+                    .replace("{{", "{")
+                    .replace("}}", "}")
+                )
                 save_text_safely(hook_path, content, encoding="utf-8")
-                self.log_message.emit('info', f"Runtime translation hook installed: {hook_filename}")
+                self.log_message.emit('info', self.config.get_ui_text("log_hook_installed").replace("{filename}", hook_filename))
             else:
                 # Remove if it exists
                 if hook_path.exists():
                     os.remove(hook_path)
-                    self.log_message.emit('info', f"Runtime translation hook removed: {hook_filename}")
+                    self.log_message.emit('info', self.config.get_ui_text("log_hook_removed").replace("{filename}", hook_filename))
                     
         except Exception as e:
             self.logger.warning(f"Failed to manage runtime hook: {e}")
@@ -900,6 +865,9 @@ init 1501 python:
         """
         Dil baslangic dosyasini olusturur.
         game/ klasorune yazilir, boylece oyun baslarken varsayilan dil ayarlanir.
+        
+        v2.6.7: Agresif aktivasyon - Bazı oyunlar basit config.default_language'ı
+        görmezden geldiği için çoklu yöntem kullanıyoruz.
         """
         try:
             # Hedef dil kodunu hesapla; ISO gelirse Ren'Py adina cevir
@@ -925,7 +893,6 @@ init 1501 python:
                     self.log_message.emit("warning", self.config.get_log_text('target_lang_default'))
 
             # Once eski otomatik init dosyalarini temizle ki tek dosya aktif kalsin
-            # Once eski otomatik init dosyalarini temizle ki tek dosya aktif kalsin
             try:
                 for existing in Path(game_dir).glob("*_language.rpy"):
                     if "renlocalizer" in existing.name or existing.name.startswith("a0_") or existing.name.startswith("zzz_"):
@@ -949,14 +916,79 @@ init 1501 python:
                 os.remove(init_file)
                 self.log_message.emit("info", self.config.get_ui_text("pipeline_lang_init_update"))
 
-            # Sade ve dinamik baslaticinin icerigi
-            # Sade ve dinamik baslaticinin icerigi (User Request: Simplified forcing)
-            content = (
-                f"# Auto-generated language initializer by RenLocalizer\n"
-                f"init 1500 python:\n"
-                f"    config.default_language = \"{language_code}\"\n"
-                f"    _preferences.language = \"{language_code}\"\n"
-            )
+            # Agresif çoklu-fazlı dil aktivasyon sistemi
+            content = f"""# ============================================================
+# RenLocalizer - Aggressive Language Activation
+# ============================================================
+# Bu dosya oyunun dilini ZORLA {language_code.title()}'ye çevirir.
+# Bazı oyunlar config.default_language'ı görmezden gelir,
+# bu yüzden birden fazla yöntem kullanıyoruz.
+
+# ============================================================
+# PHASE 1: Early Init (Config Override)
+# ============================================================
+init -100 python:
+    # Oyun başlamadan önce varsayılan dili ayarla
+    config.default_language = "{language_code}"
+    
+    # Bazı oyunlar bu değişkeni kontrol eder
+    if hasattr(config, "language"):
+        config.language = "{language_code}"
+
+# ============================================================
+# PHASE 2: Preference Override (User Settings)
+# ============================================================
+init 1500 python:
+    # Kullanıcı tercihlerini zorla değiştir
+    _preferences.language = "{language_code}"
+    
+    # Tercihleri kaydet (kalıcı olması için)
+    try:
+        renpy.save_persistent()
+    except:
+        pass
+
+# ============================================================
+# PHASE 3: Runtime Enforcement (Startup Hook)
+# ============================================================
+init python:
+    def force_{language_code}_language():
+        \"\"\"
+        Oyun her başladığında dili kontrol et ve {language_code.title()}'ye çevir.
+        Kullanıcı başka bir dil seçse bile {language_code.title()}'ye geri döndür.
+        \"\"\"
+        if _preferences.language != "{language_code}":
+            _preferences.language = "{language_code}"
+            try:
+                renpy.save_persistent()
+            except:
+                pass
+            
+            # Dil değişikliğini uygula
+            try:
+                renpy.change_language("{language_code}")
+            except:
+                pass
+    
+    # Oyun başladığında bu fonksiyonu çalıştır
+    config.start_callbacks.append(force_{language_code}_language)
+
+# ============================================================
+# PHASE 4: Persistent Override (Save File Protection)
+# ============================================================
+init python:
+    # Eğer persistent'ta dil ayarı varsa onu da değiştir
+    if hasattr(persistent, "language"):
+        persistent.language = "{language_code}"
+    
+    # Bazı oyunlar kendi persistent değişkenlerini kullanır
+    if hasattr(persistent, "game_language"):
+        persistent.game_language = "{language_code}"
+    
+    if hasattr(persistent, "selected_language"):
+        persistent.selected_language = "{language_code}"
+"""
+
 
             save_text_safely(Path(init_file), content, encoding='utf-8-sig', newline='\n')
 
@@ -964,6 +996,7 @@ init 1501 python:
 
         except Exception as e:
             self.log_message.emit("warning", self.config.get_ui_text("pipeline_lang_init_failed").format(error=e))
+
 
 
 

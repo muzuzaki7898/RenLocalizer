@@ -7,7 +7,7 @@
 
 RenLocalizer is a sophisticated, cross-platform tool designed to automate the translation and localization of Ren'Py games. It combines traditional machine translation (Google, DeepL) with state-of-the-art LLMs (OpenAI, Gemini, Local LLMs) and a powerful context-aware parser to deliver high-quality translations while preserving game logic.
 
-> **Status:** Active Development (v2.4.10)  
+> **Status:** Active Development (v2.6.6)  
 > **Supported Platforms:** Windows, macOS, Linux  
 > **Documentation:** [Visit our GitHub Wiki](https://github.com/Lord0fTurk/RenLocalizer/wiki) or check the local [[docs/wiki]] folder.
 

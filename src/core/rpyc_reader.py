@@ -42,18 +42,43 @@ import sys
 # ============================================================================
 # Compiling these at module level prevents re-compilation for every single string check.
 
+# Universal ID Ranges (Latin, Cyrillic, Greek, Arabic, Hebrew, Thai, CJK, Hangul)
+# Used to build other regexes securely
+_UNICODE_RANGES = (
+    r'a-zA-Z'                                   # Latin Basic
+    r'\u00C0-\u00FF\u0100-\u024F\u1E00-\u1EFF'  # Latin Extended
+    r'\u0400-\u052F\u2DE0-\u2DFF\uA640-\uA69F'  # Cyrillic (Expanded)
+    r'\u0370-\u03FF\u1F00-\u1FFF'               # Greek
+    r'\u0600-\u06FF\u0750-\u077F'               # Arabic
+    r'\u0590-\u05FF'                            # Hebrew
+    r'\u0E00-\u0E7F'                            # Thai
+    r'\u4E00-\u9FFF\u3400-\u4DBF'               # CJK Unified
+    r'\u3040-\u309F\u30A0-\u30FF'               # Hiragana/Katakana
+    r'\uAC00-\uD7AF'                            # Hangul
+)
+
+# Checks for characters allowed in valid text (Letters + Numbers + Common Punctuation)
+_RE_VALID_TEXT_CHARS = re.compile(f'[{_UNICODE_RANGES}]')
+
 # Binary / Corruption Checks
 _RE_PUA = re.compile(r'[\uE000-\uF8FF\uFFF0-\uFFFF]')
 _RE_CONTROL_CHARS = re.compile(r'[\x00-\x08\x0B\x0C\x0E-\x1F\x7F-\x9F]')
-_RE_NON_PRINTABLE_HIGH_RATIO = re.compile(r'[^\x20-\x7E\s\u00A0-\u00FF\u0100-\u024F\u0400-\u04FF\u4E00-\u9FFF\u3040-\u30FF\uAC00-\uD7AF]')
-_RE_UNUSUAL_SHORT = re.compile(r'[^\x20-\x7E]')
-_RE_ASCII_LETTERS = re.compile(r'[a-zA-Z]')
+
+# Inverse logic: Match things that are NOT valid text, whitespace, or common symbols
+# Used to detect binary blobs disguised as strings
+_RE_NON_PRINTABLE_HIGH_RATIO = re.compile(f'[^\\x20-\\x7E\\s{_UNICODE_RANGES}]')
+
+# For short strings, any character NOT in our safe ranges is "unusual"
+_RE_UNUSUAL_SHORT = re.compile(f'[^\\x20-\\x7E{_UNICODE_RANGES}]')
+
+_RE_ASCII_LETTERS = re.compile(r'[a-zA-Z]') # Kept for variable name checking
+_RE_ANY_LETTER = re.compile(f'[{_UNICODE_RANGES}]') # Used for language-agnostic text validation
 
 # Format Checks
 _RE_COLOR_HEX = re.compile(r'^#[0-9a-fA-F]{3,8}$')
 _RE_PURE_NUMBER = re.compile(r'^-?\d+\.?\d*$')
-_RE_SNAKE_CASE = re.compile(r'^[a-z][a-z0-9]*(_[a-z0-9]+)+$')
-_RE_HAS_LETTER = re.compile(r'[a-zA-Z\u00C0-\u024F\u0400-\u04FF]')
+_RE_SNAKE_CASE = re.compile(r'^[a-z][a-z0-9]*(_[a-z0-9]+)+$') # Strictly ASCII for technical variables
+_RE_HAS_LETTER = re.compile(f'[{_UNICODE_RANGES}]')
 
 # Python Code Patterns (Combined for speed)
 _PYTHON_CODE_PATTERNS = [
@@ -74,6 +99,8 @@ _PYTHON_BUILTINS = [
 _RE_PYTHON_BUILTINS = re.compile('|'.join(f'(?:{p})' for p in _PYTHON_BUILTINS))
 
 _RE_FILE_PATH_VAR = re.compile(r'["\']?[\w/]+["\']?\s*\+\s*\w+')
+_RE_FILE_PATH_STRICT = re.compile(r'^[\w\-. ]+(?:/[\w\-. ]+)+$') # Detects paths like 'audio/bgm/track.ogg'
+_RE_STRICT_SNAKE_CASE = re.compile(r'^[a-z_][a-z0-9_]*$') # Identifies likely variable names
 
 
 # ============================================================================
@@ -475,6 +502,19 @@ class FakePass(FakeASTBase):
     pass
 
 
+class FakeTestcase(FakeASTBase):
+    """
+    Represents testcase statement (Ren'Py 8.x+).
+    Used for automated testing scenarios.
+    Example: testcase "test_menu" label start
+    """
+    def __init__(self):
+        super().__init__()
+        self.label: str = ""  # Target label for the test
+        self.options: Optional[str] = None  # Test options/configuration
+        self.block: List[Any] = []  # Test block content
+
+
 class FakeGeneric(FakeASTBase):
     """Generic fallback for unknown AST nodes."""
     def __init__(self):
@@ -872,6 +912,23 @@ class RenpyUnpickler(pickle.Unpickler):
     Custom unpickler that redirects Ren'Py classes to our fake implementations.
     """
     
+    def find_class(self, module, name):
+        """
+        Secure class loading: Only allow mapped Fake classes and whitelisted standard types.
+        Prevents arbitrary code execution from malicious pickles.
+        """
+        # 1. Check Ren'Py Class Map
+        if (module, name) in self.CLASS_MAP:
+             return self.CLASS_MAP[(module, name)]
+        
+        # 2. Whitelist for safe standard library types (used in Ren'Py internals)
+        if module in ('builtins', 'collections', 'datetime', 'time', 'functools', 'itertools', 're', 'types', '__builtin__'):
+             return super().find_class(module, name)
+             
+        # 3. Soft Block: Return harmless Generic for unknown classes to prevent crashing but stop RCE
+        # This is safer than executing arbitrary code (e.g. os.system)
+        return FakeGeneric
+    
     # Mapping of Ren'Py class paths to our fake classes
     CLASS_MAP = {
         # Core AST nodes (renpy.ast)
@@ -907,7 +964,7 @@ class RenpyUnpickler(pickle.Unpickler):
         ("renpy.ast", "Pass"): FakePass,
         ("renpy.ast", "Transform"): FakeGeneric,
         ("renpy.ast", "Style"): FakeGeneric,
-        ("renpy.ast", "Testcase"): FakeGeneric,
+        ("renpy.ast", "Testcase"): FakeTestcase,
         ("renpy.ast", "Camera"): FakeGeneric,
         ("renpy.ast", "ShowLayer"): FakeGeneric,
         ("renpy.ast", "RPY"): FakeGeneric,
@@ -927,7 +984,6 @@ class RenpyUnpickler(pickle.Unpickler):
         
         # New Ren'Py 8.5.2 Nodes
         ("renpy.ast", "Bubble"): FakeBubble,
-        ("renpy.ast", "Testcase"): FakeTestcase,
         
         # ATL (Animation and Transformation Language)
         ("renpy.atl", "RawBlock"): FakeRawBlock,
@@ -1291,6 +1347,11 @@ class ASTTextExtractor:
         self.DATA_KEY_WHITELIST = DATA_KEY_WHITELIST
         # Instantiate parser once for performance (placeholder preservation, etc.)
         self.parser = RenPyParser(config_manager)
+        
+        # Filter settings
+        self.translate_character_names = False
+        if self.config_manager:
+             self.translate_character_names = getattr(self.config_manager.translation_settings, 'translate_character_names', False)
     
     def extract_from_file(self, file_path: Union[str, Path]) -> List[ExtractedText]:
         """
@@ -1432,15 +1493,18 @@ class ASTTextExtractor:
              if strange_chars > text_len * 0.3:
                  return True
              
-             # Low alpha content
+             # Low alpha content (Using ANY_LETTER instead of ASCII_LETTERS for Global Support)
              if text_len > 8:
-                 alpha_count = len(_RE_ASCII_LETTERS.findall(text_strip))
+                 # Original ASCII check killed Russian/Chinese text. Now we check for ANY valid letter.
+                 alpha_count = len(_RE_ANY_LETTER.findall(text_strip))
+                 # If text is long but has very few actual letters (e.g. mostly symbols/numbers), kill it.
                  if alpha_count < text_len * 0.2:
                      return True
 
         if 3 <= text_len <= 15:
             unusual_chars_count = len(_RE_UNUSUAL_SHORT.findall(text_strip))
-            if unusual_chars_count >= 1 and len(_RE_ASCII_LETTERS.findall(text_strip)) <= 3:
+            # Relaxed check: Allow non-ASCII if they are valid letters in supported languages
+            if unusual_chars_count >= 1 and len(_RE_ANY_LETTER.findall(text_strip)) <= 1:
                 return True
         # --- END BINARY/CORRUPTED ---
 
@@ -1464,6 +1528,17 @@ class ASTTextExtractor:
         if ' ' not in text_strip and '_' in text_strip:
             if _RE_SNAKE_CASE.match(text_strip):
                 return True
+        
+        # Strict Path Check (New v2.6.4)
+        if '/' in text_strip and ' ' not in text_strip:
+            if _RE_FILE_PATH_STRICT.match(text_strip):
+                return True
+
+        # Strict Variable Name Check (New v2.6.4)
+        if ' ' not in text_strip and text_strip.islower() and '_' in text_strip:
+             if _RE_STRICT_SNAKE_CASE.match(text_strip):
+                 # Variables usually don't have punctuation except specific ones
+                 return True
 
         # Check against the whitelist (context-based)
         if context and self._context_requires_whitelist(context_lower) and not any(key in context_lower for key in DATA_KEY_WHITELIST):
@@ -1523,11 +1598,15 @@ class ASTTextExtractor:
     
     def _walk_nodes(self, nodes: List[Any], context: str = "") -> None:
         """Recursively walk AST nodes and extract text."""
-        if not isinstance(nodes, (list, tuple)):
-            nodes = [nodes]
-        
-        for node in nodes:
-            self._process_node(node, context)
+        # Safety: Catch recursion depth if AST is malformed or excessively deep
+        try:
+            if not isinstance(nodes, (list, tuple)):
+                nodes = [nodes]
+            
+            for node in nodes:
+                self._process_node(node, context)
+        except RecursionError:
+            pass # Stop processing this branch deeply to prevent crash
 
     def _extract_from_code_obj(self, code_obj: Any, line_number: int) -> None:
         """Extract strings from a code-like object using AST parsing and fallback to Regex."""
@@ -1586,9 +1665,18 @@ class ASTTextExtractor:
                     elif isinstance(node.func, ast.Attribute):
                         # Handle renpy.say, renpy.notify
                         if hasattr(node.func.value, 'id') and node.func.value.id == 'renpy':
-                            func_name = 'renpy.' + node.func.attr
+                            func_name = f"renpy.{node.func.attr}"
+
                     
-                    if func_name in ('_', '__', 'renpy.say', 'renpy.notify'):
+                    # Define function groups based on settings
+                    target_funcs = {'_', '__', 'Tr', 'tr', 'renpy.say', 'renpy.notify', 'Notify',
+                                    'SetVariable', 'SetScreenVariable', 'ToggleVariable'}
+                                    
+                    # Add character definitions only if enabled
+                    if getattr(self, 'translate_character_names', True):
+                         target_funcs.update({'Character', 'ADVCharacter', 'NVLCharacter', 'DynamicCharacter'})
+
+                    if func_name in target_funcs:
                         for arg in node.args:
                             arg_val = None
                             if isinstance(arg, ast.Constant) and isinstance(arg.value, str):
@@ -1598,6 +1686,35 @@ class ASTTextExtractor:
                             
                             if arg_val:
                                 self._add_text(arg_val, line_number, 'call_arg', context=func_name)
+
+                # Enhanced Data Structure Crawling (New v2.6.4)
+                # Catch strings inside Lists ["Item 1", "Item 2"] and Dicts {"name": "Hero"}
+                elif isinstance(node, (ast.List, ast.Tuple, ast.Set)):
+                    for elt in node.elts:
+                        val = None
+                        if isinstance(elt, ast.Constant) and isinstance(elt.value, str):
+                            val = elt.value
+                        elif hasattr(ast, 'Str') and isinstance(elt, ast.Str):
+                            val = elt.s
+                            
+                        # Strict filtering for lists (high risk of assets/IDs)
+                        if val and len(val) > 2:
+                            # Must pass strict checks: no paths, no technical IDs
+                            if not self.parser.is_technical_string(val) and self.parser.is_meaningful_text(val):
+                                 self._add_text(val, line_number, 'python_list', context='list_item')
+
+                elif isinstance(node, ast.Dict):
+                    # Only check values, keys are usually technical identifiers
+                    for val_node in node.values:
+                        val = None
+                        if isinstance(val_node, ast.Constant) and isinstance(val_node.value, str):
+                            val = val_node.value
+                        elif hasattr(ast, 'Str') and isinstance(val_node, ast.Str):
+                            val = val_node.s
+                            
+                        if val and len(val) > 2:
+                            if not self.parser.is_technical_string(val) and self.parser.is_meaningful_text(val):
+                                 self._add_text(val, line_number, 'python_dict', context='dict_value')
                                 
         except Exception:
             # Fallback to Regex if AST parsing fails (e.g. incomplete code fragments)
@@ -1662,6 +1779,28 @@ class ASTTextExtractor:
                     context=context,
                     node_type=node_type
                 )
+            
+            # Check arguments for additional text (e.g. what_prefix="...")
+            args = getattr(node, 'arguments', None)
+            if args:
+                 # Flatten arguments structure to find strings
+                 # FakeArgumentInfo or tuple/list
+                 candidates = []
+                 if isinstance(args, FakeArgumentInfo):
+                     candidates.extend([a for arg_tuple in args.arguments for a in arg_tuple if isinstance(a, str)])
+                 elif isinstance(args, (list, tuple)):
+                     candidates.extend([a for a in args if isinstance(a, str)])
+                 
+                 for arg_text in candidates:
+                     if arg_text and isinstance(arg_text, str) and not self._is_technical_string(arg_text, context="say_arg"):
+                          self._add_text(
+                            str(arg_text),
+                            getattr(node, 'linenumber', 0),
+                            'dialogue_arg',
+                            character=str(character) if character else "",
+                            context=f"{context}/arg",
+                            node_type=node_type
+                        )
         
         # Menu choices
         elif isinstance(node, FakeMenu):
@@ -1768,6 +1907,19 @@ class ASTTextExtractor:
         elif isinstance(node, FakeWhile):
             if getattr(node, 'block', None):
                 self._walk_nodes(node.block, context)
+        
+        # Python Code Block (New v2.6.4)
+        elif isinstance(node, FakePython):
+            code_obj = getattr(node, 'code', None)
+            self._extract_from_code_obj(code_obj, getattr(node, 'linenumber', 0))
+
+        # User Statement (New v2.6.4)
+        elif isinstance(node, FakeUserStatement):
+            line = getattr(node, 'line', '')
+            if line:
+                # User statements are unstructured, use loose extraction from the raw line
+                # e.g. "chapter set 'Beginning'"
+                self._extract_strings_from_code(line, getattr(node, 'linenumber', 0))
         
         # Translate block - extract both old and new
         elif isinstance(node, FakeTranslateString):
@@ -1998,6 +2150,40 @@ class ASTTextExtractor:
             text = match.group(1)
             processed_text, placeholder_map = p.preserve_placeholders(text)
             self._add_text(processed_text, line_number, 'ui', context='displayable', placeholder_map=placeholder_map)
+        
+        # ============================================================
+        # V2.6.7: NEW PATTERNS FROM REN'PY DOCUMENTATION RESEARCH
+        # ============================================================
+        
+        # Match ___("text") pattern - triple underscore immediate translation
+        # Example: text ___("Hello [player]")
+        # Translates AND interpolates variables immediately
+        triple_under_pattern = r'___\s*\(\s*["\'](.+?)["\']\s*\)'
+        for match in re.finditer(triple_under_pattern, code):
+            text = match.group(1)
+            processed_text, placeholder_map = p.preserve_placeholders(text)
+            self._add_text(processed_text, line_number, 'string', context='python/___', placeholder_map=placeholder_map)
+        
+        # Detect strings with !t flag interpolation
+        # Example: "I'm feeling [mood!t]."
+        # The !t flag marks the variable for translation lookup
+        # We extract the full string, not just the variable
+        t_flag_pattern = r'["\'](.* ?\[\w+!t\].+?)["\']'
+        for match in re.finditer(t_flag_pattern, code):
+            text = match.group(1)
+            # Only extract if it has actual text, not just the placeholder
+            if len(text.replace('[', '').replace(']', '').strip()) > 3:
+                processed_text, placeholder_map = p.preserve_placeholders(text)
+                self._add_text(processed_text, line_number, 'string', context='interpolation_t', placeholder_map=placeholder_map)
+        
+        # Match nvl "text" or nvl clear "text" patterns
+        # Example: nvl "This is NVL dialogue"
+        # NVL mode is used for novel-style text display
+        nvl_pattern = r'nvl\s+(?:clear\s+)?["\'](.+?)["\']'
+        for match in re.finditer(nvl_pattern, code):
+            text = match.group(1)
+            processed_text, placeholder_map = p.preserve_placeholders(text)
+            self._add_text(processed_text, line_number, 'dialogue', context='nvl', placeholder_map=placeholder_map)
         
         # Match config.name = "Game Name" pattern
         config_name_pattern = r'config\.(name|version)\s*=\s*["\'](.+?)["\']'
