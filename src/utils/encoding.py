@@ -77,7 +77,7 @@ def save_text_safely(path: Path, content: str, encoding: str = "utf-8-sig", newl
         if os.path.exists(temp_path):
             try:
                 os.unlink(temp_path)
-            except:
+            except Exception:
                 pass
     return False
 

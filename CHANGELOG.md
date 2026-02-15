@@ -1,4 +1,451 @@
-# RenLocalizer Changelog
+﻿# RenLocalizer Changelog
+
+## [2.7.1] - 2025-06-14
+
+### Bug Fixes
+- **DeepL formality bug**: Fixed two bugs—wrong attribute access path (`getattr(self.config_manager, 'deepl_formality')` instead of going through `translation_settings`), and `config_manager` not passed to `DeepLTranslator` constructor. Turkish added to formality-supported languages.
+- **Empty `{}` placeholder protection**: `.format()` positional `{}` placeholders were not protected during translation. Added `_PAT_EMPTY_BRACE` to `syntax_guard.py`.
+- **Menu hint parameter parsing**: `menu_choice_re` regex now handles `(hint=expression)` and nested parentheses like `(hint=func(x))` after menu text strings.
+- **AES loader key derivation mismatch**: Fixed critical bug where the generated Ren'Py loader used a hash of the passphrase instead of the passphrase itself for key derivation, making decryption impossible.
+- **XML entity encoding**: Fixed missing `&` → `&amp;` escaping in AI translator batch XML `context` and `type` attributes.
+- **Config int/float crash**: `__post_init__` validators now use safe conversion helpers that handle `None`/empty string/invalid values gracefully instead of crashing.
+- **Batch boundary context leak**: `_prev_entry_text` is now reset per batch and checks file boundaries, preventing cross-file/cross-scene context contamination for `extend` entries.
+- **Glossary thread-safety**: Auto-protect character names now acquires ConfigManager lock before mutating glossary.
+- **RPA header size**: Dynamic header calculation instead of hardcoded 46 bytes (actual is 34).
+- **Obfuscation keyword filter**: `obfuscate_rpy_content()` now excludes Ren'Py keywords (`if`, `return`, etc.) from dialogue matching to prevent false positives.
+
+### New Features
+
+#### Config Validation
+- All 4 dataclasses (`TranslationSettings`, `ApiKeys`, `AppSettings`, `ProxySettings`) now have `__post_init__` validators
+- **Numeric clamps**: 15+ fields clamped to safe ranges (prevents `batch_size=0` infinite loops, `concurrency=0` deadlocks)
+- **Enum allowlists**: `deepl_formality`, `gemini_safety_settings`, `app_theme`, `output_format`
+- **String sanitization**: API keys auto-stripped, language codes trimmed, URL fields cleaned
+- **JSON validation**: `custom_function_params` validated on load (invalid → `"{}"`)
+
+#### Extend Context for AI Translation
+- New `TextType.EXTEND` type in parser for `extend` dialogue lines
+- Pipeline tracks previous entry text, passes as `context_hint` metadata
+- AI translator adds `context="..."` attribute to batch XML for better translations
+
+#### Custom Function Parameter Extraction
+- New `custom_function_params` JSON config field (TranslationSettings)
+- Users define which function calls to extract: `{"Quest": {"pos": [0,1,2]}, "notify": [0]}`
+- `DeepExtractionConfig.get_merged_text_calls()` merges user config with built-in TIER1
+
+#### Auto-Protect Character Names
+- New `auto_protect_character_names` config field (default: `True`)
+- Pipeline auto-collects Character names from `define` entries
+- Names (including multi-word like "Mary Jane") added to glossary as `name → name`
+
+#### Ren'Py Translation Lint (`src/tools/renpy_lint.py`)
+- Post-translation validator with 10 check codes (E000–E050, W010–W041, I010, R001)
+- Indentation validation (tabs, non-4-space)
+- `translate` block structure integrity (duplicate IDs, missing indent)
+- `old`/`new` pair validation (orphaned old, missing new)
+- Placeholder preservation: `[var]`, `{tag}`, `%(name)s`, `.format()` placeholders
+- String syntax (unbalanced quotes, triple-quote toggle fix)
+- Encoding/BOM checks (UTF-16 → error)
+- Optional Ren'Py engine lint integration (`run_renpy_lint()`)
+
+#### Project Import/Export (`src/utils/project_io.py`)
+- `.rlproj` archive format (ZIP containing JSON manifests)
+- Exports: settings, glossary, critical terms, never-translate rules, translation cache
+- Imports with merge options (glossary merge/replace, selective settings)
+- ZIP bomb protection (100 MB per entry, 500 MB total limit)
+- API keys excluded by default for safety
+- Version-aware manifest for future compatibility
+
+#### JSON/YAML Data Extractor Plugin System (`src/core/data_extractors.py`)
+- `BaseExtractor` abstract class with key-based heuristic filtering
+- `JsonExtractor` with auto-detection, write-back support
+- `YamlExtractor` (graceful degradation without PyYAML, roundtrip warning)
+- `ExtractorRegistry` with auto-detect and custom plugin registration
+- Heuristic filters: skip `id`, `path`, `image`, `color`; include `text`, `dialogue`, `name`, `description`
+- Directory scanning with extension filtering
+
+#### Translation Encryption/Obfuscation (`src/utils/translation_crypto.py`)
+- **Obfuscation mode** (zero dependencies): Base64 encodes strings, injects Ren'Py `init -999` decoder
+- Round-trip: `obfuscate_rpy_content()` ↔ `deobfuscate_rpy_content()`
+- File-level API: `obfuscate_rpy_file()`
+- **AES mode** (requires `cryptography`): AES-256-GCM encryption with PBKDF2 key derivation
+- Generates `.rlenc` + loader `.rpy` with real AES-GCM decryption for Ren'Py runtime
+
+#### RPA Archive Packer (`src/utils/rpa_packer.py`)
+- Creates RPA-3.0 archives compatible with Ren'Py's archive loader
+- `pack_directory()` with extension filtering and prefix support
+- `pack_files()` for explicit file mapping
+- Round-trip verified with existing `RPAParser` extractor
+- Convenience: `pack_translations()` one-call API
+
+### Tests
+- 46 new tests for all v2.7.1 features (469 total passing)
+- +39 atomic segment + quote-stripping + segment splitting tests (520 total passing)
+- Covers: config validation, lint, project I/O, extractors, crypto, RPA packer, atomic segments, quote-stripping, strings.json segment splitting (angle-pipe + bare pipe)
+
+### 🔀 Delimiter Atomic Segment Registration (v2.7.1)
+
+**Issue:** Ren'Py runtime does not use `<A|B|C>` blocks as a single string — it calls each segment individually via `vary()` or list indexing. However, the pipeline was writing only a single `old`/`new` pair for the combined block, so Ren'Py couldn't match individual segments and fell back to English.
+
+**Root Cause:** `_translate_entries()` was correctly splitting and translating delimiter segments, but only wrote the combined block (`<TransA|TransB|TransC>`) to output files. At runtime, when `vary()` looked up `"TransA"` individually, it found no match in the translation dictionary since only the combined block existed.
+
+**Fix — Atomic Segment Registration:**
+
+1. **Instance variable**: `_last_atomic_segments = {}` is reset on each `_translate_entries()` call
+2. **Per-batch collection**: `_atomic_segments = []` list is populated during batch result processing
+3. **Multi-group path**: When `rejoin_angle_pipe_groups()` succeeds, each segment's `(original_text, translated_text)` pair is collected from result metadata
+4. **Bare-pipe path**: Same collection logic applies for `_delimiter_groups` entries
+5. **Phase 2.5 block**: `_atomic_segments` pairs are written to both the `translations` dict and `self._last_atomic_segments` (with duplicate checking)
+6. **`_generate_strings_json()` updated**: Atomic segments are added to strings.json via the `extra_translations` parameter
+
+**Critical Fix — play_dialogue Quote Wrapping (hotfix):**
+- **Bug 1 (Crash)**: The initial implementation created an `_rl_segments.rpy` file, but its `old` entries collided with existing entries in `strings.rpy` → Ren'Py crash: `Exception: A translation for "Really?" already exists at...`
+- **Bug 2 (Translation invisible)**: The game's `play_dialogue()` function wrapped `vary()` output in literal double quotes: `renpy.say(speaker, '"'+talk+'"')`. So the runtime text `"Really?"` didn't match the `Really?` key in strings.json.
+- **Bug 3 (IDE errors)**: The `_rl_segments.rpy` file showed entirely red in the IDE, and Ren'Py `translate XX strings:` blocks do not affect dynamic `renpy.say()` calls.
+
+**Architecture Decision — `_rl_segments.rpy` Removed:**
+- `translate XX strings:` blocks only work for static string matching — they DO NOT AFFECT dynamic `renpy.say()` calls
+- The `vary()` + `play_dialogue()` system is fully dynamic: `renpy.say(mc, '"' + vary("A|B") + '"')`
+- Therefore `_rl_segments.rpy` served no useful purpose — removed entirely
+- `_write_atomic_segments_rpy()` method DEPRECATED — disabled with early `return`
+- Pipeline now automatically cleans up old `_rl_segments.rpy` + `.rpyc` files
+
+**Fix — Runtime Hook Quote-Stripping (v4.1.0+):**
+- **Layer 1** (`_rl_say_menu_text_filter`): New "Try 3" — for quote-wrapped text like `"Really?"`, strips outer quotes, looks up `Really?`, and re-wraps the translation in quotes if found
+- **Layer 2** (`_rl_replace_text`): New "Step 3" — same quote-stripping logic, inner text searched via exact + case-insensitive lookup, found translation re-wrapped in quotes
+- Both layers include empty string/short string guards (crash-safe)
+
+**Fix — strings.json Segment Splitting (v2.7.1 hotfix-2):**
+- **Core issue**: `_translate_entries()` only collected atomic segments when new translation engine results arrived — segments from cache or previous runs were not split
+- **`translate_existing_tl` path**: `_generate_strings_json` was never called → atomic segments were not written to strings.json (fixed)
+- **Solution**: `_generate_strings_json()` now scans all delimiter patterns after building the mapping:
+  - **Path 1 — Angle-pipe** (`<A|B|C>`): Parses groups using `split_angle_pipe_groups()`
+    - Single group: `<A|B|C>` → individual entries for `A`, `B`, `C`
+    - Multiple groups: `text <A|B> mid <C|D>` → entries for `A`, `B`, `C`, `D`
+    - Embedded group: `And they all <X|Y|Z>...` → entries for `X`, `Y`, `Z`
+  - **Path 2 — Bare pipe** (`A|B|C`, without `<>`): `split_delimited_text()` + simple pipe split fallback
+    - Example: `Interesting...|Really...?|Indeed...` → entries for `Interesting...`, `Really...?`, `Indeed...`
+    - `vary('A|B|C')` produces strings in exactly this format
+    - Skipped for safety if segment counts differ between original and translation
+  - Does not overwrite existing segments (duplicate protection)
+  - Segments where `orig == trans` are skipped
+
+**Output:**
+- `strings.json`: Combined blocks + individual segments written together (single output point)
+- Runtime hook: `play_dialogue()` compatibility via quote-stripping
+- Pipeline cleanup: Old `_rl_segments.rpy` + `.rpyc` files automatically removed
+
+**Tests:** 39 tests — segment split, dict building, strings.json injection + **segment splitting** (13 tests: angle-pipe + bare pipe + mixed), Ren'Py vary() compatibility, **quote-stripping** (Layer 1 + Layer 2, 13 tests)
+
+### Multi-Group Angle-Pipe Delimiter System (v2.7.1)
+
+**Issue:** The delimiter system (`<seg1|seg2|...>` patterns) had 3 critical bugs causing 97/229 (42%) delimiter patterns to produce incorrect translations:
+
+1. **Multi-group regex failure**: Strings with MULTIPLE `<...|...>` groups (e.g., `text <A|B> mid <C|D> end`) couldn't match the `^...$` single-group regex, falling to bare-pipe split which destroyed the `<>` structure
+2. **Surrounding text not translated**: For `Pirate activity <A|B> remains challenging!`, the text outside the angle brackets ("Pirate activity", "remains challenging!") was embedded in prefix/suffix and NEVER translated
+3. **Structural integrity too strict**: Single-word segments like `<increasing|forecast|intensifying>` and short phrases like `<Indeed.|Really?|Is that so?>` were rejected by the min_words=2/min_len=8 requirement
+
+**Fix — New `split_angle_pipe_groups()` system:**
+- Uses `re.finditer()` to find ALL `<...|...>` groups in a string (not just one)
+- Creates a template with `[DGRP_N]` placeholders (protected by `protect_renpy_syntax`)
+- Template is translated as a single unit (preserving sentence context and allowing natural word order)
+- Each group's segments are translated independently
+- `rejoin_angle_pipe_groups()` reassembles the final text
+
+**Results:**
+- **Before**: 132/229 OK (57.6%), 97 broken
+- **After**: 228/229 OK (99.6%), 1 remaining (all-numeric group, handled by GT)
+- 69 patterns with surrounding text now get full translation
+- Short/single-word segments accepted without min_words restriction
+- Numeric groups (`<0.1|0.02|0.005>`) preserved in template as-is (no translation needed)
+- Turkish word order: GT naturally reorders `[DGRP_0]` and `[DGRP_1]` in template
+
+**False-Positive Fixes:**
+- `_CODE_DOT_RE`: Requires 2+ chars before dot (prevents `A.I.` abbreviation false positive)
+- File path detection: Uses `re.search(r'[\\/][A-Za-z_]', s)` — prevents `\"` escaped quote AND `10/20` numeric slash false positives
+
+**Safety Guards:**
+- Doubled placeholder detection: If GT duplicates a `[DGRP_N]` token, `rejoin_angle_pipe_groups()` returns `None` (safe fallback)
+- Remaining `[DGRP_` text after reassembly → automatic corruption detection → original text preserved
+
+**Pipeline Integration:**
+- `split_angle_pipe_groups()` tried FIRST (handles all angle-bracket patterns)
+- `split_delimited_text()` now only handles bare pipe patterns (angle-bracket guard added)
+- Result processing handles multi-group rejoin with corruption detection
+
+### 🛡️ Critical: Dotted-Path & Python Builtin Leak Fix (Crash Prevention)
+
+**Issue:** Despite initial filter hardening, ~31 critical code strings still leaked through filters and caused `IndexError: list index out of range` crash in `renpy/ui.py` when translated. These fell into patterns not covered by existing regexes.
+
+**Leaked Patterns (SpaceJourneyX 230_023, 51K-line strings.rpy):**
+- 16× `GAME.hour in [18,19,20,21,22]` — dotted path + `in` + square brackets
+- 13× `'reactor activated' in GAME.mc.done` — multi-word quoted string in dotted path
+- 1× `True` standalone — Python boolean translated to `Doğru`
+- 1× `GAME.day%5 == 0` — dotted path + modulo/comparison
+- 1× `[x >= 70 for x in bot.skills.values()].count(True) >= 3` — list comprehension
+- 1× `GAME.getStarSys().ID in ['SSIDIltari']` — method chain + `in` check
+
+**Fixes (6 new detection patterns):**
+
+1. **`_DOTTED_IN_RE`**: `GAME.hour in [list]`, `GAME.getStarSys().ID in ['X']` — dotted path followed by `in [`
+2. **`_DOTTED_COMPARE_RE`**: `GAME.day%5 == 0`, `GAME.hour < 18` — dotted path followed by comparison operators
+3. **`_LIST_COMPREHENSION_RE`**: `[x >= 70 for x in items]` — Python list comprehension inside brackets
+4. **`_BRACKET_METHOD_RE`**: `].count(True)`, `).items()` — method call on bracket/paren result
+5. **`_PYTHON_CONDITION_RE` expanded**: Now handles multi-word quoted strings (`'reactor activated'` → `[^'"]+` instead of `\w+`)
+6. **`True`/`False`/`None` standalone**: Python builtin constants blocked as standalone text
+
+**Broad Code Detector Enhancement:**
+- Lowered dot reference threshold from 2 to 1 (with 3-char minimum to exclude abbreviations like `e.g.`, `U.S.`, `Dr.`)
+- Pattern: 1+ dotted reference (3+ chars before dot) AND comparison/boolean operators
+
+**Safety Balance:**
+- All 31 crash-causing code strings now blocked (was 0/31)
+- 99.39% of translated entries still pass through (only 96/15,843 filtered)
+- Legitimate game dialogue with `[GAME.mc.name]`, `[GAME.version]` variables correctly passes
+- Natural language with `return`, `True`, `not` in sentences correctly passes
+- 39/39 targeted test cases correct, 394 total tests passing
+
+**Impact:** Eliminates remaining code-translation crashes.
+
+### 🛡️ False-Positive Filter Hardening (Crash Prevention)
+
+**Issue:** ~476 code-like strings in game translations were being translated, causing Ren'Py crashes (`IndexError: list index out of range` in `renpy/ui.py`). Game logic conditions, stat abbreviations, and format templates were leaking through the filter chain.
+
+**Root Cause Analysis (69,918-line strings.rpy — SpaceJourneyX):**
+- 335 Python condition strings (`'likes_toy_talk' in moira.done`)
+- 54 short ALL_CAPS game stats (`NOT`, `REP`, `INT`, `CON`, `DEX`)
+- 37 code-logic expressions (`moira in GAME.crew`)
+- 7 broad code patterns (`GAME.hour < 18 and GAME.questSys.isDone(...)`)
+- 4 format-string templates (`"Track: {} | Dist: {}".format(...)`)
+- 36 newly-classified Ren'Py keywords (`scene`, `with`, `at`, `return`, `screen`, `label`, `menu`, `init`)
+
+**Fixes:**
+
+1. **New detection patterns** (4 pre-compiled regexes + 2 inline checks):
+   - `_PYTHON_CONDITION_RE`: `'var_name' in obj.attr` — game logic conditions
+   - `_CODE_LOGIC_RE`: `X not in GAME.crew` — dotted-path code (requires `.` to avoid catching "Getting in Shape")
+   - `_SHORT_ALL_CAPS_RE`: `NOT`, `STR`, `INT` (2-6 chars) — with whitelist (`OK`, `NO`, `ON`, etc.)
+   - `_FORMAT_TEMPLATE_RE`: `"...".format(...)` — Python format templates
+   - Broad code detector: ≥2 dotted refs + comparison/boolean operators
+   - `not func_call()` prefix handler
+
+2. **Ren'Py text tag fix**: `{b}Hello{/b}` was wrongly caught by format-placeholder check. Now Ren'Py tags (`{b}`, `{/b}`, `{color=...}`, `{size=...}`, etc.) are stripped before counting format placeholders.
+
+3. **RENPY_TECHNICAL_TERMS expanded**: Added 34 crash-causing keywords in three rounds:
+   - **Round 1** (13): `scene`, `with`, `at`, `behind`, `as`, `onlayer`, `zorder`, `parallel`, `block`, `contains`, `pause`, `repeat`, `function`
+   - **Round 2** (10): `return`, `screen`, `label`, `menu`, `init`, `call`, `jump`, `python`, `define`, `image`
+   - **Round 3** (11 — Screen Language): `textbutton`, `imagebutton`, `mousearea`, `nearrect`, `hbox`, `vbox`, `vbar`, `transclude`, `testcase`, `nvl`, `elif`
+   - Cleaned 5 duplicate terms (`ascii`, `input`, `insensitive`, `style`, `viewport`)
+   - **Total: ~217 unique technical terms**
+
+4. **Python code pattern strictness overhaul** (prevents natural language over-filtering):
+   - `for X in` → requires statement-level context with `:` ending
+   - `return X` → only catches `return self/True/False/None/digit/bracket`
+   - `while X` → requires `:` ending or boolean keywords (`True/False/not/digit`)
+   - `with X as` → requires context manager call pattern `with X(...) as`
+   - File path concat → requires quotes or `/` to match
+   - **Result:** 10 legitimate English phrases previously over-filtered now pass correctly
+
+**Safety Balance:**
+- Filter rate: 2.94% of translated entries blocked (476/16,165)
+- Pass rate: 97.06% of legitimate text still passes through
+- Title Case keywords (`Return`, `Screen`, `Menu`) still pass as UI labels
+- Pattern accuracy: 39/39 test texts correctly classified (code blocked, natural language passed)
+- 136 dedicated test cases + 394 total tests passing
+
+**Impact:** Eliminates ~476 false-positive translations that could corrupt game logic and cause Ren'Py runtime crashes.
+
+### 🛡️ CRITICAL: Alphabet-Independent Token Format (⟦N⟧)
+
+**Issue:** Google Translate transliterated legacy Latin placeholder tokens on Cyrillic/Greek targets, breaking restoration for multiple token families.
+
+**Fix:** Migrated placeholder keys to Unicode bracket tokens (`⟦N⟧`) so token identifiers contain no transliterable Latin letters.
+
+```python
+# Legacy (<=2.7.0)
+# VAR0, TAG1, ESC_PAIR2, DIS3, PCT4, ESC_OPEN, ESC_CLOSE
+
+# 2.7.1
+key_content = f"⟦{counter}⟧"
+```
+
+**Restoration Layers:**
+- Stage 0: Unicode token restore (`⟦ 0 ⟧` → `⟦0⟧`)
+- Stage 0.5/0.6: Backward compatibility for legacy transliterated/spaced tokens
+- Stage 1: Generic legacy restore path
+
+**Impact:** Eliminates transliteration-based token loss while keeping backward compatibility for older cached outputs.
+
+### 🔧 Placeholder Corruption Fuzzy Recovery
+
+**Issue:** Google inserted spaces inside bracket expressions (`[player.name]` → `[player. name]`).
+
+**Fixes:**
+- `restore_renpy_syntax()` cleans dot-spacing in bracket content
+- `validate_placeholders()` compares whitespace-insensitive normalized forms
+
+**Result:** Placeholder corruption false positives are greatly reduced without relaxing strict structural checks.
+
+### 🛡️ Placeholder Integrity v3.6 — Injection Recovery, Word-Boundary Fix, Early-Exit
+
+**Issue 1: Full token deletion**
+Google occasionally removed `⟦RLPH...⟧` markers entirely.
+
+**Fix:** Added `inject_missing_placeholders()` to reinsert missing originals by proportional position from protected text.
+
+**Issue 2: Broken insertion boundaries (fixed in v3.6)**
+Earlier insertion could split words or glue placeholders to text.
+
+**Fix:**
+- Snap to real space boundaries when available
+- Fallback to nearest text edge when no spaces exist
+- Always enforce sane spacing around injected values
+
+**Issue 3: Glossary false positives**
+Glossary placeholders (`_G*`) were treated like syntax placeholders.
+
+**Fix:** `validate_translation_integrity(..., skip_glossary=True)` now ignores glossary keys by default.
+
+**Issue 4: Double-protection in preprotected flows**
+DeepL/AI paths could re-protect already protected text.
+
+**Fix:** Preprotected metadata guards now consistently use `original_text`.
+
+**Issue 5: Cache key mismatch**
+Protected-vs-original key mismatch created duplicate cache entries.
+
+**Fix:** Cache keys normalized to `metadata.get('original_text', request.text)` in retry and batch paths.
+
+**Issue 6: Unnecessary retries when tokens are fully deleted**
+If raw response had no `RLPH`, retry + Lingva fallback were usually wasted.
+
+**Fix (Early-Exit):**
+- If raw output still contains `RLPH`: allow retry/fallback path
+- If raw output contains no `RLPH`: skip retry/fallback and inject immediately
+
+**Observed gain:** typically removes 2-3 seconds and 3 extra network calls for affected lines.
+
+**Integrity handlers:** multi-endpoint, single-endpoint, batch multi-endpoint, batch single-endpoint now all follow injection-first recovery.
+
+### 🔧 Proxy Manager v2.1 — Priority Logic Fix
+
+**Issue:** Personal/manual proxies were mixed with unstable free proxies.
+
+**Fix:**
+- If `proxy_url` or `manual_proxies` exists: use only personal/manual proxies
+- If none exists: fetch free proxies (fallback mode)
+
+**Additional UX:** Added localized warning when proxy is enabled but only free proxies are used.
+
+### ⚡ Google Rate-Limit Stabilization
+
+**What changed:**
+- Global cooldown with escalating backoff on HTTP 429
+- Lower parallelism in sensitive paths to reduce ban cascades
+- Better endpoint health handling and pacing jitter
+
+**Why:** Reduce cross-mirror cascade throttling and improve sustained throughput stability.
+
+### 🧩 Translation Pipeline Hardening (2.7.1 Addendum)
+
+**Scope:** End-to-end pipeline review from **Start Translation** click to final `strings.rpy/strings.json` output.
+
+**Fixes included:**
+- Removed duplicate restore call in pipeline phase-1 result assembly (prevents `{i}{i}...{/i}{/i}` double-tag corruption and related Ren'Py runtime instability)
+- Hardened `strings.json` sanitization against separator remnants, placeholder leakage (`⟦RLPH...⟧`, `XRPYX_`, `RNPY_`), and HTML tag bleed (`<span>`, `<div>`)
+- Fixed dead code path in `save_translations()` and restored reliable success/failure logging
+- Improved worker shutdown safety with timeout fallback (`wait` → `terminate`) to reduce dangling thread risk
+- Minor cleanup: removed duplicated inline comment in translator lazy-init block
+
+### 🔀 Delimiter-Aware Translation System (Pipe Variants)
+
+**Issue:** Variant texts like `<choice_a|choice_b|choice_c>` were translated as a single block, causing semantic drift and malformed mixed outputs in some engines.
+
+**Fix:** Added delimiter-aware flow that safely splits, translates, and rejoins pipe-variant segments.
+
+**What changed:**
+- Added `split_delimited_text()` / `rejoin_delimited_text()` pipeline in syntax protection layer for `<...|...>` and bare-pipe variant patterns
+- Integrated segment-based request creation in translation pipeline, preserving per-entry metadata and placeholder context
+- Added config toggle `enable_delimiter_aware_translation` (default: `true`) in settings and `config.json`
+- Updated phase-1 result assembly to avoid duplicate restore on pre-restored translator outputs (prevents double wrapper tags)
+- Improved debug logging output for delimiter previews using UI-safe brackets (`‹...›`) to avoid renderer swallowing `<...>`
+
+**Compatibility:**
+- Works with Google / DeepL / OpenAI / Gemini / Local LLM paths without changing engine public API
+- Falls back to normal single-request flow when delimiter pattern is not detected
+
+**Validation:**
+- Added `tests/test_delimiter_aware.py` with 33 dedicated tests (split/rejoin/roundtrip/edge cases/config toggle)
+- Full suite verification after integration: `215 passed` (excluding `tests/test_settings_sanitization.py` environment-specific collection issue)
+
+### ✅ Validation
+
+- Initial test suite result (at time of delimiter-aware feature implementation): `167 passed`
+- After hardening updates: `215 passed`
+- After all v2.7.1 features + atomic segment tests: **520 passed**
+- All counts exclude `tests/test_settings_sanitization.py` (environment-specific collection issue)
+
+### 🔍 Deep Extraction Engine
+
+**Issue:** Many translatable strings in Ren'Py projects were missed by the standard extraction pipeline:
+- `define quest_title = "text"` / `default player_name = "text"` without `_()` wrappers
+- f-string templates (`f"Welcome back, {player}!"`)
+- Multi-line dict/list structures with translatable text values
+- API calls like `QuickSave(message=...)`, `CopyToClipboard(...)`, `narrator(...)`, `renpy.display_notify(...)`
+- `tooltip "hint text"` properties in screen language
+- Compiled `.rpyc` strings from extended Ren'Py API calls
+
+**Solution — Deep Extraction Module (`src/core/deep_extraction.py`):**
+
+- **DeepExtractionConfig**: Three-tier API call classification
+  - Tier-1 (16 text calls): `renpy.notify`, `renpy.confirm`, `Character`, `Text`, `ui.text`, etc.
+  - Tier-2 (4 contextual calls): `QuickSave`, `CopyToClipboard`, `FilePageNameInputValue`, `Help`
+  - Tier-3 (30+ blacklist calls): `Jump`, `Call`, `Show`, `Hide`, `Play`, `SetVariable`, etc.
+
+- **DeepVariableAnalyzer**: Heuristic scoring (0.0–1.0) for variable name classification
+  - Prefix/suffix/exact matching for translatable/non-translatable names
+  - `is_technical_string()` with 15 compiled regex patterns for false positive prevention
+  - Reliably classifies `quest_title` → translatable, `persistent.flags` → non-translatable
+
+- **FStringReconstructor**: Converts `{expr}` → `[expr]` (Ren'Py-compatible) with static text ratio threshold (≥30%)
+
+- **MultiLineStructureParser**: Detects multi-line `define`/`default` structures, balanced bracket collection, AST-based value extraction with DATA_KEY_WHITELIST/BLACKLIST filtering
+
+**Parser Integration (7 new patterns, 6 secondary passes):**
+- Bare define/default string extraction with variable name filtering
+- `tooltip` property, `QuickSave(message=)`, `CopyToClipboard()` secondary passes
+- f-string template extraction secondary pass
+- `$ renpy.confirm()`, `$ narrator()`, `$ renpy.display_notify()` secondary passes
+
+**RPYC Reader Integration (7 new DeepStringVisitor handlers):**
+- `QuickSave`, `CopyToClipboard`, `FilePageNameInputValue`, `narrator`, `renpy.display_notify`, `renpy.display_menu`, `renpy.confirm`
+- Tier-3 blacklist prevents extraction of non-translatable call arguments
+- Smart variable filtering with DeepVariableAnalyzer for FakeDefine/FakeDefault code objects
+
+**Config Settings (7 new toggles):**
+- `enable_deep_extraction` (master toggle)
+- `deep_extraction_bare_defines`, `deep_extraction_bare_defaults`, `deep_extraction_fstrings`
+- `deep_extraction_multiline_structures`, `deep_extraction_extended_api`, `deep_extraction_tooltip_properties`
+
+### 📝 Key Files Updated in 2.7.1
+
+- `src/core/deep_extraction.py` *(NEW — shared Deep Extraction module)*
+- `src/core/parser.py` *(7 new patterns, 6 secondary passes, multi-line structure support)*
+- `src/core/rpyc_reader.py` *(7 new DeepStringVisitor handlers, smart var filtering)*
+- `src/core/syntax_guard.py`
+- `src/core/translator.py`
+- `src/core/ai_translator.py`
+- `src/core/proxy_manager.py`
+- `src/backend/settings_backend.py`
+- `src/core/translation_pipeline.py`
+- `src/utils/config.py` *(7 new deep extraction config fields)*
+- `config.json` *(7 new deep extraction settings)*
+- `tests/test_deep_extraction.py` *(NEW — 65 tests for Deep Extraction)*
+- `tests/test_delimiter_aware.py` *(NEW — 33 tests for delimiter-aware translation flow)*
+- `tests/test_integrity_injection.py`
+- `tests/test_deepl_ai_preprotected.py`
+
+---
 
 ## [2.7.0] - 2026-02-10
 ### 🔥 Multi-Layer Runtime Hook (v2.7.0 patch)
@@ -20,7 +467,8 @@ This patch stays within the [2.7.0] entry because it represents a runtime-hook r
 - **Spacing Restoration:** Added a regex-based post-processing step to both `say_menu_text_filter` and `replace_text` so Ren'Py strings never stick to punctuation after translation (`Hello.World` → `Hello. World`).
 - **Template Synchronization:** Ensured `runtime_hook_template.py` and the generated `zzz_renlocalizer_runtime.rpy` are in sync with these refinements so every project gets the same late-install, spacing-safe hook without manual edits.
 
-### 🛠️ Runtime Hook Generation & Compatibility Fixes (v2.7.0 hotfix)
+### 🛠️ Runtime Hook Generation & Compatibility Fixes
+
 - **Format String Generation Fix:** Fixed critical `ValueError: Single '}' encountered in format string` error during hook generation. Changed from unsafe `str.format(renpy_lang=...)` to safe `.replace("{renpy_lang}", renpy_lang)` in both `translation_pipeline.py` and `app_backend.py`. This prevents Python format string parser errors when template contains unescaped braces (e.g., in regex patterns like `[^\}]`).
   - **Root Cause:** Template contains regex patterns with literal braces that conflict with Python format syntax
   - **Solution:** Switched to explicit string replacement to avoid format string parsing

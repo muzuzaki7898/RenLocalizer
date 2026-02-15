@@ -21,6 +21,13 @@ import chardet
 from src.utils.encoding import read_text_safely
 import configparser
 import yaml
+from src.core.deep_extraction import (
+    DeepExtractionConfig,
+    DeepVariableAnalyzer,
+    FStringReconstructor,
+    MultiLineStructureParser,
+    _shared_analyzer as _module_deep_var_analyzer,
+)
 
 # Module-level defaults for datasets / whitelist for rpyc reader import
 DATA_KEY_BLACKLIST = {
@@ -64,6 +71,7 @@ class TextType:
     RENPY_FUNC = 'renpy_func'
     CONFIG_TEXT = 'config_text'
     DEFINE_TEXT = 'define_text'
+    EXTEND = 'extend'  # extend "text" — continues previous dialogue line
 
 # Shared regex pattern for quoted strings (DRY principle)
 # Matches: "text", 'text', r"text", f'text', rf"text", etc.
@@ -85,18 +93,6 @@ class RenPyParser:
     def __init__(self, config_manager=None):
         self.logger = logging.getLogger(__name__)
         self.config = config_manager
-
-        # Blacklist/whitelist for data keys
-        self.DATA_KEY_BLACKLIST = {
-            'id', 'code', 'name_id', 'image', 'img', 'icon', 'sfx', 'sound', 'audio',
-            'voice', 'file', 'path', 'url', 'link', 'type', 'ref', 'var', 'value_id', 'texture'
-        }
-        self.DATA_KEY_WHITELIST = {
-            'name', 'title', 'description', 'desc', 'text', 'content', 'caption',
-            'label', 'prompt', 'help', 'header', 'footer', 'message', 'dialogue',
-            'summary', 'quest', 'objective', 'char', 'character',
-            'tips', 'hints', 'help', 'notes', 'log', 'history', 'inventory', 'items', 'objectives', 'goals', 'achievements', 'gallery'
-        }
 
         # Technical terms for filtering
         self.renpy_technical_terms = {
@@ -188,7 +184,7 @@ class RenPyParser:
             r'touch_keyboard|subtitle|empty',
             r'\*\*?/\*\*?', # Glob patterns
             r'\.old$|\.new$|\.bak$',
-            r'^[a-z0-9_]+\.[a-z0-9_.]+$', # module.sub.attr
+            r'^[a-z0-9_]+\.[a-z0-9_]+(?:\.[a-z0-9_]+)*$', # module.sub.attr (won't match "wow..." or "oh...")
             r'^[a-z0-9_]+=[^=]+$', # Assignment without double equals
             r'^(?:config|gui|preferences|style)\.[a-z0-9_.]+$', # Internal variables
             r'\b(?:uniform|attribute|varying|vec[234]|mat[234]|gl_FragColor|sampler2D|gl_Position|texture2D|v_tex_coord|a_tex_coord|a_position|u_transform|u_lod_bias)\b', # Shader/GLSL keywords
@@ -218,6 +214,10 @@ class RenPyParser:
         ]
         self.code_patterns_re = re.compile(r'(?:' + r')|(?:'.join(code_patterns) + r')')
 
+        # Blacklist / Whitelist for data-file key filtering (used by deep scan)
+        self.DATA_KEY_BLACKLIST = set(DATA_KEY_BLACKLIST)
+        self.DATA_KEY_WHITELIST = set(DATA_KEY_WHITELIST)
+
         # --- Core regex patterns and registries (ensure attributes exist for tests) ---
         # Common quoted-string pattern (handles optional prefixes like r, u, b, f)
         self._quoted_string = r'(?:[rRuUbBfF]{,2})?(?P<quote>"(?:[^"\\]|\\.)*"|\'(?:[^\\\']|\\.)*\')'
@@ -227,7 +227,7 @@ class RenPyParser:
             r'(?P<quote>"(?:[^"\\]|\\.)*"|\'(?:[^\\\']|\\.)*\')'
         )
         self.narrator_re = re.compile(
-            r'^(?P<indent>\s*)(?P<quote>"(?:[^"\\]|\\.)*"|\'(?:[^\\\']|\\.)*\')(?P<trailing>.*)$'
+            r'^(?P<indent>\s+)(?P<quote>"(?:[^"\\]|\\.)*"|\'(?:[^\\\']|\\.)*\')(?P<trailing>\s*(?:(?:with|nointeract|at)\s+\S+)?\s*(?:#.*)?)$'
         )
 
         self.char_multiline_re = re.compile(
@@ -241,7 +241,7 @@ class RenPyParser:
         )
 
         self.menu_choice_re = re.compile(
-            r'^\s*(?P<quote>"(?:[^"\\]|\\.)*"|\'(?:[^\\\']|\\.)*\')\s*(?:if\s+[^:]+)?\s*:\s*'
+            r'^\s*(?P<quote>"(?:[^"\\]|\\.)*"|\'(?:[^\\\']|\\.)*\')\s*(?:\((?:[^)(]*|\([^)]*\))*\)\s*)?(?:if\s+[^:]+)?\s*:\s*'
         )
         self.menu_choice_multiline_re = re.compile(
             r'^\s*(?P<delim>"""|\'\'\')(?P<body>(?![\s]*\)).*)\s*(?:if\s+[^:]+)?\s*:\s*$'
@@ -251,7 +251,7 @@ class RenPyParser:
         )
 
         self.screen_text_re = re.compile(
-            r'\s*(?:text|label|tooltip|vbar|slider|frame|window)\s+(?:_\s*\(\s*)?(?:[rRuUbBfF]{,2})?(?P<quote>"(?:[^"\\]|\\.)*"|\'(?:[^\\\']|\\.)*\')(?:\s*\))?'
+            r'\s*(?:text|label|tooltip)\s+(?:_\s*\(\s*)?(?:[rRuUbBfF]{,2})?(?P<quote>"(?:[^"\\]|\\.)*"|\'(?:[^\\\']|\\.)*\')(?:\s*\))?'
         )
         self.textbutton_re = re.compile(
             r'^\s*textbutton\s+(?:_\s*\(\s*)?(?:[rRuUbBfF]{,2})?(?P<quote>"(?:[^"\\]|\\.)*"|\'(?:[^\\\']|\\.)*\')(?:\s*\))?'
@@ -318,8 +318,9 @@ class RenPyParser:
         # Example: e "Hello" (what_prefix="{i}", what_suffix="{/i}")
         # These are often missed but contain translatable formatting text
         # Extended to include color, size, font arguments that may contain translatable values
+        # Only extract text-bearing hidden args, not technical values (color, size, font, etc.)
         self.hidden_args_re = re.compile(
-            rf'\(\s*(?:what_prefix|what_suffix|who_prefix|who_suffix|what_color|what_size|what_font|what_outlinecolor|what_text_align)\s*=\s*{_QUOTED_STRING_PATTERN}'
+            rf'\(\s*(?:what_prefix|what_suffix|who_prefix|who_suffix)\s*=\s*{_QUOTED_STRING_PATTERN}'
         )
 
         # Triple Underscore Immediate Translation (v2.6.6): ___("text")
@@ -396,6 +397,69 @@ class RenPyParser:
             r'^\s*\$?\s*([a-zA-Z_]\w*)\s*=\s*_\s*\('
         )
 
+        # ============================================================
+        # V2.7.1: DEEP EXTRACTION PATTERNS
+        # ============================================================
+
+        # 9. Bare Define String: define any_var = "text" (not just gui/config)
+        # Example: define quest_title = "The Dark Forest"
+        # FALSE POSITIVE PREVENTION: DeepVariableAnalyzer filters non-translatable vars
+        self.bare_define_string_re = re.compile(
+            r'^\s*define\s+'
+            r'(?:(?:-?\d+)\s+)?'
+            r'(?P<var_name>[\w.]+)\s*'
+            r'=\s*'
+            rf'{_QUOTED_STRING_PATTERN}'
+            r'\s*$'
+        )
+
+        # 10. Bare Default String: default var = "text" (without _() wrapper)
+        # Example: default player_title = "Recruit"
+        self.bare_default_string_re = re.compile(
+            r'^\s*default\s+'
+            r'(?P<var_name>[\w.]+)\s*'
+            r'=\s*'
+            rf'{_QUOTED_STRING_PATTERN}'
+            r'\s*$'
+        )
+
+        # 11. Python Text Call: $ renpy.confirm("text"), $ narrator("text"), etc.
+        # Covers Tier-1 API calls from DeepExtractionConfig
+        # Note: display_menu excluded — takes a list arg, not a string (handled by AST deep scan)
+        self.python_text_call_re = re.compile(
+            r'^\s*\$\s*'
+            r'(?P<func>(?:renpy\.(?:confirm|display_notify)|narrator))'
+            r'\s*\(\s*'
+            r'(?:[^,]*,\s*)?'
+            rf'{_QUOTED_STRING_PATTERN}'
+        )
+
+        # 12. f-string Assignment: $ var = f"text {expr} more"
+        # Example: $ msg = f"Welcome back, {player_name}!"
+        self.fstring_assign_re = re.compile(
+            r'^\s*\$?\s*'
+            r'(?:(?:define|default)\s+)?'
+            r'[\w.]+\s*=\s*'
+            r'[fF](?P<fquote>["\'])(?P<fcontent>(?:[^\\"\']|\\.)+?)(?P=fquote)'
+            r'\s*$'
+        )
+
+        # 13. Screen Language tooltip Property: tooltip "text"
+        # Example: textbutton "Save" action FileSave(1) tooltip "Quick save"
+        self.tooltip_property_re = re.compile(
+            rf'\btooltip\s+{_QUOTED_STRING_PATTERN}'
+        )
+
+        # 14. QuickSave/CopyToClipboard with text args
+        self.quicksave_re = re.compile(
+            rf'QuickSave\s*\([^)]*message\s*=\s*{_QUOTED_STRING_PATTERN}'
+        )
+        self.copy_clipboard_re = re.compile(
+            rf'CopyToClipboard\s*\(\s*{_QUOTED_STRING_PATTERN}'
+        )
+
+        # Deep extraction: use module-level shared analyzer (avoids recompiling 15 regexes per parser instance)
+        self._deep_var_analyzer = _module_deep_var_analyzer
 
         self.layout_text_re = re.compile(r'^\s*layout\.[a-zA-Z0-9_]+\s*=\s*' + self._quoted_string)
         self.store_text_re = re.compile(r'^\s*store\.[a-zA-Z0-9_]+\s*=\s*' + self._quoted_string)
@@ -416,8 +480,35 @@ class RenPyParser:
         # Initialize v2.4.1 patterns
         self._init_new_patterns()
         
+        # Populate pattern registry for regex extraction pass (3rd pass)
+        self._register_patterns()
+        
         # State tracking for context-aware filtering
         self._current_context_line = ""
+
+    def _is_deep_feature_enabled(self, feature: str = None) -> bool:
+        """
+        V2.7.1: Check if a deep extraction feature is enabled via config toggles.
+        
+        Returns True when config is None (backward compatibility — no config means all features on).
+        When config exists, checks master toggle first, then specific feature toggle.
+        
+        Args:
+            feature: Specific toggle name, e.g. 'deep_extraction_bare_defines'.
+                     If None, only checks the master toggle.
+        """
+        if self.config is None:
+            return True
+        ts = getattr(self.config, 'translation_settings', None)
+        if ts is None:
+            return True
+        # Master toggle
+        if not getattr(ts, 'enable_deep_extraction', True):
+            return False
+        # Specific feature toggle
+        if feature:
+            return getattr(ts, feature, True)
+        return True
         
     # ========== NEW PATTERNS FOR BETTER EXTRACTION (v2.4.1) ==========
     # These are initialized in __init__ but need class-level declarations
@@ -448,6 +539,64 @@ class RenPyParser:
         # Translate block detection (to skip already translated content)
         self.translate_block_re = re.compile(
             r'^\s*translate\s+([a-zA-Z_]\w*)\s+([a-zA-Z_]\w*)\s*:'
+        )
+        
+        # ================================================================
+        # Patterns referenced by _register_patterns() — defined here to
+        # prevent AttributeError if _register_patterns() is ever called.
+        # ================================================================
+        _QS = _QUOTED_STRING_PATTERN
+        
+        # Notify("text") / renpy.notify("text")
+        self.notify_re = re.compile(
+            rf'(?:renpy\.)?[Nn]otify\s*\(\s*(?:_\s*\(\s*)?{_QS}'
+        )
+        # Confirm("text")
+        self.confirm_re = re.compile(
+            rf'[Cc]onfirm\s*\(\s*(?:_\s*\(\s*)?{_QS}'
+        )
+        # renpy.input("prompt")
+        self.renpy_input_re = re.compile(
+            rf'renpy\.input\s*\(\s*(?:_\s*\(\s*)?{_QS}'
+        )
+        # ATL text: show text "..."
+        self.atl_text_re = re.compile(
+            rf'^\s*show\s+text\s+(?:_\s*\(\s*)?{_QS}'
+        )
+        # renpy.say(who, "what")
+        self.renpy_say_re = re.compile(
+            rf'renpy\.say\s*\([^,]+,\s*{_QS}'
+        )
+        # Action with _("text"): action=_("text")
+        self.action_text_re = re.compile(
+            rf'action\s*=?\s*_\s*\(\s*{_QS}'
+        )
+        # caption "text" in screens
+        self.caption_re = re.compile(
+            rf'^\s*caption\s+(?:_\s*\(\s*)?{_QS}'
+        )
+        # frame title / window title text
+        self.frame_title_re = re.compile(
+            rf'^\s*(?:frame|window)\s+(?:_\s*\(\s*)?{_QS}'
+        )
+        # Generic _("text") anywhere
+        self.generic_translatable_re = re.compile(
+            rf'_\s*\(\s*{_QS}\s*\)'
+        )
+        # side "text" in screens
+        self.side_text_re = re.compile(
+            rf'^\s*side\s+{_QS}'
+        )
+        # renpy.function("text") generic
+        self.python_renpy_re = re.compile(
+            rf'renpy\.\w+\s*\([^)]*{_QS}'
+        )
+        self.renpy_function_re = re.compile(
+            rf'renpy\.(?:say|notify|call_screen)\s*\([^)]*{_QS}'
+        )
+        # extend "text"
+        self.extend_re = re.compile(
+            rf'^\s*extend\s+{_QS}'
         )
 
     # ========== END NEW PATTERNS ==========
@@ -494,7 +643,7 @@ class RenPyParser:
             {'regex': self.renpy_function_re, 'type': 'renpy_func'},
             # Dialogue patterns (most general - last)
             {'regex': self.char_dialog_re, 'type': 'dialogue', 'character_group': 'char'},
-            {'regex': self.extend_re, 'type': 'dialogue'},
+            {'regex': self.extend_re, 'type': TextType.EXTEND},
             {'regex': self.narrator_re, 'type': 'dialogue'},
             {'regex': self.gui_variable_re, 'type': 'gui'},
             # REMOVED: renpy_show_re
@@ -510,11 +659,15 @@ class RenPyParser:
             # NEW v2.4.1 patterns
             {'regex': self.default_translatable_re, 'type': 'translatable_string'},
             {'regex': self.show_screen_re, 'type': 'ui'},
+            # V2.7.1: Deep Extraction patterns
+            {'regex': self.bare_define_string_re, 'type': TextType.DEFINE_TEXT, 'deep_extract': True},
+            {'regex': self.bare_default_string_re, 'type': TextType.DEFINE_TEXT, 'deep_extract': True},
+            {'regex': self.python_text_call_re, 'type': TextType.RENPY_FUNC},
         ]
 
         self.multiline_registry = [
             {'regex': self.char_multiline_re, 'type': 'dialogue', 'character_group': 'char'},
-            {'regex': self.extend_multiline_re, 'type': 'dialogue'},
+            {'regex': self.extend_multiline_re, 'type': TextType.EXTEND},
             {'regex': self.narrator_multiline_re, 'type': 'dialogue'},
             {'regex': self.screen_multiline_re, 'type': 'ui'},
             # _p() multi-line patterns - check FIRST as it's most specific
@@ -559,10 +712,28 @@ class RenPyParser:
             except csv.Error:
                 dialect = None
             reader = csv.reader(f_io, dialect) if dialect else csv.reader(f_io)
+            _csv_header_row = None  # for header detection
             for row_idx, row in enumerate(reader):
+                # ── CSV header row guard ──
+                # Row 0 is very likely a header row (column names like "Name",
+                # "Type", "Description").  Translating these causes key collisions
+                # in strings.json (e.g. "Name" → "İsim" would replace all
+                # occurrences of the word "Name" in dialogue).  Heuristic: if
+                # EVERY non-empty cell in row 0 is a single word or short
+                # identifier (no spaces, <20 chars, all ASCII-alnum/underscore),
+                # treat it as a header row and skip it.
+                if row_idx == 0:
+                    _csv_header_row = row
+                    _non_empty = [c.strip() for c in row if c.strip()]
+                    if _non_empty and all(
+                        len(c) < 20 and ' ' not in c and c.replace('_', '').replace('-', '').isalnum()
+                        for c in _non_empty
+                    ):
+                        self.logger.debug(f"CSV header row skipped (detected as column names): {_non_empty[:5]}")
+                        continue
+
                 for col_idx, cell in enumerate(row):
                     # Use existing smart filter
-                    # If row 0, it might be a header, but we translate it anyway if it looks like text
                     # Additional sanity: remove placeholders/tags and require at least
                     # two letters to be considered translatable; attach a raw_text
                     # field (escaped and quoted) for deterministic ID generation.
@@ -648,12 +819,13 @@ class RenPyParser:
                 # Use raw_text when available for canonical deduplication,
                 # and normalize escape/newline variants so different extraction
                 # passes don't produce duplicate IDs for the same literal.
-                canonical = entry.get('raw_text') or text_value
-                try:
-                    canonical = canonical.replace('\r\n', '\n').replace('\r', '\n')
-                    canonical = bytes(canonical, 'utf-8').decode('unicode_escape')
-                except Exception:
-                    pass
+                raw_text = entry.get('raw_text')
+                canonical = raw_text or text_value
+                canonical = canonical.replace('\r\n', '\n').replace('\r', '\n')
+                # Only unescape if we have raw_text (source-level escapes);
+                # text_value is already unescaped — double-decoding corrupts it.
+                if raw_text:
+                    canonical = self._safe_unescape(canonical)
                 # Use canonical for deduplication to collapse "Text" and "Text\n" and "Text"
                 # But keep original context for reconstruction if needed
                 key = (canonical, entry.get('character', ''), tuple(ctx))
@@ -681,12 +853,11 @@ class RenPyParser:
                 text_value = token.text or ''
                 if not self.is_meaningful_text(text_value):
                     continue
-                canonical = token.raw_text or text_value
-                try:
-                    canonical = canonical.replace('\r\n', '\n').replace('\r', '\n')
-                    canonical = bytes(canonical, 'utf-8').decode('unicode_escape')
-                except Exception:
-                    pass
+                raw_txt = token.raw_text
+                canonical = raw_txt or text_value
+                canonical = canonical.replace('\r\n', '\n').replace('\r', '\n')
+                if raw_txt:
+                    canonical = self._safe_unescape(canonical)
                 key = (canonical, token.character or '', tuple(ctx))
                 if key not in seen_texts:
                     entry = self._record_entry(
@@ -759,9 +930,30 @@ class RenPyParser:
                     if quote_value:
                         quotes = [quote_value]
                 
+                # FIX: _p_single_re has no capture group — extract _p() argument separately
+                if not quotes and descriptor.get('type') == 'paragraph':
+                    import re as _re_p
+                    p_match = _re_p.search(
+                        r'_p\s*\(\s*(?:[rRuUbBfF]{,2})?(?P<quote>"(?:[^"\\]|\\.)*"|\'(?:[^\\\']|\\.)*\')',
+                        raw_line
+                    )
+                    if p_match:
+                        quotes = [p_match.group('quote')]
+
                 if not quotes:
                     continue
                 
+                # V2.7.1: Deep Extraction variable name filtering
+                # For bare define/default patterns, check if variable name suggests translatable content
+                _desc_type = descriptor.get('type', '')
+                if descriptor.get('deep_extract') or _desc_type == 'define':
+                    # Respect config toggle — skip if deep extraction for bare defines is disabled
+                    if not self._is_deep_feature_enabled('deep_extraction_bare_defines'):
+                        continue
+                    var_name = match.groupdict().get('var_name', '')
+                    if var_name and not self._deep_var_analyzer.is_likely_translatable(var_name):
+                        continue
+
                 character = ""
                 char_group = descriptor.get('character_group')
                 if char_group and match.groupdict().get(char_group):
@@ -933,6 +1125,150 @@ class RenPyParser:
                     entries=entries,
                     file_path=file_path
                 )
+
+            # --- V2.7.1: Secondary Pass for Tooltip Properties ---
+            # Captures: textbutton "X" action Y tooltip "Hint text"
+            if self._is_deep_feature_enabled('deep_extraction_tooltip_properties'):
+                tooltip_match = self.tooltip_property_re.search(raw_line)
+                if tooltip_match:
+                    self._process_secondary_extraction(
+                        match=tooltip_match,
+                        text_type=TextType.UI_ACTION,
+                        raw_line=raw_line,
+                        idx=idx,
+                        lines=lines,
+                        stripped_line=stripped_line,
+                        current_path=current_path,
+                        seen_texts=seen_texts,
+                        entries=entries,
+                        file_path=file_path
+                    )
+
+            # --- V2.7.1: Secondary Pass for QuickSave message ---
+            # Captures: QuickSave(message="Saved!")
+            if self._is_deep_feature_enabled('deep_extraction_extended_api'):
+                qs_match = self.quicksave_re.search(raw_line)
+                if qs_match:
+                    self._process_secondary_extraction(
+                        match=qs_match,
+                        text_type=TextType.UI_ACTION,
+                        raw_line=raw_line,
+                        idx=idx,
+                        lines=lines,
+                        stripped_line=stripped_line,
+                        current_path=current_path,
+                        seen_texts=seen_texts,
+                        entries=entries,
+                        file_path=file_path
+                    )
+
+            # --- V2.7.1: Secondary Pass for CopyToClipboard ---
+            # Captures: CopyToClipboard("Link copied")
+            if self._is_deep_feature_enabled('deep_extraction_extended_api'):
+                ctc_match = self.copy_clipboard_re.search(raw_line)
+                if ctc_match:
+                    self._process_secondary_extraction(
+                        match=ctc_match,
+                        text_type=TextType.UI_ACTION,
+                        raw_line=raw_line,
+                        idx=idx,
+                        lines=lines,
+                        stripped_line=stripped_line,
+                        current_path=current_path,
+                        seen_texts=seen_texts,
+                        entries=entries,
+                        file_path=file_path
+                    )
+
+            # --- V2.7.1: Secondary Pass for f-string Assignments ---
+            # Captures: $ msg = f"Welcome back, {player_name}!"
+            if self._is_deep_feature_enabled('deep_extraction_fstrings'):
+                fstr_match = self.fstring_assign_re.match(raw_line)
+                if fstr_match:
+                    try:
+                        fcontent = fstr_match.group('fcontent')
+                        template = FStringReconstructor.extract_template(fcontent)
+                        if template and self.is_meaningful_text(template):
+                            key = (template, EMPTY_CHARACTER, tuple(current_path) if current_path else ())
+                            if key not in seen_texts:
+                                entry = self._record_entry(
+                                    text=template,
+                                    raw_text=f'"{template}"',
+                                    line_number=idx + 1,
+                                    context_line=stripped_line,
+                                    text_type=TextType.DEFINE_TEXT,
+                                    context_path=list(current_path) if current_path else [],
+                                    character=EMPTY_CHARACTER,
+                                    file_path=str(file_path),
+                                )
+                                if entry:
+                                    entries.append(entry)
+                                    seen_texts.add(key)
+                                    if self.logger.isEnabledFor(logging.INFO):
+                                        self.logger.info(f"[ENTRY+FSTRING] {file_path}:{idx+1} text={template}")
+                    except Exception as e:
+                        if self.logger.isEnabledFor(logging.DEBUG):
+                            self.logger.debug(f"f-string extraction failed at {file_path}:{idx+1}: {e}")
+
+            # --- V2.7.1: Secondary Pass for Bare Define Strings ---
+            # Captures: define quest_title = "The Dark Forest"
+            # Uses DeepVariableAnalyzer to filter non-translatable var names
+            if self._is_deep_feature_enabled('deep_extraction_bare_defines'):
+                bare_def_match = self.bare_define_string_re.match(raw_line)
+                if bare_def_match:
+                    var_name = bare_def_match.group('var_name')
+                    if self._deep_var_analyzer.is_likely_translatable(var_name):
+                        self._process_secondary_extraction(
+                            match=bare_def_match,
+                            text_type=TextType.DEFINE_TEXT,
+                            raw_line=raw_line,
+                            idx=idx,
+                            lines=lines,
+                            stripped_line=stripped_line,
+                            current_path=current_path,
+                            seen_texts=seen_texts,
+                            entries=entries,
+                            file_path=file_path
+                        )
+
+            # --- V2.7.1: Secondary Pass for Bare Default Strings ---
+            # Captures: default player_title = "Recruit"
+            if self._is_deep_feature_enabled('deep_extraction_bare_defaults'):
+                bare_default_match = self.bare_default_string_re.match(raw_line)
+                if bare_default_match:
+                    var_name = bare_default_match.group('var_name')
+                    if self._deep_var_analyzer.is_likely_translatable(var_name):
+                        self._process_secondary_extraction(
+                            match=bare_default_match,
+                            text_type=TextType.DEFINE_TEXT,
+                            raw_line=raw_line,
+                            idx=idx,
+                            lines=lines,
+                            stripped_line=stripped_line,
+                            current_path=current_path,
+                            seen_texts=seen_texts,
+                            entries=entries,
+                            file_path=file_path
+                        )
+
+            # --- V2.7.1: Secondary Pass for Python Text Calls ---
+            # Captures: $ renpy.confirm("text"), $ narrator("text"), etc.
+            if self._is_deep_feature_enabled('deep_extraction_extended_api'):
+                py_text_match = self.python_text_call_re.match(raw_line)
+                if py_text_match:
+                    self._process_secondary_extraction(
+                        match=py_text_match,
+                        text_type=TextType.RENPY_FUNC,
+                        raw_line=raw_line,
+                        idx=idx,
+                        lines=lines,
+                        stripped_line=stripped_line,
+                        current_path=current_path,
+                        seen_texts=seen_texts,
+                        entries=entries,
+                        file_path=file_path
+                    )
+
         return entries
 
     def _process_secondary_extraction(
@@ -1526,6 +1862,25 @@ class RenPyParser:
                 return True
         return False
 
+    @staticmethod
+    def _safe_unescape(s: str) -> str:
+        """Safely unescape standard Ren'Py/Python string escapes without corrupting non-ASCII.
+        
+        Unlike codecs.decode('unicode_escape'), this handles only standard escapes
+        (\\n, \\t, \\\", \\', \\\\) and preserves non-ASCII text (Cyrillic, CJK, Turkish, etc.)
+        intact. Uses single-pass regex to avoid ordering issues with backslash sequences.
+        """
+        import re as _re
+        _ESCAPE_MAP = {
+            '\\n': '\n', '\\t': '\t', '\\\\': '\\',
+            '\\"': '"', "\\\'" : "'",
+            '\\r': '\r', '\\a': '\a', '\\b': '\b',
+            '\\f': '\f', '\\v': '\v',
+        }
+        def _replace(m):
+            return _ESCAPE_MAP.get(m.group(0), m.group(0))
+        return _re.sub(r'\\[nt\\"\'\'rabfv]', _replace, s)
+
     def _extract_string_content(self, quoted_string: str) -> str:
         if not quoted_string:
             return ''
@@ -1565,17 +1920,9 @@ class RenPyParser:
         # Standard string unescaping
         # Handle common Ren'Py/Python escapes
         # We avoid using ast.literal_eval for safety and because we already have the stripped content
-        try:
-            # Replace literal newlines with \n for escape_decode/unicode_escape
-            content_for_decode = content.replace('\n', '\\n').replace('\r', '\\r')
-            
-            # Using unicode_escape to handle \n, \t, and unicode points
-            content = content_for_decode.encode('utf-8').decode('unicode_escape')
-        except Exception:
-            # Failsafe: fall back to manual replacement if decoding fails
-            content = content.replace('\\"', '"').replace("\\'", "'")
-            content = content.replace('\\n', '\n').replace('\\t', '\t')
-            
+        # Safe unescape: handles \n, \t, \", \', \\ without corrupting non-ASCII
+        # (unicode_escape codec destroys non-ASCII text encoded as UTF-8 multibyte)
+        content = self._safe_unescape(content)
         return content
 
     def _extract_string_raw_and_unescaped(self, quoted_string: str, start_line: int = None, lines: List[str] = None) -> Tuple[str, str]:
@@ -1623,7 +1970,10 @@ class RenPyParser:
             
         # Crash Prevention: Reject file paths, URLs, and asset names immediately
         # Using fast string checks before regex
-        if any(ind in text for ind in self.path_indicators):
+        # FIX v2.7.1: Strip Ren'Py display tags before path check so that
+        # closing tags like {/b}, {/color}, {/cps} don't trigger the '/' indicator.
+        _text_no_tags = re.sub(r'\{/?[^}]*\}', '', text) if '{' in text else text
+        if any(ind in _text_no_tags for ind in self.path_indicators):
             return False
             
         text_lower = text.lower().strip()
@@ -1655,11 +2005,11 @@ class RenPyParser:
         if text_lower in self.renpy_technical_terms:
             return False
             
-        # Reject internal Ren'Py names (staring with _) or internal files (starting with 00)
+        # Reject internal Ren'Py names (starting with _) or internal files (starting with 00)
         if text_strip.startswith('_') and ' ' not in text_strip:
-            return True
+            return False
         if text_strip.startswith('00') and not any(ch.isalpha() for ch in text_strip[:5]):
-            return True
+            return False
 
         if self.technical_id_re.match(text_strip):
             return False
@@ -1729,8 +2079,11 @@ class RenPyParser:
              return False
         
         if len(text_strip) > 15:
-            symbol_count = len(re.findall(r'[\\#\[\](){}|*+?^$]', text_strip))
-            if symbol_count > len(text_strip) * 0.25:
+            # FIX v2.7.1: Strip Ren'Py display tags before counting symbols
+            # so that {b}, {/b}, {color=#f00}, [player] don't inflate the ratio.
+            _stripped_for_sym = re.sub(r'\{/?[^}]*\}|\[[^\]]*\]', '', text_strip)
+            symbol_count = len(re.findall(r'[\\#\[\](){}|*+?^$]', _stripped_for_sym))
+            if symbol_count > len(_stripped_for_sym) * 0.25 if _stripped_for_sym else False:
                 return False
         
         # --- NEW: Gibbberish / Binary / Encrypted String Detection ---
@@ -1756,13 +2109,17 @@ class RenPyParser:
             # Check ratio of letters to total length
             # Real sentences (even short ones) have high letter density.
             # Junk/Encrypted strings have lots of numbers/symbols/null-like chars.
-            alpha_count = sum(1 for ch in text_strip if ch.isalpha())
-            if alpha_count < len(text_strip) * 0.2 and len(text_strip) > 10:
+            # FIX v2.7.1: Strip Ren'Py tags and interpolation brackets before counting
+            # so that {cps=45}, {w}, [player_name] markup doesn't skew the ratio.
+            _stripped_for_alpha = re.sub(r'\{/?[^}]*\}|\[[^\]]*\]', '', text_strip)
+            alpha_count = sum(1 for ch in _stripped_for_alpha if ch.isalpha())
+            _effective_len = len(_stripped_for_alpha) if _stripped_for_alpha else len(text_strip)
+            if alpha_count < _effective_len * 0.2 and _effective_len > 10:
                 return False
             # High unique character variety in non-alpha strings is a sign of entropy (encryption/junk)
-            if alpha_count < len(text_strip) * 0.4:
-                unique_chars = len(set(text_strip))
-                if unique_chars > len(text_strip) * 0.7:
+            if alpha_count < _effective_len * 0.4:
+                unique_chars = len(set(_stripped_for_alpha))
+                if unique_chars > _effective_len * 0.7 and _effective_len > 8:
                     return False
         # -------------------------------------------------------------
 
@@ -1825,7 +2182,13 @@ class RenPyParser:
                 alpha_count = sum(1 for ch in cleaned if ch.isalpha())
                 # Russian "Я" (I), "Да" (Yes) are 1-2 chars.
                 min_alpha = 1 if re.search(r'[а-яА-ЯёЁ]', cleaned) else 2
-                if alpha_count < min_alpha:
+                # FIX v2.7.1: If original text contains Ren'Py interpolation [var],
+                # the cleaned text may lose all alpha chars but the text is still
+                # dialogue with runtime substitution (e.g. "......[name]?").
+                # In this case, skip the strict alpha check — the punctuation
+                # structure itself needs translation for some languages.
+                has_renpy_interpolation = bool(re.search(r'\[[^\]]+\]', text_strip))
+                if not has_renpy_interpolation and alpha_count < min_alpha:
                     return False
         except Exception:
             pass
@@ -1858,7 +2221,9 @@ class RenPyParser:
         # 3. Reject Text() constructor technical parameters
         # Example: "size=24", "color=#fff", "font=DejaVuSans.ttf"
         # ALLOW: Actual text content in Text()
-        if '=' in text_strip and re.search(r'\b(size|color|font|outlines|xalign|yalign|xpos|ypos|style|textalign)\s*=', text_strip, re.IGNORECASE):
+        # FIX v2.7.1: Strip Ren'Py display tags first so {color=#f00}Text{/color} isn't rejected
+        _no_tags_for_param = re.sub(r'\{/?[^}]*\}', '', text_strip) if '{' in text_strip else text_strip
+        if '=' in _no_tags_for_param and re.search(r'\b(size|color|font|outlines|xalign|yalign|xpos|ypos|style|textalign)\s*=', _no_tags_for_param, re.IGNORECASE):
             return False
         
         # 4. Reject NVL mode technical commands
@@ -2357,12 +2722,18 @@ class RenPyParser:
     # Bu modül, normal pattern'lerin yakalayamadığı gizli metinleri bulur
     # init python bloklarındaki dictionary'ler, değişken atamaları vb.
     
-    # ========== NEW: AST-BASED DEEP SCAN (v2.4.1) ==========
+    # ========== NEW: AST-BASED DEEP SCAN (v2.4.1, Enhanced v2.7.1) ==========
     
     def deep_scan_strings_ast(self, file_path: Union[str, Path]) -> List[Dict[str, Any]]:
         """
         Python AST kullanarak derin string taraması.
         Regex'in kaçırdığı nested structure'ları yakalar.
+        
+        v2.7.1 Enhancements:
+        - Multi-line define/default structure parsing (dicts, lists)
+        - Improved f-string extraction with FStringReconstructor
+        - Extended API call detection via DeepExtractionConfig
+        - Variable name heuristic filtering
         
         Args:
             file_path: Dosya yolu
@@ -2398,25 +2769,19 @@ class RenPyParser:
                     if not self.is_meaningful_text(text):
                         return
                     
-                    # Filter technical strings
-                    text_lower = text.lower().strip()
-                    if any(ext in text_lower for ext in ['.png', '.jpg', '.mp3', '.ogg', '.rpy']):
-                        return
-                    if re.match(r'^[a-z_][a-z0-9_]*$', text.strip()):  # snake_case identifiers
-                        return
-                    if re.match(r'^#[0-9a-fA-F]{3,8}$', text.strip()):  # color codes
+                    # Filter technical strings using DeepVariableAnalyzer
+                    if self._deep_var_analyzer.is_technical_string(text):
                         return
                     
-                    processed_text, placeholder_map = self.preserve_placeholders(text)
-                    
+                    # NOTE: preserve_placeholders() is NOT called here.
+                    # The translation pipeline applies protect_renpy_syntax()
+                    # independently — calling it here would be wasted CPU.
                     entries.append({
                         'text': text,
                         'line_number': block_start + lineno,
                         'context_line': lines[min(block_start + lineno - 1, len(lines) - 1)] if lines else '',
                         'text_type': text_type,
                         'context_path': ['deep_scan_ast'],
-                        'processed_text': processed_text,
-                        'placeholder_map': placeholder_map,
                         'is_deep_scan': True,
                         'is_ast_scan': True,
                         'file_path': str(file_path),
@@ -2429,33 +2794,63 @@ class RenPyParser:
                     if isinstance(node, python_ast.Constant) and isinstance(node.value, str):
                         add_entry(node.value, getattr(node, 'lineno', 1))
                     
-                    # f-strings (JoinedStr)
+                    # f-strings (JoinedStr) — Enhanced with FStringReconstructor
                     elif isinstance(node, python_ast.JoinedStr):
-                        parts = []
-                        for v in node.values:
-                            if isinstance(v, python_ast.Constant) and isinstance(v.value, str):
-                                parts.append(v.value)
-                            elif isinstance(v, python_ast.FormattedValue):
-                                # Preserve as placeholder
-                                parts.append('[expr]')
-                        
-                        text = ''.join(str(p) for p in parts)
-                        if text and '[expr]' not in text or len(text) > len('[expr]'):
-                            add_entry(text, getattr(node, 'lineno', 1), 'deep_scan_fstring')
+                        if self._is_deep_feature_enabled('deep_extraction_fstrings'):
+                            template = FStringReconstructor.extract_from_ast_node(node, block_code)
+                            if template:
+                                add_entry(template, getattr(node, 'lineno', 1), 'deep_scan_fstring')
                     
-                    # Call to _() or __()
+                    # Call to _(), __(), or Tier-1 API calls
                     elif isinstance(node, python_ast.Call):
                         func = node.func
                         func_name = ''
                         if isinstance(func, python_ast.Name):
                             func_name = func.id
                         elif isinstance(func, python_ast.Attribute):
-                            func_name = func.attr
+                            if isinstance(func.value, python_ast.Name):
+                                func_name = f"{func.value.id}.{func.attr}"
+                            else:
+                                func_name = func.attr
+                        
+                        # Skip Tier-3 blacklisted calls
+                        if func_name in DeepExtractionConfig.TIER3_BLACKLIST_CALLS:
+                            continue
                         
                         if func_name in ('_', '__', 'renpy_say', 'notify'):
                             for arg in node.args:
                                 if isinstance(arg, python_ast.Constant) and isinstance(arg.value, str):
                                     add_entry(arg.value, getattr(node, 'lineno', 1), 'translatable_call')
+                        
+                        # V2.7.1: Tier-1 API call extraction
+                        # v2.7.1: Merged with user-defined custom_function_params
+                        if self._is_deep_feature_enabled('deep_extraction_extended_api'):
+                            if not hasattr(self, '_cached_merged_calls'):
+                                self._cached_merged_calls = DeepExtractionConfig.get_merged_text_calls(self.config)
+                            tier1_info = self._cached_merged_calls.get(func_name)
+                            if tier1_info:
+                                for pos_idx in tier1_info.get('pos', []):
+                                    if len(node.args) > pos_idx:
+                                        arg = node.args[pos_idx]
+                                        if isinstance(arg, python_ast.Constant) and isinstance(arg.value, str):
+                                            add_entry(arg.value, getattr(node, 'lineno', 1), 'api_call')
+                                for kw_name in tier1_info.get('kw', []):
+                                    for kw in node.keywords:
+                                        if kw.arg == kw_name and isinstance(kw.value, python_ast.Constant) and isinstance(kw.value.value, str):
+                                            add_entry(kw.value.value, getattr(node, 'lineno', 1), 'api_call')
+                        
+                            # V2.7.1: Tier-2 contextual calls
+                            tier2_info = DeepExtractionConfig.TIER2_CONTEXTUAL_CALLS.get(func_name)
+                            if tier2_info:
+                                for pos_idx in tier2_info.get('pos', []):
+                                    if len(node.args) > pos_idx:
+                                        arg = node.args[pos_idx]
+                                        if isinstance(arg, python_ast.Constant) and isinstance(arg.value, str):
+                                            add_entry(arg.value, getattr(node, 'lineno', 1), 'api_call')
+                                for kw_name in tier2_info.get('kw', []):
+                                    for kw in node.keywords:
+                                        if kw.arg == kw_name and isinstance(kw.value, python_ast.Constant) and isinstance(kw.value.value, str):
+                                            add_entry(kw.value.value, getattr(node, 'lineno', 1), 'api_call')
                 
             except SyntaxError:
                 # Invalid Python, skip this block
@@ -2463,7 +2858,62 @@ class RenPyParser:
             except Exception as exc:
                 self.logger.debug(f"AST parse error in block: {exc}")
         
+        # V2.7.1: Multi-line define/default structure extraction
+        if self._is_deep_feature_enabled('deep_extraction_multiline_structures'):
+            multiline_entries = self._extract_multiline_define_default(lines, file_path)
+            for me in multiline_entries:
+                if me.get('text') not in seen_texts:
+                    entries.append(me)
+                    seen_texts.add(me.get('text'))
+        
         self.logger.info(f"AST deep scan found {len(entries)} strings in {file_path}")
+        return entries
+    
+    def _extract_multiline_define_default(self, lines: List[str], file_path: Union[str, Path]) -> List[Dict[str, Any]]:
+        """
+        V2.7.1: Extract translatable strings from multi-line define/default structures.
+        
+        Handles:
+            define quest_data = {
+                "title": "Dragon Slayer",
+                "desc": "Kill the mighty dragon",
+            }
+        """
+        entries: List[Dict[str, Any]] = []
+        idx = 0
+        while idx < len(lines):
+            line = lines[idx]
+            info = MultiLineStructureParser.detect_multiline_start(line)
+            if info:
+                var_name = info['var_name']
+                # Check if variable name suggests translatable content
+                if not self._deep_var_analyzer.is_likely_translatable(var_name, threshold=0.35):
+                    idx += 1
+                    continue
+                
+                collected_code, end_idx = MultiLineStructureParser.collect_block(lines, idx, info)
+                try:
+                    results = MultiLineStructureParser.extract_translatable_values(
+                        var_name, collected_code
+                    )
+                    for r in results:
+                        text = r['text']
+                        if text and self.is_meaningful_text(text):
+                            entries.append({
+                                'text': text,
+                                'line_number': idx + 1 + r.get('lineno', 0),
+                                'context_line': line.strip(),
+                                'text_type': TextType.DEFINE_TEXT,
+                                'context_path': [f"variable:{var_name}", r.get('context', '')],
+                                'is_deep_scan': True,
+                                'is_ast_scan': True,
+                                'file_path': str(file_path),
+                            })
+                except Exception as exc:
+                    self.logger.debug(f"Multi-line structure parse error at {file_path}:{idx+1}: {exc}")
+                idx = end_idx + 1
+            else:
+                idx += 1
         return entries
     
     def _extract_python_blocks_for_ast(self, content: str, lines: List[str]) -> List[Tuple[int, str]]:

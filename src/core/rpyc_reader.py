@@ -35,6 +35,12 @@ import io
 import traceback
 import binascii
 import sys
+from src.core.deep_extraction import (
+    DeepExtractionConfig,
+    DeepVariableAnalyzer,
+    FStringReconstructor,
+    _shared_analyzer as _deep_var_analyzer,
+)
 
 
 # ============================================================================
@@ -1352,6 +1358,22 @@ class ASTTextExtractor:
         self.translate_character_names = False
         if self.config_manager:
              self.translate_character_names = getattr(self.config_manager.translation_settings, 'translate_character_names', False)
+
+    def _is_deep_feature_enabled(self, feature: str = None) -> bool:
+        """
+        V2.7.1: Check if a deep extraction feature is enabled via config toggles.
+        Returns True when config_manager is None (backward compatibility).
+        """
+        if self.config_manager is None:
+            return True
+        ts = getattr(self.config_manager, 'translation_settings', None)
+        if ts is None:
+            return True
+        if not getattr(ts, 'enable_deep_extraction', True):
+            return False
+        if feature:
+            return getattr(ts, feature, True)
+        return True
     
     def extract_from_file(self, file_path: Union[str, Path]) -> List[ExtractedText]:
         """
@@ -1608,10 +1630,22 @@ class ASTTextExtractor:
         except RecursionError:
             pass # Stop processing this branch deeply to prevent crash
 
-    def _extract_from_code_obj(self, code_obj: Any, line_number: int) -> None:
-        """Extract strings from a code-like object using AST parsing and fallback to Regex."""
+    def _extract_from_code_obj(self, code_obj: Any, line_number: int, var_name: str = "") -> None:
+        """Extract strings from a code-like object using AST parsing and fallback to Regex.
+        
+        Args:
+            code_obj: The code object to extract from
+            line_number: Source line number
+            var_name: Optional variable name (from FakeDefine/FakeDefault) for smart filtering
+        """
         if code_obj is None:
             return
+        
+        # V2.7.1: Smart variable filtering — skip non-translatable variables early
+        if var_name:
+            classification = _deep_var_analyzer.classify(var_name)
+            if classification == "non_translatable":
+                return  # Skip entirely
             
         code = ""
         if hasattr(code_obj, 'source'):
@@ -1669,8 +1703,7 @@ class ASTTextExtractor:
 
                     
                     # Define function groups based on settings
-                    target_funcs = {'_', '__', 'Tr', 'tr', 'renpy.say', 'renpy.notify', 'Notify',
-                                    'SetVariable', 'SetScreenVariable', 'ToggleVariable'}
+                    target_funcs = {'_', '__', 'Tr', 'tr', 'renpy.say', 'renpy.notify', 'Notify'}
                                     
                     # Add character definitions only if enabled
                     if getattr(self, 'translate_character_names', True):
@@ -1955,33 +1988,27 @@ class ASTTextExtractor:
         
         # Define statement - check for translatable strings
         elif isinstance(node, FakeDefine):
-            code = getattr(node, 'code', None)
-            if code:
-                self._extract_from_code_obj(code, getattr(node, 'linenumber', 0))
+            if self._is_deep_feature_enabled('deep_extraction_bare_defines'):
+                code = getattr(node, 'code', None)
+                if code:
+                    # V2.7.1: Smart variable filtering for bare define strings
+                    var_name = getattr(node, 'varname', '')
+                    self._extract_from_code_obj(code, getattr(node, 'linenumber', 0), var_name=var_name)
 
         # Default statement - check for translatable strings
         elif isinstance(node, FakeDefault):
-            code = getattr(node, 'code', None)
-            if code:
-                self._extract_from_code_obj(code, getattr(node, 'linenumber', 0))
+            if self._is_deep_feature_enabled('deep_extraction_bare_defaults'):
+                code = getattr(node, 'code', None)
+                if code:
+                    # V2.7.1: Smart variable filtering for bare default strings
+                    var_name = getattr(node, 'varname', '')
+                    self._extract_from_code_obj(code, getattr(node, 'linenumber', 0), var_name=var_name)
         
-        # Python block - look for strings
-        elif isinstance(node, FakePython):
-            code = getattr(node, 'code', None)
-            if code:
-                self._extract_from_code_obj(code, getattr(node, 'linenumber', 0))
-
         # ATL / RawBlock
         elif isinstance(node, FakeRawBlock):
             body = getattr(node, 'code', None) or getattr(node, 'block', None) or getattr(node, 'string', None)
             if isinstance(body, str):
                 self._extract_strings_from_code(body, getattr(node, 'linenumber', 0))
-        
-        # User statement - may contain text
-        elif isinstance(node, FakeUserStatement):
-            line = getattr(node, 'line', '')
-            if line:
-                self._extract_strings_from_line(line, getattr(node, 'linenumber', 0))
         
         # Generic block handling
         elif hasattr(node, 'block') and node.block:
@@ -2283,6 +2310,9 @@ class ASTTextExtractor:
 
         p = self.parser
         
+        # V2.7.1: Config-aware feature check closure for nested DeepStringVisitor
+        is_deep_enabled = self._is_deep_feature_enabled
+        
         # Helper to add text securely
         def add_text_val(raw_text: str, rel_line: int, ctx: str = '', text_type: str = 'python_string'):
             if not raw_text or len(raw_text.strip()) < 2:
@@ -2327,7 +2357,7 @@ class ASTTextExtractor:
                     elif isinstance(target, ast.Attribute):
                          self.context_stack.append(f"var:{target.attr}")
                          pushed = True
-                except:
+                except Exception:
                     pass
                 
                 self.generic_visit(node)
@@ -2346,6 +2376,10 @@ class ASTTextExtractor:
                         func_name = f"renpy.{node.func.attr}"
                     else:
                         func_name = node.func.attr
+                
+                # Tier-3 Blacklist: Skip all arguments from these calls FIRST
+                if func_name in DeepExtractionConfig.TIER3_BLACKLIST_CALLS:
+                    return  # Don't generic_visit into blacklisted call args
                 
                 # 1. Functions where ALL arguments are potential text (Translation functions)
                 if func_name in ('_', '__', 'p'):
@@ -2386,6 +2420,51 @@ class ASTTextExtractor:
                      if node.args and isinstance(node.args[0], ast.Constant) and isinstance(node.args[0].value, str):
                         add_text_val(node.args[0].value, getattr(node, 'lineno', 0), "tooltip", 'ui_string')
 
+                # ============================================================
+                # V2.7.1: DEEP EXTRACTION — Extended API Call Coverage
+                # Only active when deep_extraction_extended_api is enabled
+                # ============================================================
+
+                elif is_deep_enabled('deep_extraction_extended_api') and func_name == 'QuickSave':
+                    for kw in node.keywords:
+                        if kw.arg == 'message' and isinstance(kw.value, ast.Constant) and isinstance(kw.value.value, str):
+                            add_text_val(kw.value.value, getattr(node, 'lineno', 0), "QuickSave.message", 'ui_string')
+
+                # 8. CopyToClipboard("Link copied")
+                elif is_deep_enabled('deep_extraction_extended_api') and func_name == 'CopyToClipboard':
+                    if node.args and isinstance(node.args[0], ast.Constant) and isinstance(node.args[0].value, str):
+                        add_text_val(node.args[0].value, getattr(node, 'lineno', 0), "CopyToClipboard", 'ui_string')
+
+                # 9. FilePageNameInputValue(pattern="Page {}", auto="Auto", quick="Quick")
+                elif is_deep_enabled('deep_extraction_extended_api') and func_name == 'FilePageNameInputValue':
+                    for kw in node.keywords:
+                        if kw.arg in ('pattern', 'auto', 'quick') and isinstance(kw.value, ast.Constant) and isinstance(kw.value.value, str):
+                            add_text_val(kw.value.value, getattr(node, 'lineno', 0), f"FilePageName.{kw.arg}", 'ui_string')
+
+                # 10. narrator("text") — direct character proxy call
+                elif is_deep_enabled('deep_extraction_extended_api') and func_name == 'narrator':
+                    if node.args and isinstance(node.args[0], ast.Constant) and isinstance(node.args[0].value, str):
+                        add_text_val(node.args[0].value, getattr(node, 'lineno', 0), "narrator", 'dialogue')
+
+                # 11. renpy.display_notify(message)
+                elif is_deep_enabled('deep_extraction_extended_api') and func_name == 'renpy.display_notify':
+                    if node.args and isinstance(node.args[0], ast.Constant) and isinstance(node.args[0].value, str):
+                        add_text_val(node.args[0].value, getattr(node, 'lineno', 0), "display_notify", 'ui_arg')
+
+                # 12. renpy.display_menu([("Option A", "a"), ...]) — extract captions
+                elif is_deep_enabled('deep_extraction_extended_api') and func_name == 'renpy.display_menu':
+                    if node.args and isinstance(node.args[0], ast.List):
+                        for elt in node.args[0].elts:
+                            if isinstance(elt, ast.Tuple) and elt.elts:
+                                first = elt.elts[0]
+                                if isinstance(first, ast.Constant) and isinstance(first.value, str):
+                                    add_text_val(first.value, getattr(node, 'lineno', 0), "display_menu.caption", 'menu_choice')
+
+                # 13. renpy.confirm("Are you sure?")
+                elif is_deep_enabled('deep_extraction_extended_api') and func_name == 'renpy.confirm':
+                    if node.args and isinstance(node.args[0], ast.Constant) and isinstance(node.args[0].value, str):
+                        add_text_val(node.args[0].value, getattr(node, 'lineno', 0), "renpy.confirm", 'ui_arg')
+
                 self.generic_visit(node)
 
             def visit_Dict(self, node):
@@ -2415,27 +2494,12 @@ class ASTTextExtractor:
                         add_text_val(node.value, getattr(node, 'lineno', 0), ctx, 'data_string')
             
             def visit_JoinedStr(self, node):
-                # F-String Reconstruction
-                parts = []
-                for val in node.values:
-                    if isinstance(val, ast.Constant) and isinstance(val.value, str):
-                        parts.append(val.value)
-                    elif isinstance(val, ast.FormattedValue):
-                        # Capture the expression part: {expr}
-                        # We use ast.get_source_segment to get the code snippet of the expression
-                        try:
-                            seg = ast.get_source_segment(self.source_code, val.value)
-                            if seg:
-                                parts.append(f"{{{seg}}}")
-                            else:
-                                parts.append("{_expr_}")
-                        except:
-                             parts.append("{_expr_}")
-                
-                full_str = "".join(parts)
-                # Only add if it looks like a sentence
-                if len(full_str) > 2 and not full_str.startswith("{"):
-                    add_text_val(full_str, getattr(node, 'lineno', 0), self._get_context(), 'f_string')
+                # F-String Reconstruction — Enhanced v2.7.1 with FStringReconstructor
+                if not is_deep_enabled('deep_extraction_fstrings'):
+                    return
+                template = FStringReconstructor.extract_from_ast_node(node, self.source_code)
+                if template:
+                    add_text_val(template, getattr(node, 'lineno', 0), self._get_context(), 'f_string')
 
         # Run visitor
         visitor = DeepStringVisitor(clean_code)

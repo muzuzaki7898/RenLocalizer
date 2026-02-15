@@ -109,8 +109,8 @@ class TranslationSettings:
     """Translation-related settings."""
     source_language: str = "auto"
     target_language: str = "tr"
-    max_concurrent_threads: int = 32
-    request_delay: float = 0.1
+    max_concurrent_threads: int = 8  # Lowered from 32 to prevent instant Google bans
+    request_delay: float = 0.15  # Delay between requests (seconds) — also used by Google translator
     max_batch_size: int = 100  # Default batch size (user adjustable, lower = more stable)
     enable_proxy: bool = False  # Disabled by default
     max_retries: int = 3
@@ -151,6 +151,17 @@ class TranslationSettings:
     enable_deep_scan: bool = True  # Varsayılan artık açık (gizli string taraması)
     # RPYC Reader: Derlenmiş .rpyc dosyalarını AST ile doğrudan oku
     enable_rpyc_reader: bool = True  # Varsayılan artık açık (derlenmiş .rpyc okuma)
+    # Deep Extraction v2.7.1: Extended extraction for non-standard patterns
+    enable_deep_extraction: bool = True  # Master toggle for all deep extraction features
+    deep_extraction_bare_defines: bool = True  # define var = "text" without _() wrapper
+    deep_extraction_bare_defaults: bool = True  # default var = "text" without _() wrapper
+    deep_extraction_fstrings: bool = True  # f-string template extraction
+    deep_extraction_multiline_structures: bool = True  # Multi-line dict/list parsing
+    deep_extraction_extended_api: bool = True  # Extended Ren'Py API call coverage
+    deep_extraction_tooltip_properties: bool = True  # tooltip property extraction
+    # Delimiter-Aware Translation (v2.7.2): Split pipe-delimited variant text before translation
+    # Handles patterns like <seg1|seg2|seg3> commonly used for random NPC dialogue
+    enable_delimiter_aware_translation: bool = True
     # Include renpy/common from installed Ren'Py SDKs (optional)
     include_engine_common: bool = True
     context_limit: int = 10  # Number of surrounding lines for context
@@ -183,14 +194,72 @@ class TranslationSettings:
     cache_path: str = "cache"           # Global cache directory name
     # DeepL Settings
     deepl_formality: str = "default"  # default, formal, informal - Hitap şekli (Sen/Siz)
+    # v2.7.1: Custom function parameter extraction config
+    # Users can define which function calls to extract and which params are translatable
+    # Format: {"func_name": {"pos": [0, 1], "kw": ["prompt"]}} — same as DeepExtractionConfig.TIER1_TEXT_CALLS
+    # Example: {"Quest": {"pos": [0, 1, 2]}, "large_notify": {"pos": [0, 1]}}
+    custom_function_params: str = "{}"  # JSON string (dataclass doesn't support dict default)
+    # v2.7.1: Auto-protect character names from translation
+    # When enabled, Character() define names are auto-added to glossary (name → name)
+    auto_protect_character_names: bool = True
     # Runtime Translation Hook (Zorla Çeviri)
+    # DEPRECATED: Use auto_generate_hook instead. Kept for backwards compatibility.
     force_runtime_translation: bool = False  # Oyun içi metinleri zorla çevir (eksik !t flagleri için)
     # Debug/Development settings
     show_debug_engines: bool = False  # Pseudo-Localization gibi debug motorlarını ana listede göster
     # HTML Wrap Protection (v2.6.7) - <span translate="no"> tag protection
     # Default: True - Google Translate'e HTML span'ları göz ardı etmesini söyler
     # Modern approach (v2.6.7): Token'lar yerine HTML span'lar daha güvenilir
-    use_html_protection: bool = True
+    use_html_protection: bool = False
+
+    def __post_init__(self):
+        """Validate and clamp all numeric/enum fields to safe ranges."""
+        def _safe_int(val, default: int, lo: int, hi: int) -> int:
+            try:
+                return max(lo, min(int(val), hi))
+            except (ValueError, TypeError):
+                return default
+
+        def _safe_float(val, default: float, lo: float, hi: float) -> float:
+            try:
+                return max(lo, min(float(val), hi))
+            except (ValueError, TypeError):
+                return default
+
+        # --- Numeric clamps (prevent infinite loops, deadlocks, OOM) ---
+        self.max_concurrent_threads = _safe_int(self.max_concurrent_threads, 4, 1, 64)
+        self.request_delay = _safe_float(self.request_delay, 0.5, 0.0, 60.0)
+        self.max_batch_size = _safe_int(self.max_batch_size, 50, 1, 500)
+        self.max_retries = _safe_int(self.max_retries, 3, 1, 20)
+        self.timeout = _safe_int(self.timeout, 30, 5, 600)
+        self.max_chars_per_request = _safe_int(self.max_chars_per_request, 4500, 100, 50000)
+        self.context_limit = _safe_int(self.context_limit, 5, 1, 100)
+        self.local_llm_timeout = _safe_int(self.local_llm_timeout, 120, 10, 3600)
+        self.ai_temperature = _safe_float(self.ai_temperature, 0.3, 0.0, 2.0)
+        self.ai_timeout = _safe_int(self.ai_timeout, 60, 5, 600)
+        self.ai_max_tokens = _safe_int(self.ai_max_tokens, 4096, 64, 32768)
+        self.ai_batch_size = _safe_int(self.ai_batch_size, 10, 1, 200)
+        self.ai_retry_count = _safe_int(self.ai_retry_count, 3, 0, 20)
+        self.ai_concurrency = _safe_int(self.ai_concurrency, 1, 1, 20)
+        self.ai_request_delay = _safe_float(self.ai_request_delay, 1.5, 0.0, 60.0)
+
+        # --- Enum / allowlist checks ---
+        if self.deepl_formality not in ("default", "formal", "informal"):
+            self.deepl_formality = "default"
+        if self.gemini_safety_settings not in ("BLOCK_NONE", "BLOCK_ONLY_HIGH", "STANDARD"):
+            self.gemini_safety_settings = "BLOCK_NONE"
+
+        # --- String sanitisation ---
+        self.source_language = str(self.source_language).strip() or "auto"
+        self.target_language = str(self.target_language).strip() or "tr"
+        self.openai_base_url = str(self.openai_base_url).strip()
+        self.local_llm_url = str(self.local_llm_url).strip() or "http://localhost:11434/v1"
+
+        # --- JSON field validation ---
+        try:
+            json.loads(self.custom_function_params)
+        except (json.JSONDecodeError, TypeError):
+            self.custom_function_params = "{}"
 
 @dataclass
 class ApiKeys:
@@ -199,6 +268,13 @@ class ApiKeys:
     openai_api_key: str = ""
     gemini_api_key: str = ""
     deepseek_api_key: str = ""
+
+    def __post_init__(self):
+        """Strip whitespace from all API keys."""
+        self.deepl_api_key = (self.deepl_api_key or "").strip()
+        self.openai_api_key = (self.openai_api_key or "").strip()
+        self.gemini_api_key = (self.gemini_api_key or "").strip()
+        self.deepseek_api_key = (self.deepseek_api_key or "").strip()
 
 @dataclass
 class AppSettings:
@@ -212,6 +288,14 @@ class AppSettings:
     # UnRen integration (Auto RPA Extraction)
     unren_auto_download: bool = True
 
+    def __post_init__(self):
+        """Validate enum/allowlist fields."""
+        if self.app_theme not in ("dark", "light", "auto"):
+            self.app_theme = "dark"
+        if self.output_format not in ("old_new", "simple"):
+            self.output_format = "old_new"
+        self.ui_language = str(self.ui_language).strip()
+
 @dataclass
 class ProxySettings:
     """Proxy-related settings."""
@@ -220,11 +304,22 @@ class ProxySettings:
     test_on_startup: bool = True
     update_interval: int = 3600  # seconds
     max_failures: int = 10
+    proxy_url: str = ""  # User's personal proxy (e.g. http://user:pass@host:port)
     manual_proxies: list = None
     
     def __post_init__(self):
         if self.manual_proxies is None:
             self.manual_proxies = []
+        # Clamp numeric fields (safe against None/string values)
+        try:
+            self.update_interval = max(60, min(int(self.update_interval), 86400))
+        except (ValueError, TypeError):
+            self.update_interval = 3600
+        try:
+            self.max_failures = max(1, min(int(self.max_failures), 100))
+        except (ValueError, TypeError):
+            self.max_failures = 10
+        self.proxy_url = (self.proxy_url or "").strip()
 
 class ConfigManager:
     """Manages application configuration."""

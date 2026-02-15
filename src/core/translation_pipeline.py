@@ -14,7 +14,7 @@ import logging
 import asyncio
 import re
 import time
-from typing import Optional, List, Dict, Callable, Tuple
+from typing import Optional, List, Dict, Callable, Tuple, Union, Any
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
@@ -460,7 +460,7 @@ class TranslationPipeline(QObject):
                      if 'common' in root.replace('\\', '/').split('/'):
                           for f in files:
                                try: os.remove(os.path.join(root, f))
-                               except: pass
+                               except Exception: pass
             
             # Tekrar kontrol
             has_rpy = self._has_rpy_files(game_dir)
@@ -695,6 +695,25 @@ class TranslationPipeline(QObject):
                     except Exception:
                         pass
         
+        # 6.5. Atomik segment çevirileri strings.json'a zaten ekleniyor (extra_translations)
+        # ve runtime hook Layer 1/2 tarafından eşleştiriliyor.
+        # _rl_segments.rpy artık oluşturulmuyor (v2.7.1 hotfix):
+        #   - translate XX strings: bloğu renpy.say() düzeyinde çalışmaz
+        #   - play_dialogue() quote wrapping ("text") nedeniyle match yapamaz
+        #   - Duplicate entry crash'lerine neden oluyordu
+        # Eski _rl_segments.rpy dosyası varsa temizle
+        _old_seg_path = os.path.join(tl_dir, '_rl_segments.rpy')
+        if os.path.exists(_old_seg_path):
+            try:
+                os.remove(_old_seg_path)
+                self.emit_log("info", "[AtomicSegments] Removed obsolete _rl_segments.rpy (translations handled by runtime hook)")
+                # .rpyc de varsa sil
+                _old_seg_rpyc = _old_seg_path + 'c'
+                if os.path.exists(_old_seg_rpyc):
+                    os.remove(_old_seg_rpyc)
+            except Exception:
+                pass
+        
         # 7. Dil başlatma kodu oluştur (game/ klasörüne)
         self._create_language_init_file(game_dir)
         
@@ -717,7 +736,7 @@ class TranslationPipeline(QObject):
             
             # strings.json oluştur (Agresif kanca için)
             lang_dir = os.path.join(tl_path, renpy_lang)
-            self._generate_strings_json(tl_files_updated, lang_dir)
+            self._generate_strings_json(tl_files_updated, lang_dir, extra_translations=translations)
             
             self._manage_runtime_hook()
 
@@ -785,14 +804,43 @@ class TranslationPipeline(QObject):
                 self.log_message.emit("warning", self.config.get_log_text('encoding_normalize_failed', path=file_path, error=str(e)))
         return normalized
     
-    def _generate_strings_json(self, tl_files: List[TranslationFile], lang_dir: str):
+    def _generate_strings_json(self, tl_files: List[TranslationFile], lang_dir: str, extra_translations: dict = None):
         """
         Tüm çevirileri strings.json dosyasına aktarır.
         Agresif substring çeviri motoru için gereklidir.
+        
+        Args:
+            tl_files: Çeviri dosyaları listesi
+            lang_dir: Hedef dil dizini
+            extra_translations: Ek çeviri çiftleri (atomik segment girişleri vb.)
         """
         try:
             import json
             mapping = {}
+            skipped_corrupt = 0
+            skipped_reason_counts = {
+                'separator_remnant': 0,
+                'placeholder_remnant': 0,
+                'html_leakage': 0,
+                'length_inflation': 0,
+                'placeholder_set_mismatch': 0,
+                'renpy_tag_set_mismatch': 0,
+                'duplicate_key_conflict': 0,
+            }
+            skipped_samples = []
+
+            def _mark_skipped(reason: str, original: str, translated: str):
+                nonlocal skipped_corrupt
+                skipped_corrupt += 1
+                if reason in skipped_reason_counts:
+                    skipped_reason_counts[reason] += 1
+                if len(skipped_samples) < 100:
+                    skipped_samples.append({
+                        'reason': reason,
+                        'original_preview': original[:120],
+                        'translated_preview': translated[:120],
+                    })
+
             for tfile in tl_files:
                 for entry in tfile.entries:
                     if entry.original_text and entry.translated_text:
@@ -801,7 +849,177 @@ class TranslationPipeline(QObject):
                         trans = entry.translated_text.strip()
                         if not orig or not trans or orig == trans:
                             continue
+                        # Sanitization: skip corrupted translations
+                        # 1. Separator remnant check (batch separator bleeding)
+                        if '|||' in trans or 'RNLSEP' in trans or 'SEP777' in trans or 'TXTSEP' in trans:
+                            _mark_skipped('separator_remnant', orig, trans)
+                            self.logger.debug(f"strings.json: Skipping separator remnant in translation of: {orig[:40]}")
+                            continue
+                        # 2. Placeholder remnant check (restore failure leakage)
+                        if '\u27e6RLPH' in trans or 'XRPYX_' in trans or 'RNPY_' in trans or '\u27e6' in trans:
+                            _mark_skipped('placeholder_remnant', orig, trans)
+                            self.logger.debug(f"strings.json: Skipping placeholder remnant in translation of: {orig[:40]}")
+                            continue
+                        # 3. HTML tag leakage check (from Google Translate HTML protection mode)
+                        if '<span' in trans.lower() or '</span>' in trans.lower() or '<div' in trans.lower():
+                            _mark_skipped('html_leakage', orig, trans)
+                            self.logger.debug(f"strings.json: Skipping HTML tag leakage in translation of: {orig[:40]}")
+                            continue
+                        # 4. Length inflation check (translated text abnormally longer than original)
+                        orig_len = len(orig)
+                        trans_len = len(trans)
+                        if orig_len > 0 and trans_len > max(orig_len * 4, orig_len + 80):
+                            _mark_skipped('length_inflation', orig, trans)
+                            self.logger.debug(f"strings.json: Skipping inflated translation ({trans_len} vs {orig_len}): {orig[:40]}")
+                            continue
+
+                        # 5. Placeholder set integrity check
+                        # Prevents broken mappings such as missing/extra [name] placeholders.
+                        orig_placeholders = sorted(re.findall(r'\[[^\]]+\]', orig))
+                        trans_placeholders = sorted(re.findall(r'\[[^\]]+\]', trans))
+                        if orig_placeholders != trans_placeholders:
+                            _mark_skipped('placeholder_set_mismatch', orig, trans)
+                            self.logger.debug(f"strings.json: Skipping placeholder-set mismatch in translation of: {orig[:40]}")
+                            continue
+
+                        # 6. Ren'Py text tag integrity check
+                        # Prevents context bleed like plain key -> styled/tagged value
+                        # e.g. "RedLightHouse" -> "{font=...}RedLightHouse{/font}"
+                        orig_tags = sorted(re.findall(r'\{/?[^}]+\}', orig))
+                        trans_tags = sorted(re.findall(r'\{/?[^}]+\}', trans))
+                        if orig_tags != trans_tags:
+                            _mark_skipped('renpy_tag_set_mismatch', orig, trans)
+                            self.logger.debug(f"strings.json: Skipping Ren'Py tag-set mismatch in translation of: {orig[:40]}")
+                            continue
+
+                        # 7. Duplicate key conflict detection
+                        # When the same original text appears in multiple files with
+                        # different translations, silently overwriting loses data.
+                        # Strategy: keep the first (typically from the main dialogue file).
+                        if orig in mapping:
+                            if mapping[orig] != trans:
+                                _mark_skipped('duplicate_key_conflict', orig, trans)
+                                self.logger.debug(
+                                    f"strings.json: Duplicate key conflict, keeping existing: "
+                                    f"{orig[:40]} -> existing={mapping[orig][:30]} vs new={trans[:30]}"
+                                )
+                            continue  # same key+value is harmless, skip either way
+
                         mapping[orig] = trans
+            
+            # ── Atomik segment çevirileri ekle (v2.7.1) ──
+            # Delimiter gruplarından gelen bağımsız segment çevirileri,
+            # Ren'Py runtime vary() eşleşmesi için strings.json'a eklenir.
+            if extra_translations:
+                for orig, trans in extra_translations.items():
+                    orig_s = orig.strip()
+                    trans_s = trans.strip()
+                    if orig_s and trans_s and orig_s != trans_s and orig_s not in mapping:
+                        mapping[orig_s] = trans_s
+            
+            # ── Delimiter grup segmentlerini ayır (v2.7.1 hotfix) ──
+            # Ren'Py vary() fonksiyonu <A|B|C> bloklarını parçalayıp tek segment seçer.
+            # strings.json'da birleşik blok ("old <A|B|C>": "<X|Y|Z>") var ama
+            # bireysel segmentler ("A": "X") yok → vary() çıktısı eşleşmiyor.
+            # Bu adım tüm mapping'i tarayıp:
+            #   1) Angle-pipe gruplarını (<A|B|C>) bireysel segment çiftlerine ayırır
+            #   2) Bare pipe patternlerini (A|B|C, <> olmadan) bireysel segment çiftlerine ayırır
+            try:
+                from src.core.syntax_guard import split_angle_pipe_groups, split_delimited_text
+                _seg_additions = {}
+                _seg_count = 0
+                for m_orig, m_trans in list(mapping.items()):
+                    # ── Yol 1: Angle-pipe grupları (<A|B|C>) ──
+                    orig_split = split_angle_pipe_groups(m_orig)
+                    if orig_split is not None:
+                        trans_split = split_angle_pipe_groups(m_trans)
+                        if trans_split is not None:
+                            _, orig_groups = orig_split
+                            _, trans_groups = trans_split
+                            for g_idx in range(min(len(orig_groups), len(trans_groups))):
+                                o_segs = orig_groups[g_idx]
+                                t_segs = trans_groups[g_idx]
+                                for s_idx in range(min(len(o_segs), len(t_segs))):
+                                    o_s = o_segs[s_idx].strip()
+                                    t_s = t_segs[s_idx].strip()
+                                    if o_s and t_s and o_s != t_s and o_s not in mapping and o_s not in _seg_additions:
+                                        _seg_additions[o_s] = t_s
+                                        _seg_count += 1
+                        continue  # Angle-pipe bulundu — bare pipe'a düşme
+                    
+                    # ── Yol 2: Bare pipe (A|B|C, <> olmadan) ──
+                    if '|' not in m_orig:
+                        continue
+                    orig_delim = split_delimited_text(m_orig)
+                    if orig_delim is None:
+                        # split_delimited_text false-positive filtresi geçemediyse
+                        # basit pipe split dene (vary() tam olarak bunu yapar)
+                        if '|' in m_orig and '|' in m_trans:
+                            o_parts = m_orig.split('|')
+                            t_parts = m_trans.split('|')
+                            # Safety: limit segment count (>6 likely CSV/data, not dialogue)
+                            # and require at least 2 alpha chars per segment to filter noise.
+                            if (len(o_parts) >= 2 and len(o_parts) == len(t_parts)
+                                    and len(o_parts) <= 6):
+                                _pipe_valid = True
+                                for _p in o_parts:
+                                    if sum(1 for ch in _p.strip() if ch.isalpha()) < 2:
+                                        _pipe_valid = False
+                                        break
+                                if _pipe_valid:
+                                    for o_s, t_s in zip(o_parts, t_parts):
+                                        o_s = o_s.strip()
+                                        t_s = t_s.strip()
+                                        if o_s and t_s and o_s != t_s and o_s not in mapping and o_s not in _seg_additions:
+                                            _seg_additions[o_s] = t_s
+                                            _seg_count += 1
+                        continue
+                    
+                    o_segs, _, _, _ = orig_delim
+                    trans_delim = split_delimited_text(m_trans)
+                    if trans_delim is not None:
+                        t_segs, _, _, _ = trans_delim
+                    elif '|' in m_trans:
+                        # Çeviri split_delimited_text'e uymuyorsa basit pipe split
+                        t_segs = m_trans.split('|')
+                    else:
+                        continue
+                    
+                    for s_idx in range(min(len(o_segs), len(t_segs))):
+                        o_s = o_segs[s_idx].strip()
+                        t_s = t_segs[s_idx].strip()
+                        if o_s and t_s and o_s != t_s and o_s not in mapping and o_s not in _seg_additions:
+                            _seg_additions[o_s] = t_s
+                            _seg_count += 1
+                
+                if _seg_additions:
+                    mapping.update(_seg_additions)
+                    self.logger.info(f"strings.json: {_seg_count} individual segments extracted from delimiter groups")
+            except Exception as e:
+                self.logger.debug(f"strings.json segment splitting skipped: {e}")
+            
+            if skipped_corrupt > 0:
+                self.logger.warning(f"strings.json: Skipped {skipped_corrupt} potentially corrupted translation(s)")
+                reason_summary = ', '.join(
+                    f"{name}={count}" for name, count in skipped_reason_counts.items() if count > 0
+                )
+                if reason_summary:
+                    self.logger.info(f"strings.json: Corruption reasons -> {reason_summary}")
+                try:
+                    diag_dir = os.path.join(lang_dir, 'diagnostics')
+                    os.makedirs(diag_dir, exist_ok=True)
+                    report_path = os.path.join(diag_dir, 'strings_json_skipped_corruptions.json')
+                    with open(report_path, 'w', encoding='utf-8') as rf:
+                        json.dump({
+                            'generated_at': int(time.time()),
+                            'total_skipped': skipped_corrupt,
+                            'reason_counts': skipped_reason_counts,
+                            'sample_limit': 100,
+                            'samples': skipped_samples,
+                        }, rf, ensure_ascii=False, indent=2)
+                    self.logger.info(f"strings.json: Wrote skipped-corruption report -> {report_path}")
+                except Exception as report_exc:
+                    self.logger.debug(f"strings.json: Failed to write skipped-corruption report: {report_exc}")
             
             if mapping:
                 json_path = os.path.join(lang_dir, "strings.json")
@@ -810,6 +1028,25 @@ class TranslationPipeline(QObject):
                 self.log_message.emit('info', self.config.get_log_text('log_strings_json_generated', count=len(mapping)))
         except Exception as e:
             self.logger.warning(f"Failed to generate strings.json: {e}")
+
+    def _write_atomic_segments_rpy(self, tl_dir: str, renpy_lang: str):
+        """
+        DEPRECATED (v2.7.1 hotfix) — Bu metod artık çağrılmıyor.
+        
+        Neden kaldırıldı:
+        1. translate XX strings: bloğu renpy.say() dinamik diyaloglarında çalışmaz
+        2. play_dialogue() fonksiyonu vary() çıktısını \"...\" ile sarmalıyor,
+           bu yüzden old "text" girişleri "text" (tırnaklı) ile eşleşemez
+        3. strings.rpy ile duplicate entry crash'lerine neden oluyordu
+        
+        Atomik segment çevirileri artık:
+        - strings.json'a ekleniyor (extra_translations parametresi ile)
+        - Runtime hook Layer 1/2 tarafından eşleştiriliyor (quote-stripping ile)
+        
+        Bu metod geriye dönük uyumluluk için korunuyor ama çağrılmıyor.
+        """
+        self.logger.debug("_write_atomic_segments_rpy is deprecated, skipping")
+        return
 
     def _manage_runtime_hook(self):
         """
@@ -916,77 +1153,90 @@ class TranslationPipeline(QObject):
                 os.remove(init_file)
                 self.log_message.emit("info", self.config.get_ui_text("pipeline_lang_init_update"))
 
+            # Sanitize language_code for use as Python identifier (e.g. zh-CN -> zh_cn)
+            safe_code = language_code.replace("-", "_").replace(" ", "_").replace(".", "_")
+
             # Agresif çoklu-fazlı dil aktivasyon sistemi
+            # v2.7.5: Ren'Py dokümantasyonuna uygun güvenli yaklaşım
+            #
+            # KRİTİK GÜVENLIK KURALLARI:
+            # 1. gui.init() "init offset = -2" ile çalışır ve renpy.call_in_new_context("_style_reset")
+            #    çağırır. Yeni context oluşturulurken config.context_copy_remove_screens'deki
+            #    ekranlar (varsayılan: ['notify', ...]) scene_lists'ten kaldırılır.
+            #    Bu kaldırma screen.update() → renpy.ui.detached() → stack[-1] gerektirir.
+            #    Init fazında ui.stack BOŞ'tur (ui.reset() post_init'te çalışır).
+            #    Bu yüzden gui.init() ÖNCESI herhangi bir screen gösterilmemeli!
+            #
+            # 2. _preferences.language Ren'Py dokümantasyonunda READ-ONLY olarak belirtilir.
+            #    Dil değiştirmek için renpy.change_language() kullanılmalıdır.
+            #
+            # 3. config.language (config.default_language DEĞİL) kullanıcı tercihini EZER.
+            #    Bu "unsanctioned translations" için Ren'Py'nin resmi önerisidir.
+            #
+            # GÜVENLI PRİORİTE SIRASI:
+            #   init -2  : gui.init() (oyunun gui.rpy dosyası)
+            #   init 0   : Bizim config.language ayarımız (gui.init SONRASI, güvenli)
+            #   init 999 : Runtime hook kurulumu
             content = f"""# ============================================================
-# RenLocalizer - Aggressive Language Activation
+# RenLocalizer - Safe Language Activation v2.7.5
 # ============================================================
-# Bu dosya oyunun dilini ZORLA {language_code.title()}'ye çevirir.
-# Bazı oyunlar config.default_language'ı görmezden gelir,
-# bu yüzden birden fazla yöntem kullanıyoruz.
+# Bu dosya oyunun dilini {language_code.title()}'ye ayarlar.
+#
+# KRİTİK: init -2'den ÖNCE (gui.init öncesi) hiçbir config/screen
+# işlemi yapılmaz. Bu, IndexError crash'ini önler.
+#
+# Ren'Py dil seçim önceliği (dokümantasyondan):
+#   1. config.language (None değilse, diğer HER ŞEYİ ezer)
+#   2. Kullanıcının daha önce seçtiği dil
+#   3. config.enable_language_autodetect
+#   4. config.default_language
+#   5. None (varsayılan dil)
 
 # ============================================================
-# PHASE 1: Early Init (Config Override)
+# PHASE 1: Safe Language Override (AFTER gui.init)
 # ============================================================
-init -100 python:
-    # Oyun başlamadan önce varsayılan dili ayarla
-    config.default_language = "{language_code}"
-    
-    # Bazı oyunlar bu değişkeni kontrol eder
-    if hasattr(config, "language"):
-        config.language = "{language_code}"
+# config.language kullanıcı tercihini ezer — "unsanctioned translations"
+# için Ren'Py'nin resmi önerisidir. Priority 0 = gui.init (-2) SONRASI.
+define config.language = "{language_code}"
 
 # ============================================================
-# PHASE 2: Preference Override (User Settings)
+# PHASE 2: Runtime Enforcement (Game Start Hook)
 # ============================================================
-init 1500 python:
-    # Kullanıcı tercihlerini zorla değiştir
-    _preferences.language = "{language_code}"
-    
-    # Tercihleri kaydet (kalıcı olması için)
-    try:
-        renpy.save_persistent()
-    except:
-        pass
-
-# ============================================================
-# PHASE 3: Runtime Enforcement (Startup Hook)
-# ============================================================
+# config.start_callbacks init fazı BİTTİKTEN SONRA,
+# oyun (splashscreen dahil) başlamadan HEMEN ÖNCE çalışır.
+# Bu noktada ui.stack başlatılmıştır, screen göstermek güvenlidir.
 init python:
-    def force_{language_code}_language():
+    def _rl_force_{safe_code}_language():
         \"\"\"
-        Oyun her başladığında dili kontrol et ve {language_code.title()}'ye çevir.
-        Kullanıcı başka bir dil seçse bile {language_code.title()}'ye geri döndür.
+        Oyun her başladığında dili kontrol et ve gerekirse {language_code.title()}'ye çevir.
+        renpy.change_language() kullanır (_preferences.language'a doğrudan yazmaz).
         \"\"\"
-        if _preferences.language != "{language_code}":
-            _preferences.language = "{language_code}"
-            try:
-                renpy.save_persistent()
-            except:
-                pass
-            
-            # Dil değişikliğini uygula
-            try:
+        try:
+            current = getattr(_preferences, 'language', None)
+            if current != "{language_code}":
                 renpy.change_language("{language_code}")
-            except:
-                pass
-    
+        except Exception:
+            pass
+
     # Oyun başladığında bu fonksiyonu çalıştır
-    config.start_callbacks.append(force_{language_code}_language)
+    if _rl_force_{safe_code}_language not in config.start_callbacks:
+        config.start_callbacks.append(_rl_force_{safe_code}_language)
 
 # ============================================================
-# PHASE 4: Persistent Override (Save File Protection)
+# PHASE 3: Persistent Override (Save File Protection)
 # ============================================================
+# init 0'da çalışır, gui.init (-2) SONRASI — güvenli.
+# Bazı oyunlar kendi persistent değişkenlerini kullanır.
 init python:
-    # Eğer persistent'ta dil ayarı varsa onu da değiştir
-    if hasattr(persistent, "language"):
-        persistent.language = "{language_code}"
-    
-    # Bazı oyunlar kendi persistent değişkenlerini kullanır
-    if hasattr(persistent, "game_language"):
-        persistent.game_language = "{language_code}"
-    
-    if hasattr(persistent, "selected_language"):
-        persistent.selected_language = "{language_code}"
+    try:
+        if hasattr(persistent, "language"):
+            persistent.language = "{language_code}"
+        if hasattr(persistent, "game_language"):
+            persistent.game_language = "{language_code}"
+        if hasattr(persistent, "selected_language"):
+            persistent.selected_language = "{language_code}"
+    except Exception:
+        pass
 """
 
 
@@ -1217,6 +1467,19 @@ init python:
                     except Exception:
                         pass
 
+        # Atomik segment çevirileri strings.json'a zaten ekleniyor (extra_translations)
+        # _rl_segments.rpy artık oluşturulmuyor (v2.7.1 hotfix) — runtime hook yeterli
+        _old_seg_path2 = os.path.join(str(lang_dir), '_rl_segments.rpy')
+        if os.path.exists(_old_seg_path2):
+            try:
+                os.remove(_old_seg_path2)
+                self.emit_log("info", "[AtomicSegments] Removed obsolete _rl_segments.rpy")
+                _old_seg_rpyc2 = _old_seg_path2 + 'c'
+                if os.path.exists(_old_seg_rpyc2):
+                    os.remove(_old_seg_rpyc2)
+            except Exception:
+                pass
+
         # Final istatistikler
         tl_files_updated = self.tl_parser.parse_directory(str(tl_path), lang_dir.name)
         stats = get_translation_stats(tl_files_updated)
@@ -1232,6 +1495,10 @@ init python:
         # Hedef dil icin dil baslatici dosyasi olustur
         if game_dir and game_dir.exists():
             self._create_language_init_file(str(game_dir))
+
+            # strings.json oluştur (Agresif kanca için) — atomik segmentler dahil
+            self._generate_strings_json(tl_files_updated, str(lang_dir), extra_translations=translations)
+
             self._manage_runtime_hook()
 
         self._set_stage(PipelineStage.COMPLETED, self.config.get_ui_text("stage_completed"))
@@ -1806,7 +2073,7 @@ init python:
                             if os.path.exists(temp_path):
                                 try:
                                     os.remove(temp_path)
-                                except:
+                                except Exception:
                                     pass
                             raise write_err
 
@@ -1846,9 +2113,6 @@ init python:
 
                         self.log_message.emit("info", self.config.get_log_text('strings_rpy_created', count=len(all_entries)))
                         return True
-                except Exception as e:
-                    self.log_message.emit("error", self.config.get_log_text('strings_rpy_error', error=str(e)))
-                    return False
                 except Exception as e:
                     self.log_message.emit("error", self.config.get_log_text('strings_rpy_error', error=str(e)))
                     return False
@@ -1900,6 +2164,7 @@ init python:
             character = entry.get('character', '')
             # 'type' is not standard in parser.py output, it uses 'text_type'
             text_type = entry.get('text_type', 'unknown')
+            is_nontranslatable_identifier = self._is_nontranslatable_identifier_entry(entry)
             
             escaped_text = self._escape_rpy_string(text)
             
@@ -1926,7 +2191,7 @@ init python:
             lines.append(f"    # {' '.join(comment_parts)}")
             # Check cache for existing translation to support seamless resume
             cached_translation = ""
-            if self.translation_manager:
+            if self.translation_manager and not is_nontranslatable_identifier:
                 # Cache lookup needs to match the key logic in translation_manager
                 # (Engine, Source, Target, Text) -> Result
                 # We do a 'best effort' check here.
@@ -1955,6 +2220,9 @@ init python:
                 if cached_res and cached_res.success:
                     cached_translation = self._escape_rpy_string(cached_res.translated_text)
 
+            if is_nontranslatable_identifier:
+                cached_translation = escaped_text
+
             lines.append(f'    old "{escaped_text}"')
             lines.append(f'    new "{cached_translation}"')
             lines.append("")
@@ -1972,12 +2240,21 @@ init python:
         return '\n'.join(lines)
     
     def _protect_glossary_terms(self, text: str) -> Tuple[str, Dict[str, str]]:
-        """Sözlük terimlerini placeholder ile korur ve karşılıklarını saklar."""
+        """Sözlük terimlerini Unicode bracket placeholder ile korur ve karşılıklarını saklar.
+        
+        v3.4: [[g0]] formatı yerine ⟦RLPH{ns}_gN⟧ formatına geçildi.
+        Eski format Google Translate tarafından kolayca bozuluyordu çünkü
+        [[ ]] çift köşeli parantezler çeviri motorları için anlamlı değildi.
+        Yeni format, syntax_guard ile aynı Unicode matematiksel parantez (U+27E6/U+27E7)
+        kullanır — Google bunlara "tanımsız sembol" olarak dokunmaz.
+        """
         if not self.config or not hasattr(self.config, 'glossary') or not self.config.glossary:
             return text, {}
             
+        import uuid
         placeholders = {}
         counter = 0
+        token_namespace = uuid.uuid4().hex[:6].upper()
         # En uzun terimler önce (çakışmayı önlemek için)
         sorted_terms = sorted(self.config.glossary.items(), key=lambda x: -len(x[0]))
         
@@ -1990,7 +2267,7 @@ init python:
             
             def replace_func(match):
                 nonlocal counter
-                key = f"[[g{counter}]]"
+                key = f"\u27e6RLPH{token_namespace}_G{counter}\u27e7"
                 placeholders[key] = dst  # Hedef çeviriyi yer tutucu sözlüğüne koy!
                 counter += 1
                 return key
@@ -2011,16 +2288,31 @@ init python:
         text = text.replace('\t', '\\t')
         
         return text
+
+    def _is_nontranslatable_identifier_entry(self, entry) -> bool:
+        """style_prefix gibi kimlik/anahtar tipindeki girdiler çevrilmemeli."""
+        try:
+            if isinstance(entry, dict):
+                character = (entry.get('character') or '').strip().lower()
+            else:
+                character = (getattr(entry, 'character', '') or '').strip().lower()
+            return character == 'style_prefix'
+        except Exception:
+            return False
     
     def _translate_entries(self, entries: List[TranslationEntry]) -> Dict[str, str]:
         """Girişleri çevir (placeholder koruması zorunlu)."""
-        from src.core.translator import protect_renpy_syntax, restore_renpy_syntax
+        from src.core.translator import protect_renpy_syntax
+        from src.core.syntax_guard import split_delimited_text, rejoin_delimited_text, split_angle_pipe_groups, rejoin_angle_pipe_groups
         translations = {}
+        self._last_atomic_segments = {}  # v2.7.1: Delimiter atomik segment çiftleri
         formatter = RenPyOutputFormatter()
 
         # Teknik/yer tutucu metinleri çeviri kuyruğundan ayıkla
         filtered_entries: List[TranslationEntry] = []
         for entry in entries:
+            if self._is_nontranslatable_identifier_entry(entry):
+                continue
             if formatter._should_skip_translation(entry.original_text):
                 continue
             filtered_entries.append(entry)
@@ -2163,7 +2455,6 @@ init python:
             self.translation_manager.add_translator(TranslationEngine.DEEPL, dt)
 
         # AI Translators Lazy Init
-        # AI Translators Lazy Init
         if self.engine == TranslationEngine.OPENAI and self.engine not in self.translation_manager.translators:
             # Determine correct API key based on Base URL
             # Users might enter DeepSeek key in its own field but run it via OpenAI engine (compatible mode)
@@ -2222,10 +2513,44 @@ init python:
             t.status_callback = self.log_message.emit
             self.translation_manager.add_translator(TranslationEngine.LOCAL_LLM, t)
 
+        # ================================================================
+        # v2.7.1: Auto-protect character names — glossary'ye ekle
+        # ================================================================
+        _auto_names_added = 0
+        if getattr(self.config.translation_settings, 'auto_protect_character_names', True):
+            existing_glossary = self.config.glossary if hasattr(self.config, 'glossary') and self.config.glossary else {}
+            existing_lower = {k.lower() for k in existing_glossary}
+            char_names: set = set()
+            for entry in entries:
+                c = getattr(entry, 'character', '') or ''
+                c = c.strip()
+                # Değişken isimleri / enterpolasyon değil, gerçek isimler
+                # Boşluklu isimler de kabul edilir (örn. "Mary Jane", "Old Man")
+                if (c and len(c) >= 2 and not c.startswith('[') and not c.startswith('{')
+                        and not c.startswith('$')
+                        and c.lower() not in existing_lower
+                        and c[0].isupper()):  # İsimler büyük harfle başlar
+                    char_names.add(c)
+            if char_names:
+                # Thread-safe glossary update via config lock if available
+                _lock = getattr(self.config, '_lock', None)
+                if _lock:
+                    _lock.acquire()
+                try:
+                    for name in char_names:
+                        existing_glossary[name] = name  # name → name (korunur, çevrilmez)
+                    self.config.glossary = existing_glossary
+                finally:
+                    if _lock:
+                        _lock.release()
+                _auto_names_added = len(char_names)
+                self.log_message.emit("info", f"[AutoProtect] {_auto_names_added} character name(s) protected: {', '.join(sorted(char_names)[:10])}")
+
         try:
             unchanged_count = 0
             failed_entries: List[str] = []
             sample_logs: List[str] = []
+            stop_quota = False
             for i in range(0, total, batch_size):
                 if self.should_stop:
                     break
@@ -2239,8 +2564,16 @@ init python:
 
                 # Çeviri istekleri oluştur (her zaman placeholder korumalı)
                 requests = []
-                batch_placeholders = []
-                for entry in batch:
+                # Delimiter-Aware Translation: Her entry için delimiter split bilgisini sakla
+                # Key: request listesindeki başlangıç indexi, Value: (entry_idx, segment_count, delimiter, prefix, suffix, translation_id, original_text)
+                _delimiter_groups = {}  # {batch_entry_idx: (req_start_idx, seg_count, delim, prefix, suffix, tid, orig_text)}
+                # Multi-Group Angle-Pipe (v2.7.5): Çoklu <seg|seg> grupları
+                _multi_group_data = {}  # {batch_entry_idx: (req_start, group_lens, tid, orig_text)}
+                _delimiter_enabled = getattr(self.config.translation_settings, 'enable_delimiter_aware_translation', True)
+                
+                _prev_entry_text = None  # extend context tracking — reset per batch
+                _prev_entry_file = None  # track file path for cross-file boundary detection
+                for entry_idx, entry in enumerate(batch):
                     translation_id = getattr(entry, 'translation_id', '') or TLParser.make_translation_id(
                         entry.file_path,
                         entry.line_number,
@@ -2248,6 +2581,125 @@ init python:
                         getattr(entry, 'context_path', []),
                         getattr(entry, 'raw_text', None)
                     )
+                    
+                    # ============================================================
+                    # MULTI-GROUP ANGLE-PIPE SPLIT (v2.7.5)
+                    # ============================================================
+                    # Metindeki TÜM <seg1|seg2|...> gruplarını bulur.
+                    # Template ayrı çevrilir, her segment bağımsız çevrilir.
+                    # Bu sayede:
+                    #   - Çoklu gruplar korunur (GT grup sırasını bozamaz)
+                    #   - Çevreleyen metin de tam çevrilir
+                    #   - Kısa/tek kelimelik segmentler desteklenir
+                    multi_result = split_angle_pipe_groups(entry.original_text) if _delimiter_enabled else None
+                    
+                    if multi_result is not None:
+                        template, groups = multi_result
+                        req_start_idx = len(requests)
+                        group_lens = [len(g) for g in groups]
+                        _multi_group_data[entry_idx] = (req_start_idx, group_lens, translation_id, entry.original_text)
+                        
+                        _log_preview = entry.original_text[:80].replace('<', '\u2039').replace('>', '\u203a')
+                        self.log_message.emit("debug", f"[MultiGroup] {len(groups)} groups ({sum(group_lens)} segments): {_log_preview}")
+                        
+                        # Request 0: Template ([DGRP_N] placeholder'lı — protect_renpy_syntax korur)
+                        protected_template, ph_template = protect_renpy_syntax(template)
+                        protected_template, gph_template = self._protect_glossary_terms(protected_template)
+                        ph_template.update(gph_template)
+                        
+                        requests.append(TranslationRequest(
+                            text=protected_template,
+                            source_lang=api_source_lang,
+                            target_lang=api_target_lang,
+                            engine=self.engine,
+                            metadata={
+                                'preprotected': True,
+                                'original_text': template,
+                                'entry': entry,
+                                'translation_id': translation_id,
+                                'file_path': entry.file_path,
+                                'line_number': entry.line_number,
+                                'context_path': getattr(entry, 'context_path', []),
+                                'placeholders': ph_template,
+                                '_multi_group_template': True,
+                            }
+                        ))
+                        
+                        # Requests 1..N: Her grubun segmentleri
+                        for group in groups:
+                            for seg in group:
+                                seg_text = seg.strip()
+                                protected_seg, ph_seg = protect_renpy_syntax(seg_text)
+                                protected_seg, gph_seg = self._protect_glossary_terms(protected_seg)
+                                ph_seg.update(gph_seg)
+                                
+                                requests.append(TranslationRequest(
+                                    text=protected_seg,
+                                    source_lang=api_source_lang,
+                                    target_lang=api_target_lang,
+                                    engine=self.engine,
+                                    metadata={
+                                        'preprotected': True,
+                                        'original_text': seg_text,
+                                        'entry': entry,
+                                        'translation_id': translation_id,
+                                        'file_path': entry.file_path,
+                                        'line_number': entry.line_number,
+                                        'context_path': getattr(entry, 'context_path', []),
+                                        'placeholders': ph_seg,
+                                        '_multi_group_segment': True,
+                                    }
+                                ))
+                        _prev_entry_text = entry.original_text  # Track for extend
+                        _prev_entry_file = entry.file_path
+                        continue  # Multi-group eklendi — normal akışı atla
+                    
+                    # ============================================================
+                    # DELIMITER-AWARE SPLIT (v2.7.2) — Bare pipe fallback
+                    # ============================================================
+                    # Angle-pipe grubu yoksa, bare pipe pattern'i dene (seg1|seg2|seg3)
+                    delim_result = split_delimited_text(entry.original_text) if _delimiter_enabled else None
+                    
+                    if delim_result is not None:
+                        segments, delimiter, d_prefix, d_suffix = delim_result
+                        req_start_idx = len(requests)
+                        _delimiter_groups[entry_idx] = (req_start_idx, len(segments), delimiter, d_prefix, d_suffix, translation_id, entry.original_text)
+                        
+                        _log_preview = entry.original_text[:80].replace('<', '\u2039').replace('>', '\u203a')
+                        self.log_message.emit("debug", f"[Delimiter] Split into {len(segments)} segments: {_log_preview}")
+                        
+                        # Her segmenti ayrı bir request olarak ekle
+                        for seg in segments:
+                            seg_text = seg.strip()
+                            protected_text, placeholders = protect_renpy_syntax(seg_text)
+                            protected_text, glossary_placeholders = self._protect_glossary_terms(protected_text)
+                            placeholders.update(glossary_placeholders)
+                            
+                            req = TranslationRequest(
+                                text=protected_text,
+                                source_lang=api_source_lang,
+                                target_lang=api_target_lang,
+                                engine=self.engine,
+                                metadata={
+                                    'preprotected': True,
+                                    'original_text': seg_text,
+                                    'entry': entry,
+                                    'translation_id': translation_id,
+                                    'file_path': entry.file_path,
+                                    'line_number': entry.line_number,
+                                    'context_path': getattr(entry, 'context_path', []),
+                                    'placeholders': placeholders,
+                                    '_delimiter_segment': True,  # İşaretçi: bu bir segment
+                                }
+                            )
+                            requests.append(req)
+                        _prev_entry_text = entry.original_text  # Track for extend
+                        _prev_entry_file = entry.file_path
+                        continue  # Normal akışı atla — segmentler eklendi
+                    
+                    # ============================================================
+                    # Normal (non-delimited) entry işleme
+                    # ============================================================
                     # Her metni çeviri öncesi koru (Ren'Py tagleri + Sözlük terimleri)
                     protected_text, placeholders = protect_renpy_syntax(entry.original_text)
                     
@@ -2255,22 +2707,29 @@ init python:
                     protected_text, glossary_placeholders = self._protect_glossary_terms(protected_text)
                     placeholders.update(glossary_placeholders)
                     
-                    batch_placeholders.append(placeholders)
                     req = TranslationRequest(
                         text=protected_text,  # KORUNMUŞ metin
                         source_lang=api_source_lang,
                         target_lang=api_target_lang,
                         engine=self.engine,
                         metadata={
+                            'preprotected': True,
+                            'original_text': entry.original_text,
                             'entry': entry,
                             'translation_id': translation_id,
                             'file_path': entry.file_path,
                             'line_number': entry.line_number,
                             'context_path': getattr(entry, 'context_path', []),
                             'placeholders': placeholders,
+                            'context_hint': _prev_entry_text if (
+                                getattr(entry, 'text_type', '') == 'extend'
+                                and _prev_entry_file == entry.file_path  # Same file only
+                            ) else None,
                         }
                     )
                     requests.append(req)
+                    _prev_entry_text = entry.original_text  # Track for next extend
+                    _prev_entry_file = entry.file_path
 
                 # Batch çeviri
                 self.translation_manager.set_proxy_enabled(self.use_proxy)
@@ -2280,64 +2739,253 @@ init python:
                 )
 
                 # Sonuçları kaydet (her zaman restore ile!)
-                stop_quota = False
-                for idx, result in enumerate(results):
-                    tid = result.metadata.get('translation_id') or result.original_text
-                    placeholders = result.metadata.get('placeholders') or {}
-                    
-                    # Kota doldu hatasını kontrol et
-                    if result.quota_exceeded:
-                        stop_quota = True
-
-                    if result.success:
-                        translated_raw = result.translated_text
-                        if self.config and hasattr(self.config, 'glossary') and self.config.glossary:
-                            translated_raw = formatter.apply_glossary(
-                                text=translated_raw, 
-                                glossary=self.config.glossary,
-                                original_text=batch[idx].original_text
-                            )
-
-                        # Çeviri sonrası placeholder restore
-                        restored = restore_renpy_syntax(translated_raw, placeholders) if translated_raw else ""
+                # ============================================================
+                # FAZ 1: Delimiter gruplarını birleştir
+                # ============================================================
+                # Önce delimiter segmentlerini birleştirip her batch entry için
+                # tek bir çevrilmiş metin elde edelim.
+                # _delimiter_groups: {entry_idx: (req_start_idx, seg_count, delim, prefix, suffix, tid, orig_text)}
+                # _multi_group_data: {entry_idx: (req_start, group_lens, tid, orig_text)}
+                
+                # Request sonuçlarını entry bazında eşle
+                # Normal entry: 1 request = 1 result
+                # Delimited entry: N request = N result → rejoin
+                # Multi-group entry: 1 template + sum(group_lens) segments → rejoin
+                
+                # Build a unified result list aligned with batch entries
+                _entry_results = []  # List of (tid, restored_text_or_None, entry, success, error)
+                _atomic_segments = []  # List of (original_seg, translated_seg) pairs for delimiter entries
+                _req_cursor = 0  # Tracks position in results list
+                
+                for entry_idx, entry in enumerate(batch):
+                    if entry_idx in _multi_group_data:
+                        # ── Multi-Group Angle-Pipe (v2.7.5) ──
+                        req_start, group_lens, tid, orig_text = _multi_group_data[entry_idx]
+                        total_reqs = 1 + sum(group_lens)  # 1 template + segments
                         
+                        # Result 0: Çevrilmiş template
+                        template_idx = req_start
+                        all_success = True
+                        seg_error = None
+                        
+                        if template_idx < len(results):
+                            template_result = results[template_idx]
+                            if not template_result.success or not template_result.translated_text:
+                                all_success = False
+                                seg_error = (template_result.error or "empty_template")
+                                if template_result.quota_exceeded:
+                                    stop_quota = True
+                        else:
+                            all_success = False
+                            seg_error = "missing_template_result"
+                        
+                        translated_template = None
+                        translated_groups = []
+                        
+                        if all_success:
+                            translated_template = template_result.translated_text
+                            if self.config and hasattr(self.config, 'glossary') and self.config.glossary:
+                                translated_template = formatter.apply_glossary(
+                                    text=translated_template, glossary=self.config.glossary,
+                                    original_text=template_result.metadata.get('original_text', '')
+                                )
+                            
+                            # Segment sonuçlarını gruplara ayır
+                            seg_cursor = req_start + 1  # template'den sonra
+                            for gl in group_lens:
+                                group_segs = []
+                                for s in range(gl):
+                                    r_idx = seg_cursor + s
+                                    if r_idx < len(results):
+                                        result = results[r_idx]
+                                        if result.success and result.translated_text:
+                                            raw = result.translated_text
+                                            if self.config and hasattr(self.config, 'glossary') and self.config.glossary:
+                                                raw = formatter.apply_glossary(
+                                                    text=raw, glossary=self.config.glossary,
+                                                    original_text=result.metadata.get('original_text', '')
+                                                )
+                                            group_segs.append(raw)
+                                        else:
+                                            all_success = False
+                                            seg_error = result.error or "empty_segment"
+                                            if result.quota_exceeded:
+                                                stop_quota = True
+                                            break
+                                        if result.quota_exceeded:
+                                            stop_quota = True
+                                    else:
+                                        all_success = False
+                                        seg_error = "missing_segment_result"
+                                        break
+                                translated_groups.append(group_segs)
+                                seg_cursor += gl
+                                if not all_success:
+                                    break
+                        
+                        _req_cursor = req_start + total_reqs
+                        
+                        if all_success and translated_template and len(translated_groups) == len(group_lens):
+                            restored = rejoin_angle_pipe_groups(translated_template, translated_groups)
+                            
+                            if restored is None:
+                                self.log_message.emit("warning", f"[MultiGroup] Structural corruption detected, using original: {orig_text[:80]}")
+                                _entry_results.append((tid, orig_text, entry, True, None))
+                            else:
+                                _entry_results.append((tid, restored, entry, True, None))
+                                # ── Atomik segment kaydı (v2.7.1) ──
+                                # Her segmentin orijinal→çeviri çiftini kaydet.
+                                # Ren'Py runtime'da vary() ile segmentleri ayrı ayrı çağırır.
+                                seg_r_cursor = req_start + 1  # template'den sonra
+                                for grp_segs in translated_groups:
+                                    for tr_seg in grp_segs:
+                                        if seg_r_cursor < len(results):
+                                            orig_seg = results[seg_r_cursor].metadata.get('original_text', '')
+                                            if orig_seg and tr_seg and orig_seg != tr_seg:
+                                                _atomic_segments.append((orig_seg, tr_seg))
+                                            seg_r_cursor += 1
+                        else:
+                            _entry_results.append((tid, None, entry, False, seg_error))
+                    
+                    elif entry_idx in _delimiter_groups:
+                        # Bu entry delimiter-split edilmişti
+                        req_start, seg_count, delim, d_prefix, d_suffix, tid, orig_text = _delimiter_groups[entry_idx]
+                        
+                        translated_segments = []
+                        all_success = True
+                        seg_error = None
+                        
+                        for seg_i in range(seg_count):
+                            r_idx = req_start + seg_i
+                            if r_idx < len(results):
+                                result = results[r_idx]
+                                if result.success and result.translated_text:
+                                    raw = result.translated_text
+                                    if self.config and hasattr(self.config, 'glossary') and self.config.glossary:
+                                        raw = formatter.apply_glossary(
+                                            text=raw, glossary=self.config.glossary,
+                                            original_text=result.metadata.get('original_text', '')
+                                        )
+                                    translated_segments.append(raw)
+                                else:
+                                    all_success = False
+                                    seg_error = result.error or "empty"
+                                    if result.quota_exceeded:
+                                        stop_quota = True
+                                    break
+                                if result.quota_exceeded:
+                                    stop_quota = True
+                            else:
+                                all_success = False
+                                seg_error = "missing_result"
+                                break
+                        
+                        _req_cursor = req_start + seg_count
+                        
+                        if all_success and len(translated_segments) == seg_count:
+                            # Segmentleri geri birleştir (v2.7.3: yapısal doğrulama ile)
+                            restored = rejoin_delimited_text(translated_segments, delim, d_prefix, d_suffix, original_text=orig_text)
+                            
+                            if restored is None:
+                                # Yapısal bozulma tespit edildi — orijinal metni koru
+                                self.log_message.emit("warning", f"[Delimiter] Structural corruption detected, using original: {orig_text[:80]}")
+                                _entry_results.append((tid, orig_text, entry, True, None))
+                            else:
+                                _entry_results.append((tid, restored, entry, True, None))
+                                # ── Atomik segment kaydı (v2.7.1) ──
+                                # Bare-pipe segmentlerinin her birini ayrı çeviri girişi olarak kaydet.
+                                for seg_i in range(seg_count):
+                                    r_idx = req_start + seg_i
+                                    if r_idx < len(results) and results[r_idx].success:
+                                        orig_seg = results[r_idx].metadata.get('original_text', '')
+                                        tr_seg = translated_segments[seg_i] if seg_i < len(translated_segments) else ''
+                                        if orig_seg and tr_seg and orig_seg != tr_seg:
+                                            _atomic_segments.append((orig_seg, tr_seg))
+                        else:
+                            # Herhangi bir segment başarısız ise orijinali koru
+                            _entry_results.append((tid, None, entry, False, seg_error))
+                    else:
+                        # Normal (non-delimited) entry
+                        if _req_cursor < len(results):
+                            result = results[_req_cursor]
+                            _req_cursor += 1
+                            
+                            if result.quota_exceeded:
+                                stop_quota = True
+                            
+                            if result.success:
+                                translated_raw = result.translated_text
+                                if self.config and hasattr(self.config, 'glossary') and self.config.glossary:
+                                    translated_raw = formatter.apply_glossary(
+                                        text=translated_raw, 
+                                        glossary=self.config.glossary,
+                                        original_text=entry.original_text
+                                    )
+                                restored = translated_raw if translated_raw else ""
+                                _entry_results.append((result.metadata.get('translation_id') or result.original_text, restored, entry, True, None))
+                            else:
+                                _entry_results.append((result.metadata.get('translation_id') or result.original_text, None, entry, False, result.error or "empty"))
+                        else:
+                            _entry_results.append(("", None, entry, False, "missing_result"))
+                
+                # ============================================================
+                # FAZ 2: Sonuçları translations'a yaz
+                # ============================================================
+                for tid, restored, entry, success, error in _entry_results:
+                    if success and restored is not None:
                         # Otomatik doğrulama: placeholder bozulduysa orijinali kullan
-                        if not self.validate_placeholders(original=batch[idx].original_text, translated=restored):
-                            self.log_message.emit("warning", self.config.get_log_text('placeholder_corrupted', original=batch[idx].original_text, translated=restored))
-                            restored = batch[idx].original_text
+                        if not self.validate_placeholders(original=entry.original_text, translated=restored):
+                            self.log_message.emit("warning", self.config.get_log_text('placeholder_corrupted', original=entry.original_text, translated=restored))
+                            restored = entry.original_text
                         
                         if restored:
                             translations[tid] = restored
-                            translations.setdefault(batch[idx].original_text, restored)
+                            translations.setdefault(entry.original_text, restored)
                             
                             # Diagnostics: record translated and unchanged
                             try:
-                                file_path = result.metadata.get('file_path') or batch[idx].file_path
-                                if restored == batch[idx].original_text:
-                                    self.diagnostic_report.mark_unchanged(file_path, tid, original_text=batch[idx].original_text)
+                                file_path = entry.file_path
+                                if restored == entry.original_text:
+                                    self.diagnostic_report.mark_unchanged(file_path, tid, original_text=entry.original_text)
                                 else:
-                                    self.diagnostic_report.mark_translated(file_path, tid, restored, original_text=batch[idx].original_text)
+                                    self.diagnostic_report.mark_translated(file_path, tid, restored, original_text=entry.original_text)
                             except Exception:
                                 pass
                             
-                            if restored == batch[idx].original_text:
+                            if restored == entry.original_text:
                                 unchanged_count += 1
                                 if len(sample_logs) < 5:
-                                    sample_logs.append(f"UNCHANGED {result.metadata.get('file_path','')}:{result.metadata.get('line_number','')} -> {batch[idx].original_text[:80]}")
+                                    sample_logs.append(f"UNCHANGED {entry.file_path}:{entry.line_number} -> {entry.original_text[:80]}")
                     else:
-                        err = result.error or "empty"
-                        file_info = f"{result.metadata.get('file_path','')}:{result.metadata.get('line_number','')}"
+                        err = error or "empty"
+                        file_info = f"{entry.file_path}:{entry.line_number}"
                         if file_info == ":":
-                            entry = f"({err})"
+                            err_entry = f"({err})"
                         else:
-                            entry = f"{file_info} ({err})"
-                        failed_entries.append(entry)
+                            err_entry = f"{file_info} ({err})"
+                        failed_entries.append(err_entry)
                         # Diagnostics: mark skipped/failed
                         try:
-                            file_path = result.metadata.get('file_path') or batch[idx].file_path
-                            self.diagnostic_report.mark_skipped(file_path, f"translate_failed:{err}", {'text': batch[idx].original_text, 'line_number': batch[idx].line_number})
+                            self.diagnostic_report.mark_skipped(entry.file_path, f"translate_failed:{err}", {'text': entry.original_text, 'line_number': entry.line_number})
                         except Exception:
                             pass
+                
+                # ============================================================
+                # FAZ 2.5: Atomik segment girişleri (v2.7.1)
+                # ============================================================
+                # Delimiter gruplarının (<A|B|C> veya A|B|C) her segmentini
+                # bağımsız bir çeviri girişi olarak kaydet. Ren'Py runtime'da
+                # vary() veya liste indeksleme ile segmentleri ayrı ayrı
+                # çağırdığından, birleşik blok yerine atomik girişler gerekir.
+                if _atomic_segments:
+                    _seg_added = 0
+                    for orig_seg, tr_seg in _atomic_segments:
+                        if orig_seg not in translations:
+                            translations[orig_seg] = tr_seg
+                            self._last_atomic_segments[orig_seg] = tr_seg
+                            _seg_added += 1
+                    if _seg_added:
+                        self.emit_log("debug", f"[AtomicSegments] {_seg_added} individual segment translations registered from delimiter groups")
                 
                 # Cache kaydet (Performans için her 500 metinde bir checkpoint al)
                 if current % 500 == 0:
@@ -2394,15 +3042,31 @@ init python:
     def validate_placeholders(self, original, translated):
         """
         Çeviri sonrası değişkenlerin doğruluğunu kontrol eder.
+        v2.7.2: Fuzzy matching - boşluklu versiyonları da kabul et (Google Translate corruption tolerance)
         """
         # Orijinaldeki [köşeli parantez] bloklarını bul
         orig_vars = re.findall(r'\[[^\]]+\]', original)
 
         for var in orig_vars:
             if var not in translated:
-                # HATA: Çeviri motoru değişkeni bozmuş!
-                # Çeviriyi iptal et ve orijinal metni kullan veya değişkeni zorla ekle
-                return False
+                # Fuzzy check: Boşluk eklenmiş veya çıkarılmış versiyonu ara
+                # [player.name] → [player. name], [player .name], [player . name]
+                var_content = var[1:-1]  # Bracket'leri çıkar
+                # Normalized versiyon: boşluksuz
+                var_normalized = re.sub(r'\s+', '', var_content)
+                
+                # Translated içindeki tüm bracket'leri kontrol et
+                found = False
+                for trans_var in re.findall(r'\[[^\]]+\]', translated):
+                    trans_content = trans_var[1:-1]
+                    trans_normalized = re.sub(r'\s+', '', trans_content)
+                    if var_normalized == trans_normalized:
+                        found = True
+                        break
+                
+                if not found:
+                    # HATA: Çeviri motoru değişkeni tamamen kaybetmiş veya değiştirmiş!
+                    return False
         return True
 
 

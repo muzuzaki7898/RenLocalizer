@@ -107,6 +107,51 @@ Rectangle {
                     btnText: (backend.uiTrigger, backend.getTextWithDefault("btn_select_and_start", "Select Folder and Start"))
                     onClicked: tlDialog.open()
                 }
+
+                // --- Çeviri Doğrulama (Lint) ---
+                ToolCard {
+                    title: "🔍 " + (backend.uiTrigger, backend.getTextWithDefault("tool_lint_title", "Translation Lint"))
+                    desc: (backend.uiTrigger, backend.getTextWithDefault("tool_lint_desc", "Validate translation files for common errors and inconsistencies."))
+                    icon: "✅"
+                    btnText: (backend.uiTrigger, backend.getTextWithDefault("btn_lint", "Run Lint"))
+                    onClicked: backend.runTranslationLint()
+                }
+
+                // --- Proje Dışa Aktarma ---
+                ToolCard {
+                    title: "📤 " + (backend.uiTrigger, backend.getTextWithDefault("tool_project_export_title", "Project Export"))
+                    desc: (backend.uiTrigger, backend.getTextWithDefault("tool_project_export_desc", "Export current project settings, glossary and cache as a portable archive (.rlproj)."))
+                    icon: "💾"
+                    btnText: (backend.uiTrigger, backend.getTextWithDefault("btn_export", "Export"))
+                    onClicked: backend.exportProject()
+                }
+
+                // --- Proje İçe Aktarma ---
+                ToolCard {
+                    title: "📥 " + (backend.uiTrigger, backend.getTextWithDefault("tool_project_import_title", "Project Import"))
+                    desc: (backend.uiTrigger, backend.getTextWithDefault("tool_project_import_desc", "Import project settings, glossary and cache from a .rlproj archive file."))
+                    icon: "📂"
+                    btnText: (backend.uiTrigger, backend.getTextWithDefault("btn_import", "Import"))
+                    onClicked: backend.importProject()
+                }
+
+                // --- Çeviri Şifreleme ---
+                ToolCard {
+                    title: "🔒 " + (backend.uiTrigger, backend.getTextWithDefault("tool_encrypt_title", "Translation Encryption"))
+                    desc: (backend.uiTrigger, backend.getTextWithDefault("tool_encrypt_desc", "Obfuscate translation files to protect your work from casual copying."))
+                    icon: "🛡️"
+                    btnText: (backend.uiTrigger, backend.getTextWithDefault("btn_encrypt", "Encrypt"))
+                    onClicked: backend.encryptTranslations()
+                }
+
+                // --- RPA Paketleme ---
+                ToolCard {
+                    title: "📦 " + (backend.uiTrigger, backend.getTextWithDefault("tool_rpa_pack_title", "RPA Packing"))
+                    desc: (backend.uiTrigger, backend.getTextWithDefault("tool_rpa_pack_desc", "Pack translation files into a Ren'Py-compatible .rpa archive."))
+                    icon: "🗜️"
+                    btnText: (backend.uiTrigger, backend.getTextWithDefault("btn_pack", "Pack"))
+                    onClicked: backend.packRPA()
+                }
             }
         }
     }

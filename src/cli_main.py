@@ -923,7 +923,8 @@ def main() -> int:
                 TranslationEngine.DEEPL,
                 DeepLTranslator(
                     api_key=config_manager.api_keys.deepl_api_key,
-                    proxy_manager=proxy_manager
+                    proxy_manager=proxy_manager,
+                    config_manager=config_manager
                 )
             )
         elif selected_engine_code == 'openai':

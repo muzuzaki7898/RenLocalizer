@@ -20,6 +20,7 @@ from .syntax_guard import (
     protect_renpy_syntax,
     restore_renpy_syntax,
     validate_translation_integrity,
+    inject_missing_placeholders,
     protect_renpy_syntax_html,
     restore_renpy_syntax_html,
     RENPY_VAR_PATTERN,
@@ -134,9 +135,15 @@ class BaseTranslator(ABC):
 
     def _get_text(self, key: str, default: str, **kwargs) -> str:
         """Helper to get localized text from config_manager."""
-        if self.config_manager:
-            return self.config_manager.get_ui_text(key, default).format(**kwargs)
-        return default.format(**kwargs)
+        try:
+            if self.config_manager:
+                return self.config_manager.get_ui_text(key, default).format(**kwargs)
+            return default.format(**kwargs)
+        except (KeyError, IndexError, ValueError):
+            # Locale file may have mismatched format keys
+            if self.config_manager:
+                return self.config_manager.get_ui_text(key, default)
+            return default
 
     async def close(self):
         if self._session:
@@ -221,6 +228,34 @@ class GoogleTranslator(BaseTranslator):
     MIRROR_MAX_FAILURES = MIRROR_MAX_FAILURES   # Max failures before temp ban
     MIRROR_BAN_TIME = MIRROR_BAN_TIME     # Ban duration in seconds (2 min)
 
+    def _supports_html_protection(self) -> bool:
+        """
+        HTML mode is reliable on official Cloud Translation HTML APIs,
+        but this translator uses public web endpoints (/translate_a/single)
+        where HTML handling is inconsistent.
+        """
+        return not any('/translate_a/single' in ep for ep in self.google_endpoints)
+
+    def _prepare_request_protection(self, request: TranslationRequest) -> Tuple[str, Dict[str, str], bool]:
+        """
+        Prepare request text/placeholders for translation.
+
+        If request.metadata carries preprotected text + placeholders (pipeline mode),
+        avoid applying protect_renpy_syntax() again.
+        """
+        metadata = request.metadata if isinstance(request.metadata, dict) else {}
+        preprotected = bool(metadata.get('preprotected'))
+        placeholders = metadata.get('placeholders')
+
+        if preprotected and isinstance(placeholders, dict):
+            return request.text, placeholders, False
+
+        if self.use_html_protection:
+            return protect_renpy_syntax_html(request.text), {}, True
+
+        protected_text, protected_placeholders = protect_renpy_syntax(request.text)
+        return protected_text, protected_placeholders, False
+
     def __init__(self, *args, config_manager=None, **kwargs):
         super().__init__(*args, **kwargs)
         self._endpoint_index = 0
@@ -229,6 +264,10 @@ class GoogleTranslator(BaseTranslator):
         self._lingva_index = random.randint(0, len(self.lingva_instances) - 1)
         
         self._endpoint_health: Dict[str, dict] = {}  # {url: {'fails': int, 'banned_until': float}}
+        # Global cooldown: when ANY mirror gets 429, ALL mirrors pause briefly
+        # because Google rate-limits by IP, not by mirror domain.
+        self._global_cooldown_until: float = 0.0
+        self._consecutive_429_count: int = 0  # Track consecutive 429s across all mirrors
         
         # Initialize health tracking for all endpoints
         for ep in self.google_endpoints:
@@ -244,20 +283,33 @@ class GoogleTranslator(BaseTranslator):
             self.max_slice_chars = getattr(ts, 'max_chars_per_request', 2000)
             self.max_texts_per_slice = getattr(ts, 'max_batch_size', 200)  # Use general batch size for Google
             self.aggressive_retry = getattr(ts, 'aggressive_retry_translation', False)
-            # HTML Protection: default True (v2.6.7)
-            # Uses <span translate="no"> tags instead of token masking
-            # More reliable against Google Translate corruption than token-based protection
-            self.use_html_protection = getattr(ts, 'use_html_protection', True)
+            # HTML Protection: force-off for Google web endpoints (/translate_a/single).
+            # Those endpoints are unofficial and HTML behavior is inconsistent.
+            requested_html_protection = getattr(ts, 'use_html_protection', False)
+            self.use_html_protection = requested_html_protection and self._supports_html_protection()
+            if requested_html_protection and not self.use_html_protection:
+                self.logger.warning(
+                    "HTML protection requested but disabled for Google web endpoints; using token protection mode."
+                )
+            # Read request_delay for Google rate limiting
+            self._google_request_delay = getattr(ts, 'request_delay', 0.1)
         else:
             self.aggressive_retry = False
-            self.use_html_protection = True  # Enable by default - HTML mode is more robust
+            self.use_html_protection = False  # Match config default
+            self._google_request_delay = 0.1
             
         # Keep a baseline to restore when proxy adaptasyonu devre dışı
         self._base_multi_q_concurrency = self.multi_q_concurrency
     
-    def _get_next_endpoint(self) -> str:
-        """Round-robin endpoint selection with health checks."""
+    async def _get_next_endpoint(self) -> str:
+        """Random endpoint selection with health checks and ban cooldown."""
         now = time.time()
+        
+        # Respect global cooldown (IP-based rate limit from Google)
+        if now < self._global_cooldown_until:
+            remaining = self._global_cooldown_until - now
+            await asyncio.sleep(min(remaining, 5.0))  # Non-blocking wait
+            now = time.time()
         
         # Filter available endpoints (not banned)
         available = []
@@ -271,14 +323,26 @@ class GoogleTranslator(BaseTranslator):
                 available.append(ep)
         
         if not available:
-            # If all banned, force unban all (emergency reset)
-            self.logger.warning("All Google mirrors banned! Resetting health checks.")
+            # All mirrors banned — apply cooldown before resetting
+            # Find the earliest ban expiry to determine minimum wait
+            earliest_expiry = min(
+                h['banned_until'] for h in self._endpoint_health.values()
+            )
+            cooldown = max(0, earliest_expiry - now)
+            # Cap cooldown at 30s to avoid excessive blocking
+            cooldown = min(cooldown, 30.0)
+            if cooldown > 0:
+                self.logger.warning(f"All Google mirrors banned! Waiting {cooldown:.0f}s before reset...")
+                await asyncio.sleep(min(cooldown, 10.0))
+            else:
+                self.logger.warning("All Google mirrors banned! Resetting health checks.")
             for ep in self.google_endpoints:
                 self._endpoint_health[ep] = {'fails': 0, 'banned_until': 0.0}
             available = self.google_endpoints
             
-        self._endpoint_index = (self._endpoint_index + 1) % len(available)
-        return available[self._endpoint_index]
+        # Use random selection instead of broken round-robin
+        # (global _endpoint_index + dynamic available list = same mirror repeatedly)
+        return random.choice(available)
     
     def _get_next_lingva(self) -> str:
         """Round-robin Lingva instance selection."""
@@ -311,12 +375,14 @@ class GoogleTranslator(BaseTranslator):
 
     async def translate_single(self, request: TranslationRequest) -> TranslationResult:
         """Translate single text with multi-endpoint + Lingva fallback."""
-        
-        # Ren'Py değişkenlerini koru
-        placeholders = {}
-        if self.use_html_protection:
+        metadata = request.metadata if isinstance(request.metadata, dict) else {}
+        source_text = metadata.get('original_text') or getattr(metadata.get('entry'), 'original_text', request.text)
+
+        # Ren'Py değişkenlerini koru (veya pipeline'dan gelen preprotected veriyi kullan)
+        protected_text, placeholders, request_use_html = self._prepare_request_protection(request)
+
+        if request_use_html:
             # HTML wrap protection (Zenpy style)
-            protected_text = protect_renpy_syntax_html(request.text)
             # Add format=html to preserve tags
             params = {
                 'client':'gtx',
@@ -327,15 +393,16 @@ class GoogleTranslator(BaseTranslator):
                 'format':'html'  # IMPORTANT!
             }
         else:
-            # Traditional placeholder replacement
-            protected_text, placeholders = protect_renpy_syntax(request.text)
+            # Token placeholder mode — uses preprotected data from pipeline
+            # or freshly generated protection from _prepare_request_protection.
+            # CRITICAL: Do NOT re-call protect_renpy_syntax here; that would
+            # double-protect already-tokenised text and cause nested tokens.
             params = {
                 'client':'gtx',
                 'sl':request.source_lang,
                 'tl':request.target_lang,
                 'dt':'t',
                 'q':protected_text,
-                'format':'html'  # IMPORTANT: Now using HTML tokens by default!
             }
         
         # Try Google endpoints first (parallel race)
@@ -348,35 +415,62 @@ class GoogleTranslator(BaseTranslator):
                     session = await self._get_session()
                     
                     proxy = None
+                    proxy_url_used = None
                     if self.use_proxy and self.proxy_manager:
                         p = self.proxy_manager.get_next_proxy()
                         if p:
                             proxy = p.url
+                            proxy_url_used = proxy
                     
                     async with session.get(url, proxy=proxy, timeout=aiohttp.ClientTimeout(total=8)) as resp:
                         if resp.status == 200:
                             data = await resp.json(content_type=None)
                             if data and isinstance(data, list) and data[0]:
                                 text = ''.join(part[0] for part in data[0] if part and part[0])
-                                # Successful translation: Reset failure count
-                                if endpoint in self._endpoint_health:
-                                    self._endpoint_health[endpoint]['fails'] = 0
-                                return text
+                                # Check for empty/corrupted response (Google sometimes returns 200 with garbage)
+                                if text and len(text.strip()) > 0:
+                                    # Successful translation: Reset failure count and 429 counter
+                                    if endpoint in self._endpoint_health:
+                                        self._endpoint_health[endpoint]['fails'] = 0
+                                    self._consecutive_429_count = max(0, self._consecutive_429_count - 1)
+                                    # Report proxy success
+                                    if proxy_url_used and self.proxy_manager:
+                                        self.proxy_manager.mark_proxy_success(proxy_url_used)
+                                    return text
+                            # 200 but empty/no data = soft ban signal from Google
+                            if endpoint in self._endpoint_health:
+                                self._endpoint_health[endpoint]['fails'] += 1
+                            if proxy_url_used and self.proxy_manager:
+                                self.proxy_manager.mark_proxy_failed(proxy_url_used)
+                            continue
                         
                         elif resp.status == 429: # Too Many Requests
-                            # Aggressive Backoff: Wait 2s -> 4s -> 8s + Jitter
-                            wait_time = (2 ** attempt) + random.uniform(0.5, 1.5)
-                            self.logger.warning(f"Google 429 (Rate Limit) on {endpoint}. Backing off {wait_time:.2f}s...")
+                            # Google rate-limits by IP — a 429 on one mirror means ALL mirrors
+                            # are likely throttled. Apply global cooldown to prevent cascade bans.
+                            self._consecutive_429_count += 1
+                            # Escalating global cooldown: 3s -> 6s -> 12s -> 24s (capped)
+                            global_wait = min(3.0 * (2 ** (self._consecutive_429_count - 1)), 30.0)
+                            self._global_cooldown_until = time.time() + global_wait
+                            # Also count as fail — 429 is a real failure signal
+                            if endpoint in self._endpoint_health:
+                                self._endpoint_health[endpoint]['fails'] += 1
+                            if proxy_url_used and self.proxy_manager:
+                                self.proxy_manager.mark_proxy_failed(proxy_url_used)
+                            wait_time = global_wait + random.uniform(0.5, 1.5)
+                            self.logger.warning(f"Google 429 (Rate Limit) on {endpoint}. Global cooldown {global_wait:.0f}s (#{self._consecutive_429_count})")
                             await asyncio.sleep(wait_time)
-                            # Do not count as 'fail' immediately to keep mirror alive, but retry
                             continue
 
                         # Other HTTP errors (500, 403, etc.)
                         if endpoint in self._endpoint_health:
                             self._endpoint_health[endpoint]['fails'] += 1
+                        if proxy_url_used and self.proxy_manager:
+                            self.proxy_manager.mark_proxy_failed(proxy_url_used)
                 
                 except Exception:
-                    # Network/Timeout errors
+                    # Network/Timeout errors — likely proxy failure
+                    if proxy_url_used and self.proxy_manager:
+                        self.proxy_manager.mark_proxy_failed(proxy_url_used)
                     # Mild Backoff: Wait 1s -> 2s
                     wait_time = (1.5 ** attempt) * 0.5
                     await asyncio.sleep(wait_time)
@@ -395,9 +489,10 @@ class GoogleTranslator(BaseTranslator):
         translated_text = None
         max_unchanged_retries = 2  # Retry limit for unchanged translations
         
-        # Multi-endpoint mode: Try 2 endpoints in parallel (fastest wins)
+        # Multi-endpoint mode: Try 1 endpoint at a time to reduce ban pressure
+        # (previously tried 2 in parallel, doubling request rate and causing cascade bans)
         if self.use_multi_endpoint:
-            endpoints_to_try = [self._get_next_endpoint(), self._get_next_endpoint()]
+            endpoints_to_try = [await self._get_next_endpoint()]
             tasks = [asyncio.create_task(try_endpoint(ep)) for ep in endpoints_to_try]
             
             # Wait for first successful result
@@ -413,7 +508,7 @@ class GoogleTranslator(BaseTranslator):
                     if self.use_html_protection:
                         final_text = restore_renpy_syntax_html(result)
                         # HTML modundaysa truncation check yap, integrity zaten HTML ile korunuyor
-                        original_len = len(request.text)
+                        original_len = len(source_text)
                         if original_len > 20 and len(final_text) < (original_len * 0.1):
                              self.logger.warning(f"Potential truncation detected (HTML mode). Original: {original_len}, Final: {len(final_text)}")
                              # Do NOT revert, let the user see the result.
@@ -425,53 +520,63 @@ class GoogleTranslator(BaseTranslator):
 
                     # 2. AŞAMA KORUMA (Validation - Global)
                     if missing_vars:
-                         self.logger.warning(f"Integrity check failed (Google Multi): {missing_vars}. Retrying (2 attempts)...")
+                         # v3.6: Token tamamen silinmiş mi kontrol et.
+                         # Google raw çıktısında RLPH yoksa retry ve Lingva boşuna —
+                         # aynı format tekrar silinecek. Doğrudan injection'a geç.
+                         _tokens_totally_deleted = 'RLPH' not in result
                          retry_success = False
-                         for _ in range(2):
-                             await asyncio.sleep(0.2)
-                             retry_res = await try_endpoint(self._get_next_endpoint())
-                             if retry_res:
-                                 retry_text = restore_renpy_syntax(retry_res, placeholders)
-                                 if not validate_translation_integrity(retry_text, placeholders):
-                                     final_text = retry_text
-                                     retry_success = True
-                                     break
-                         
-                         if not retry_success:
-                             self.logger.warning("Integrity retries failed (Multi). Trying Lingva fallback as last resort...")
-                             # FORCE LINGVA FALLBACK
-                             lingva_success = False
-                             if self.enable_lingva_fallback:
-                                 try:
-                                     # Lingva may not support HTML format well via URL, so fallback to legacy protection
-                                     if self.use_html_protection:
-                                         lingva_input, lingva_map = protect_renpy_syntax(request.text)
-                                     else:
-                                         lingva_input, lingva_map = protected_text, placeholders
 
+                         if _tokens_totally_deleted:
+                             self.logger.warning(f"Integrity check failed (Google Multi): {missing_vars}. Tokens deleted, skipping retries...")
+                         else:
+                             self.logger.warning(f"Integrity check failed (Google Multi): {missing_vars}. Retrying (2 attempts)...")
+                             for _ in range(2):
+                                 await asyncio.sleep(0.2)
+                                 retry_res = await try_endpoint(await self._get_next_endpoint())
+                                 if retry_res:
+                                     retry_text = restore_renpy_syntax(retry_res, placeholders)
+                                     if not validate_translation_integrity(retry_text, placeholders):
+                                         final_text = retry_text
+                                         retry_success = True
+                                         break
+                         
+                             if not retry_success and self.enable_lingva_fallback:
+                                 self.logger.warning("Integrity retries failed (Multi). Trying Lingva fallback...")
+                                 try:
                                      lingva_result = await self._translate_via_lingva(
-                                         lingva_input, request.source_lang, request.target_lang
+                                         protected_text, request.source_lang, request.target_lang
                                      )
                                      if lingva_result:
-                                         lingva_final = restore_renpy_syntax(lingva_result, lingva_map)
-                                         if not validate_translation_integrity(lingva_final, lingva_map):
+                                         lingva_final = restore_renpy_syntax(lingva_result, placeholders)
+                                         if not validate_translation_integrity(lingva_final, placeholders):
                                              final_text = lingva_final
                                              retry_success = True
-                                             lingva_success = True
                                              self.logger.info("Lingva rescued the translation!")
                                  except Exception:
                                      pass
-                             
-                             if not lingva_success:
-                                 self.logger.warning("All recovery attempts failed. Reverting to original.")
-                                 final_text = request.text
+                         
+                         if not retry_success:
+                             self.logger.warning("Attempting placeholder injection...")
+                             injected = inject_missing_placeholders(
+                                 final_text, protected_text, placeholders, missing_vars
+                             )
+                             still_missing = validate_translation_integrity(injected, placeholders)
+                             if not still_missing:
+                                 self.logger.info("Placeholder injection rescued the translation!")
+                                 final_text = injected
+                             elif final_text.strip() and final_text.strip() != source_text.strip():
+                                 self.logger.warning(f"Partial rescue: {len(still_missing)} vars still missing. Using injected version.")
+                                 final_text = injected
+                             else:
+                                 self.logger.warning("Injection failed. Reverting to original.")
+                                 final_text = source_text
 
                     # If translation equals original and aggressive_retry is enabled
-                    if self.aggressive_retry and final_text.strip() == request.text.strip():
+                    if self.aggressive_retry and final_text.strip() == source_text.strip():
                         self.logger.debug(f"Translation unchanged. Starting Aggressive Retry chain...")
                         
                         # LEVEL 1: Try another Google Endpoint
-                        retry_google_res = await try_endpoint(self._get_next_endpoint())
+                        retry_google_res = await try_endpoint(await self._get_next_endpoint())
                         if retry_google_res:
                             if self.use_html_protection:
                                 retry_google_final = restore_renpy_syntax_html(retry_google_res)
@@ -479,23 +584,20 @@ class GoogleTranslator(BaseTranslator):
                                 retry_google_final = restore_renpy_syntax(retry_google_res, placeholders)
                             
                             # Validasyon
-                            if (retry_google_final.strip() != request.text.strip()) and (not validate_translation_integrity(retry_google_final, placeholders)):
+                            if (retry_google_final.strip() != source_text.strip()) and (not validate_translation_integrity(retry_google_final, placeholders)):
                                 self.logger.info("Aggressive: Alternative Google Endpoint succeeded!")
                                 final_text = retry_google_final
                                 # Success, return immediately
                                 return TranslationResult(
-                                    request.text, final_text, request.source_lang, request.target_lang,
+                                    source_text, final_text, request.source_lang, request.target_lang,
                                     TranslationEngine.GOOGLE, True, metadata={'aggressive': True}
                                 )
 
                         # LEVEL 2: Try Lingva fallback (Eğer Google yine başarısız olduysa)
                         if self.enable_lingva_fallback:
                             self.logger.debug("Aggressive: Google failed, trying Lingva...")
-                            # Prepare Lingva input
-                            if self.use_html_protection:
-                                lingva_input, lingva_map = protect_renpy_syntax(request.text)
-                            else:
-                                lingva_input, lingva_map = protected_text, placeholders
+                            # Lingva uses same token protection as main request
+                            lingva_input, lingva_map = protected_text, placeholders
 
                             for retry in range(max_unchanged_retries):
                                 lingva_result = await self._translate_via_lingva(
@@ -508,16 +610,16 @@ class GoogleTranslator(BaseTranslator):
                                     if validate_translation_integrity(lingva_final, lingva_map):
                                         continue # Skip if broken
 
-                                    if lingva_final.strip() != request.text.strip():
+                                    if lingva_final.strip() != source_text.strip():
                                         return TranslationResult(
-                                            request.text, lingva_final, request.source_lang, request.target_lang,
+                                            source_text, lingva_final, request.source_lang, request.target_lang,
                                             TranslationEngine.GOOGLE, True, confidence=0.85, metadata=request.metadata
                                         )
                                 await asyncio.sleep(0.5)  # Brief delay between retries
                         
                         # Try different Google endpoints sequentially
                         for retry in range(max_unchanged_retries):
-                            alt_endpoint = self._get_next_endpoint()
+                            alt_endpoint = await self._get_next_endpoint()
                             alt_result = await try_endpoint(alt_endpoint)
                             if alt_result:
                                 if self.use_html_protection:
@@ -530,9 +632,9 @@ class GoogleTranslator(BaseTranslator):
                                          self.logger.warning("Integrity check failed (Retry): Placeholders missing.")
                                          continue
                                 
-                                if alt_final.strip() != request.text.strip():
+                                if alt_final.strip() != source_text.strip():
                                     return TranslationResult(
-                                        request.text, alt_final, request.source_lang, request.target_lang,
+                                        source_text, alt_final, request.source_lang, request.target_lang,
                                         TranslationEngine.GOOGLE, True, confidence=0.85, metadata=request.metadata
                                     )
                             await asyncio.sleep(0.3)
@@ -542,70 +644,74 @@ class GoogleTranslator(BaseTranslator):
                         self.logger.debug(f"Translation unchanged after retries: {request.text[:50]}")
                     
                     return TranslationResult(
-                        request.text, final_text, request.source_lang, request.target_lang,
+                        source_text, final_text, request.source_lang, request.target_lang,
                         TranslationEngine.GOOGLE, True, confidence=0.9, metadata=request.metadata
                     )
         else:
             # Single endpoint mode
-            result = await try_endpoint(self._get_next_endpoint())
+            result = await try_endpoint(await self._get_next_endpoint())
             if result:
                 final_text = restore_renpy_syntax(result, placeholders)
                 
                 # 2. AŞAMA KORUMA (Validation - Global)
                 missing_vars = validate_translation_integrity(final_text, placeholders)
                 if missing_vars:
-                     self.logger.warning(f"Integrity check failed (Google Single): {missing_vars}. Retrying (2 attempts)...")
+                     _tokens_totally_deleted = 'RLPH' not in result
                      retry_success = False
-                     for _ in range(2):
-                         await asyncio.sleep(0.2)
-                         retry_res = await try_endpoint(self._get_next_endpoint())
-                         if retry_res:
-                             retry_text = restore_renpy_syntax(retry_res, placeholders)
-                             if not validate_translation_integrity(retry_text, placeholders):
-                                 final_text = retry_text
-                                 retry_success = True
-                                 break
-                     
-                     if not retry_success:
-                         self.logger.warning("Integrity retries failed (Single). Trying Lingva fallback as last resort...")
-                         # FORCE LINGVA FALLBACK
-                         lingva_success = False
-                         if self.enable_lingva_fallback:
-                             try:
-                                 # Lingva may not support HTML format well, force token protection
-                                 if self.use_html_protection:
-                                     lingva_input, lingva_map = protect_renpy_syntax(request.text)
-                                 else:
-                                     lingva_input, lingva_map = protected_text, placeholders
 
+                     if _tokens_totally_deleted:
+                         self.logger.warning(f"Integrity check failed (Google Single): {missing_vars}. Tokens deleted, skipping retries...")
+                     else:
+                         self.logger.warning(f"Integrity check failed (Google Single): {missing_vars}. Retrying (2 attempts)...")
+                         for _ in range(2):
+                             await asyncio.sleep(0.2)
+                             retry_res = await try_endpoint(await self._get_next_endpoint())
+                             if retry_res:
+                                 retry_text = restore_renpy_syntax(retry_res, placeholders)
+                                 if not validate_translation_integrity(retry_text, placeholders):
+                                     final_text = retry_text
+                                     retry_success = True
+                                     break
+                     
+                         if not retry_success and self.enable_lingva_fallback:
+                             self.logger.warning("Integrity retries failed (Single). Trying Lingva fallback...")
+                             try:
                                  lingva_result = await self._translate_via_lingva(
-                                     lingva_input, request.source_lang, request.target_lang
+                                     protected_text, request.source_lang, request.target_lang
                                  )
                                  if lingva_result:
-                                     lingva_final = restore_renpy_syntax(lingva_result, lingva_map)
-                                     if not validate_translation_integrity(lingva_final, lingva_map):
+                                     lingva_final = restore_renpy_syntax(lingva_result, placeholders)
+                                     if not validate_translation_integrity(lingva_final, placeholders):
                                          final_text = lingva_final
                                          retry_success = True
-                                         lingva_success = True
-                                         self.logger.info("Lingva rescued the translation (Single Mode)!")
+                                         self.logger.info("Lingva rescued the translation (Single)!")
                              except Exception:
                                  pass
-                         
-                         if not lingva_success:
-                             self.logger.warning("Integrity retries failed (Single). Reverting to original.")
-                             final_text = request.text
+                     
+                     if not retry_success:
+                         self.logger.warning("Attempting placeholder injection (Single)...")
+                         injected = inject_missing_placeholders(
+                             final_text, protected_text, placeholders, missing_vars
+                         )
+                         still_missing = validate_translation_integrity(injected, placeholders)
+                         if not still_missing:
+                             self.logger.info("Placeholder injection rescued the translation (Single)!")
+                             final_text = injected
+                         elif final_text.strip() and final_text.strip() != source_text.strip():
+                             self.logger.warning(f"Partial rescue (Single): {len(still_missing)} vars still missing.")
+                             final_text = injected
+                         else:
+                             self.logger.warning("Injection failed (Single). Reverting to original.")
+                             final_text = source_text
                 
                 # Retry if unchanged and aggressive_retry is enabled
-                if self.aggressive_retry and final_text.strip() == request.text.strip():
+                if self.aggressive_retry and final_text.strip() == source_text.strip():
                     self.logger.debug(f"Single-mode: translation unchanged, retrying: {request.text[:50]}")
                     
                     # Try Lingva
                     if self.enable_lingva_fallback:
-                        # Prepare Lingva input correctly
-                        if self.use_html_protection:
-                            lingva_input, lingva_map = protect_renpy_syntax(request.text)
-                        else:
-                            lingva_input, lingva_map = protected_text, placeholders
+                        # Lingva uses same token protection as main request
+                        lingva_input, lingva_map = protected_text, placeholders
 
                         lingva_result = await self._translate_via_lingva(
                             lingva_input, request.source_lang, request.target_lang
@@ -615,15 +721,15 @@ class GoogleTranslator(BaseTranslator):
                             
                             # Validation
                             if not validate_translation_integrity(lingva_final, placeholders):
-                                if lingva_final.strip() != request.text.strip():
+                                if lingva_final.strip() != source_text.strip():
                                     return TranslationResult(
-                                        request.text, lingva_final, request.source_lang, request.target_lang,
+                                        source_text, lingva_final, request.source_lang, request.target_lang,
                                         TranslationEngine.GOOGLE, True, confidence=0.85, metadata=request.metadata
                                     )
                     
                     # Try alternative endpoints
                     for _ in range(max_unchanged_retries):
-                        alt_result = await try_endpoint(self._get_next_endpoint())
+                        alt_result = await try_endpoint(await self._get_next_endpoint())
                         if alt_result:
                             alt_final = restore_renpy_syntax(alt_result, placeholders)
                             
@@ -631,15 +737,15 @@ class GoogleTranslator(BaseTranslator):
                             if validate_translation_integrity(alt_final, placeholders):
                                 continue
 
-                            if alt_final.strip() != request.text.strip():
+                            if alt_final.strip() != source_text.strip():
                                 return TranslationResult(
-                                    request.text, alt_final, request.source_lang, request.target_lang,
+                                    source_text, alt_final, request.source_lang, request.target_lang,
                                     TranslationEngine.GOOGLE, True, confidence=0.85, metadata=request.metadata
                                 )
                         await asyncio.sleep(0.3)
                 
                 return TranslationResult(
-                    request.text, final_text, request.source_lang, request.target_lang,
+                    source_text, final_text, request.source_lang, request.target_lang,
                     TranslationEngine.GOOGLE, True, confidence=0.9, metadata=request.metadata
                 )
         
@@ -647,11 +753,8 @@ class GoogleTranslator(BaseTranslator):
         if self.enable_lingva_fallback:
             self.logger.debug("Google endpoints failed, trying Lingva fallback...")
 
-            # Prepare Lingva input correctly
-            if self.use_html_protection:
-                 lingva_input, lingva_map = protect_renpy_syntax(request.text)
-            else:
-                 lingva_input, lingva_map = protected_text, placeholders
+            # Lingva uses same token protection as main request
+            lingva_input, lingva_map = protected_text, placeholders
 
             lingva_result = await self._translate_via_lingva(
                 lingva_input, request.source_lang, request.target_lang
@@ -665,10 +768,10 @@ class GoogleTranslator(BaseTranslator):
                 # validate_translation_integrity returns list of missing vars. If list is not empty, integrity failed.
                 if lingva_map and validate_translation_integrity(final_text, lingva_map):
                         self.logger.warning(f"Integrity check failed (Lingva): Placeholders missing in translation. Using original text.")
-                        final_text = request.text
+                        final_text = source_text
 
                 return TranslationResult(
-                    request.text, final_text, request.source_lang, request.target_lang,
+                    source_text, final_text, request.source_lang, request.target_lang,
                     TranslationEngine.GOOGLE, True, confidence=0.85, metadata=request.metadata
                 )
         
@@ -698,17 +801,17 @@ class GoogleTranslator(BaseTranslator):
                         # BÜTÜNLÜK KONTROLÜ
                         if placeholders and validate_translation_integrity(final_text, placeholders):
                              self.logger.warning(f"Integrity check failed (Fallback): Placeholders missing. Using original text.")
-                             final_text = request.text
+                             final_text = source_text
 
                     return TranslationResult(
-                        request.text, final_text, request.source_lang, request.target_lang,
+                        source_text, final_text, request.source_lang, request.target_lang,
                         TranslationEngine.GOOGLE, True, confidence=0.8, metadata=request.metadata
                     )
         except Exception as e:
             pass
         
         return TranslationResult(
-            request.text, "", request.source_lang, request.target_lang,
+            source_text, "", request.source_lang, request.target_lang,
             TranslationEngine.GOOGLE, False, self._get_text('error_all_engines_failed', "All translation methods failed"), metadata=request.metadata
         )
 
@@ -804,7 +907,7 @@ class GoogleTranslator(BaseTranslator):
         }
         
         try:
-            endpoint = self._get_next_endpoint()
+            endpoint = await self._get_next_endpoint()
             session = await self._get_session()
             
             async with session.get(
@@ -1015,6 +1118,22 @@ class GoogleTranslator(BaseTranslator):
         if len(batch) <= 50 and total_chars <= 8000:
             result = await self._try_batch_separator(batch)
             if result:
+                # ── Batch integrity-fail recovery ──
+                # Batch separator'da token kaybı yaşayan satırları translate_single
+                # ile tekrar dene (multi-endpoint + Lingva retry pipeline'ı var).
+                failed_indices = [i for i, r in enumerate(result) if r.confidence == 0.0 and r.success]
+                if failed_indices and len(failed_indices) <= 30:
+                    self.logger.info(f"Batch-sep: {len(failed_indices)} integrity failures, retrying individually...")
+                    for idx in failed_indices:
+                        try:
+                            retry = await self.translate_single(batch[idx])
+                            if retry.success and retry.confidence > 0.0:
+                                result[idx] = retry
+                        except Exception:
+                            pass  # Keep original reverted text
+                    recovered = sum(1 for idx in failed_indices if result[idx].confidence > 0.0)
+                    if recovered:
+                        self.logger.info(f"Batch-sep recovery: {recovered}/{len(failed_indices)} texts rescued via individual translation")
                 return result
             self.logger.debug(f"Batch separator failed for {len(batch)} texts ({total_chars} chars), falling back to parallel")
 
@@ -1028,17 +1147,16 @@ class GoogleTranslator(BaseTranslator):
         protected_texts = []
         all_placeholders = []  # Her metin için placeholder sözlüğü
         
-        use_html = self.use_html_protection
+        html_flags = []
         
         for req in batch:
-            if use_html:
-                protected = protect_renpy_syntax_html(req.text)
-                placeholders = {}
-            else:
-                protected, placeholders = protect_renpy_syntax(req.text)
+            protected, placeholders, req_use_html = self._prepare_request_protection(req)
+            html_flags.append(req_use_html)
                 
             protected_texts.append(protected)
             all_placeholders.append(placeholders)
+
+        use_html = bool(html_flags) and all(html_flags)
         
         combined_text = self.BATCH_SEPARATOR.join(protected_texts)
         
@@ -1054,66 +1172,118 @@ class GoogleTranslator(BaseTranslator):
         query = urllib.parse.urlencode(params)
         
         async def try_endpoint(endpoint: str) -> Optional[List[str]]:
-            """Try a single endpoint, return list of translations or None."""
-            try:
-                url = f"{endpoint}?{query}"
-                session = await self._get_session()
-                
-                proxy = None
-                if self.use_proxy and self.proxy_manager:
-                    p = self.proxy_manager.get_next_proxy()
-                    if p:
-                        proxy = p.url
-                
-                async with session.get(url, proxy=proxy, timeout=aiohttp.ClientTimeout(total=15)) as resp:
-                    if resp.status != 200:
+            """Try a single endpoint with retries, return list of translations or None."""
+            max_attempts = 2  # Fewer retries than translate_single (batch is heavier)
+            for attempt in range(1, max_attempts + 1):
+                try:
+                    url = f"{endpoint}?{query}"
+                    session = await self._get_session()
+                    
+                    proxy = None
+                    proxy_url_used = None
+                    if self.use_proxy and self.proxy_manager:
+                        p = self.proxy_manager.get_next_proxy()
+                        if p:
+                            proxy = p.url
+                            proxy_url_used = proxy
+                    
+                    async with session.get(url, proxy=proxy, timeout=aiohttp.ClientTimeout(total=15)) as resp:
+                        if resp.status == 429:
+                            # 429 = IP-level rate limit — apply global cooldown
+                            self._consecutive_429_count += 1
+                            global_wait = min(3.0 * (2 ** (self._consecutive_429_count - 1)), 30.0)
+                            self._global_cooldown_until = time.time() + global_wait
+                            if endpoint in self._endpoint_health:
+                                self._endpoint_health[endpoint]['fails'] += 1
+                                if self._endpoint_health[endpoint]['fails'] >= self.MIRROR_MAX_FAILURES:
+                                    self._endpoint_health[endpoint]['banned_until'] = time.time() + self.MIRROR_BAN_TIME
+                                    self.logger.warning(f"Google Mirror BANNED temporarily (2min): {endpoint}")
+                            if proxy_url_used and self.proxy_manager:
+                                self.proxy_manager.mark_proxy_failed(proxy_url_used)
+                            self.logger.warning(f"Batch-sep 429 on {endpoint}. Global cooldown {global_wait:.0f}s")
+                            await asyncio.sleep(global_wait + random.uniform(0.5, 1.0))
+                            continue  # Retry after cooldown
+                        
+                        if resp.status != 200:
+                            if endpoint in self._endpoint_health:
+                                self._endpoint_health[endpoint]['fails'] += 1
+                                if self._endpoint_health[endpoint]['fails'] >= self.MIRROR_MAX_FAILURES:
+                                    self._endpoint_health[endpoint]['banned_until'] = time.time() + self.MIRROR_BAN_TIME
+                                    self.logger.warning(f"Google Mirror BANNED temporarily (2min): {endpoint}")
+                            if proxy_url_used and self.proxy_manager:
+                                self.proxy_manager.mark_proxy_failed(proxy_url_used)
+                            self.logger.debug(f"Batch-sep {endpoint}: HTTP {resp.status}")
+                            return None  # Non-retryable HTTP error
+                        
+                        data = await resp.json(content_type=None)
+                        segs = data[0] if isinstance(data, list) and data else None
+                        if not segs:
+                            self.logger.debug(f"Batch-sep {endpoint}: No segments in response")
+                            # Empty 200 = soft ban signal, count as fail
+                            if endpoint in self._endpoint_health:
+                                self._endpoint_health[endpoint]['fails'] += 1
+                            if proxy_url_used and self.proxy_manager:
+                                self.proxy_manager.mark_proxy_failed(proxy_url_used)
+                            continue  # Retry
+                        
+                        # Combine all translation segments
+                        full_translation = ""
+                        for seg in segs:
+                            if seg and seg[0]:
+                                full_translation += seg[0]
+                        
+                        # Split by separator
+                        parts = full_translation.split(self.BATCH_SEPARATOR)
+                        
+                        # Verify count matches
+                        if len(parts) != len(batch):
+                            self.logger.debug(f"Batch-sep {endpoint}: Part count mismatch - expected {len(batch)}, got {len(parts)}")
+                            return None  # Structural mismatch, don't retry
+                        
+                        # Validate individual parts for separator bleeding
+                        # (adjacent translations merging when separator is absorbed)
+                        for pidx, (part, req) in enumerate(zip(parts, batch)):
+                            orig_len = len(req.text)
+                            part_len = len(part.strip())
+                            # If translated part is >3x longer than original,
+                            # it likely contains text from adjacent entries
+                            if orig_len > 0 and part_len > max(orig_len * 3, orig_len + 50):
+                                self.logger.debug(f"Batch-sep {endpoint}: Part {pidx} suspiciously long ({part_len} vs {orig_len} orig) - possible separator bleeding")
+                                return None
+                            # Check for separator remnants in the translated part
+                            if '|||' in part or 'RNLSEP' in part or 'SEP777' in part or 'TXTSEP' in part:
+                                self.logger.debug(f"Batch-sep {endpoint}: Separator remnant found in part {pidx}")
+                                return None
+                        
+                        # Success - reset endpoint failures and 429 counter
                         if endpoint in self._endpoint_health:
-                            self._endpoint_health[endpoint]['fails'] += 1
-                            if self._endpoint_health[endpoint]['fails'] >= self.MIRROR_MAX_FAILURES:
-                                self._endpoint_health[endpoint]['banned_until'] = time.time() + self.MIRROR_BAN_TIME
-                                self.logger.warning(f"Google Mirror BANNED temporarily (2min): {endpoint}")
-                        self.logger.debug(f"Batch-sep {endpoint}: HTTP {resp.status}")
-                        return None
-                    
-                    data = await resp.json(content_type=None)
-                    segs = data[0] if isinstance(data, list) and data else None
-                    if not segs:
-                        self.logger.debug(f"Batch-sep {endpoint}: No segments in response")
-                        return None
-                    
-                    # Combine all translation segments
-                    full_translation = ""
-                    for seg in segs:
-                        if seg and seg[0]:
-                            full_translation += seg[0]
-                    
-                    # Split by separator
-                    parts = full_translation.split(self.BATCH_SEPARATOR)
-                    
-                    # Verify count matches
-                    if len(parts) != len(batch):
-                        self.logger.debug(f"Batch-sep {endpoint}: Part count mismatch - expected {len(batch)}, got {len(parts)}")
-                        return None
-                    
-                    # Success - reset endpoint failures
+                            self._endpoint_health[endpoint]['fails'] = 0
+                        self._consecutive_429_count = max(0, self._consecutive_429_count - 1)
+                        # Report proxy success
+                        if proxy_url_used and self.proxy_manager:
+                            self.proxy_manager.mark_proxy_success(proxy_url_used)
+                        return parts
+                
+                except asyncio.CancelledError:
+                    raise
+                except Exception as e:
                     if endpoint in self._endpoint_health:
-                        self._endpoint_health[endpoint]['fails'] = 0
-                    return parts
+                        self._endpoint_health[endpoint]['fails'] += 1
+                        if self._endpoint_health[endpoint]['fails'] >= self.MIRROR_MAX_FAILURES:
+                            self._endpoint_health[endpoint]['banned_until'] = time.time() + self.MIRROR_BAN_TIME
+                            self.logger.warning(f"Google Mirror BANNED temporarily (2min): {endpoint} ({str(e)[:50]})")
+                    if proxy_url_used and self.proxy_manager:
+                        self.proxy_manager.mark_proxy_failed(proxy_url_used)
+                    self.logger.debug(f"Batch-sep failed on {endpoint} (attempt {attempt}): {e}")
+                    # Backoff before retry
+                    if attempt < max_attempts:
+                        await asyncio.sleep(1.0 * attempt)
             
-            except asyncio.CancelledError:
-                raise
-            except Exception as e:
-                if endpoint in self._endpoint_health:
-                    self._endpoint_health[endpoint]['fails'] += 1
-                    if self._endpoint_health[endpoint]['fails'] >= self.MIRROR_MAX_FAILURES:
-                        self._endpoint_health[endpoint]['banned_until'] = time.time() + self.MIRROR_BAN_TIME
-                        self.logger.warning(f"Google Mirror BANNED temporarily (2min): {endpoint} ({str(e)[:50]})")
-                self.logger.debug(f"Batch-sep failed on {endpoint}: {e}")
-                return None
+            return None  # All attempts exhausted
         
-        # Parallel endpoint racing (if enabled)
+        # Parallel endpoint racing (if enabled) — reduced to 1 to prevent cascade bans
         if self.use_multi_endpoint:
-            endpoints_to_try = [self._get_next_endpoint() for _ in range(min(3, len(self.google_endpoints)))]
+            endpoints_to_try = [await self._get_next_endpoint()]
             tasks = [asyncio.create_task(try_endpoint(ep)) for ep in endpoints_to_try]
             
             try:
@@ -1147,22 +1317,43 @@ class GoogleTranslator(BaseTranslator):
                                 restored_len = len(restored)
                                 is_truncated = original_len > 20 and restored_len < (original_len * 0.3)
                                 
+                                # Inflation check - çeviri orijinalden çok mu uzun?
+                                # Bu, separator bleeding'i gösterir (komşu çeviriler birleşmiş)
+                                is_inflated = original_len > 0 and restored_len > max(original_len * 3, original_len + 50)
+                                
                                 # Integrity check (HTML modunda missing zaten boş)
                                 
-                                if missing or is_truncated:
-                                    # Placeholder kayıp veya metin kesilmiş - orijinali kullan
-                                    reason = "truncated" if is_truncated else "integrity"
-                                    self.logger.warning(f"Batch {reason} fail, reverting: {req.text[:40]}...")
-                                    restored = req.text  # Fallback to original
+                                if missing or is_truncated or is_inflated:
+                                    # Placeholder kayıp veya metin kesilmiş/şişmiş
+                                    reason = "truncated" if is_truncated else ("inflated" if is_inflated else "integrity")
+                                    _meta = req.metadata if isinstance(req.metadata, dict) else {}
+                                    _orig = _meta.get('original_text', req.text)
+                                    
+                                    if missing and not is_truncated and not is_inflated:
+                                        # v3.5: Token tamamen silinmişse enjeksiyon dene
+                                        injected = inject_missing_placeholders(
+                                            restored, req.text, placeholders, missing
+                                        )
+                                        still_missing = validate_translation_integrity(injected, placeholders)
+                                        if not still_missing or (restored.strip() and restored.strip() != _orig.strip()):
+                                            self.logger.info(f"Batch injection rescued: {_orig[:40]}...")
+                                            restored = injected
+                                        else:
+                                            self.logger.warning(f"Batch integrity fail, reverting: {_orig[:40]}...")
+                                            restored = _orig
+                                    else:
+                                        self.logger.warning(f"Batch {reason} fail, reverting: {_orig[:40]}...")
+                                        restored = _orig  # Fallback to ORIGINAL (unprotected) text
                                 
+                                _meta = req.metadata if isinstance(req.metadata, dict) else {}
                                 final_results.append(TranslationResult(
-                                    original_text=req.text,
+                                    original_text=_meta.get('original_text', req.text),
                                     translated_text=restored,
                                     source_lang=req.source_lang,
                                     target_lang=req.target_lang,
                                     engine=TranslationEngine.GOOGLE,
                                     success=True,
-                                    confidence=0.9 if not (missing or is_truncated) else 0.0,
+                                    confidence=0.9 if not (missing or is_truncated or is_inflated) else 0.0,
                                     metadata=req.metadata
                                 ))
                             return final_results
@@ -1179,7 +1370,7 @@ class GoogleTranslator(BaseTranslator):
         else:
             # Single endpoint mode (sequential)
             for _ in range(3):
-                result = await try_endpoint(self._get_next_endpoint())
+                result = await try_endpoint(await self._get_next_endpoint())
                 if result:
                     # Restore placeholders and validate integrity (same as multi-endpoint)
                     final_results = []
@@ -1197,19 +1388,39 @@ class GoogleTranslator(BaseTranslator):
                         restored_len = len(restored)
                         is_truncated = original_len > 20 and restored_len < (original_len * 0.3)
                         
+                        # Inflation check (separator bleeding)
+                        is_inflated = original_len > 0 and restored_len > max(original_len * 3, original_len + 50)
+                        
                         # missing check (empty in HTML mode)
-                        if missing or is_truncated:
-                            reason = "truncated" if is_truncated else "integrity"
-                            self.logger.warning(f"Batch {reason} fail, reverting: {req.text[:40]}...")
-                            restored = req.text
+                        if missing or is_truncated or is_inflated:
+                            reason = "truncated" if is_truncated else ("inflated" if is_inflated else "integrity")
+                            _meta = req.metadata if isinstance(req.metadata, dict) else {}
+                            _orig = _meta.get('original_text', req.text)
+                            
+                            if missing and not is_truncated and not is_inflated:
+                                # v3.5: Token tamamen silinmişse enjeksiyon dene
+                                injected = inject_missing_placeholders(
+                                    restored, req.text, placeholders, missing
+                                )
+                                still_missing = validate_translation_integrity(injected, placeholders)
+                                if not still_missing or (restored.strip() and restored.strip() != _orig.strip()):
+                                    self.logger.info(f"Batch injection rescued (single-ep): {_orig[:40]}...")
+                                    restored = injected
+                                else:
+                                    self.logger.warning(f"Batch {reason} fail, reverting: {_orig[:40]}...")
+                                    restored = _orig
+                            else:
+                                self.logger.warning(f"Batch {reason} fail, reverting: {_orig[:40]}...")
+                                restored = _orig  # Fallback to ORIGINAL (unprotected) text
+                        _meta = req.metadata if isinstance(req.metadata, dict) else {}
                         final_results.append(TranslationResult(
-                            original_text=req.text,
+                            original_text=_meta.get('original_text', req.text),
                             translated_text=restored,
                             source_lang=req.source_lang,
                             target_lang=req.target_lang,
                             engine=TranslationEngine.GOOGLE,
                             success=True,
-                            confidence=0.9 if not (missing or is_truncated) else 0.0,
+                            confidence=0.9 if not (missing or is_truncated or is_inflated) else 0.0,
                             metadata=req.metadata
                         ))
                     return final_results
@@ -1222,11 +1433,16 @@ class GoogleTranslator(BaseTranslator):
         if not batch:
             return []
         
-        # Paralel çeviri için semaphore (aynı anda çok fazla istek atmamak için)
-        sem = asyncio.Semaphore(self.multi_q_concurrency)
+        # Cap concurrency to avoid instant bans on free endpoints
+        effective_concurrency = min(self.multi_q_concurrency, 8)
+        sem = asyncio.Semaphore(effective_concurrency)
+        delay = getattr(self, '_google_request_delay', 0.1)
         
         async def translate_one(req: TranslationRequest) -> TranslationResult:
             async with sem:
+                # Rate limiting between parallel requests to avoid Google bans
+                if delay > 0:
+                    await asyncio.sleep(delay * random.uniform(0.5, 1.5))
                 return await self.translate_single(req)
         
         # Tüm çevirileri paralel başlat
@@ -1257,9 +1473,10 @@ class GoogleTranslator(BaseTranslator):
             try:
                 result = await self.translate_single(req)
                 results.append(result)
-                # Rate limiting - small delay between requests
+                # Rate limiting - respect configured delay with jitter
                 if i < len(batch) - 1:
-                    await asyncio.sleep(0.1)
+                    delay = getattr(self, '_google_request_delay', 0.15)
+                    await asyncio.sleep(delay * random.uniform(0.8, 1.5))
             except Exception as e:
                 self.logger.debug(f"Individual translation failed for text {i+1}: {e}")
                 results.append(TranslationResult(
@@ -1450,7 +1667,10 @@ class DeepLTranslator(BaseTranslator):
         all_placeholders = []
         
         for r in requests:
-            p_text, p_holders = protect_renpy_syntax(r.text)
+            # ── Preprotected guard: pipeline may have already applied protect_renpy_syntax ──
+            meta = r.metadata if isinstance(r.metadata, dict) else {}
+            source_text = meta.get('original_text', r.text) if meta.get('preprotected') else r.text
+            p_text, p_holders = protect_renpy_syntax(source_text)
             # Map XRPYX to <x id="N"/> tags
             # We must be careful not to break the mapping
             temp_text = p_text
@@ -1478,9 +1698,14 @@ class DeepLTranslator(BaseTranslator):
             data["source_lang"] = source_lang
         
         # Add formality if configured and supported by target language
-        # Formality is supported for: DE, FR, IT, ES, NL, PL, PT, RU, JA
-        formality_languages = {'de', 'fr', 'it', 'es', 'nl', 'pl', 'pt', 'ru', 'ja'}
-        formality_setting = getattr(self.config_manager, 'deepl_formality', 'default') if self.config_manager else 'default'
+        # DeepL formality supported targets: DE, FR, IT, ES, NL, PL, PT-BR, PT-PT, RU, JA, TR
+        formality_languages = {'de', 'fr', 'it', 'es', 'nl', 'pl', 'pt', 'ru', 'ja', 'tr'}
+        # v2.7.1: config_manager.translation_settings.deepl_formality erişimi
+        if self.config_manager:
+            ts = getattr(self.config_manager, 'translation_settings', None)
+            formality_setting = getattr(ts, 'deepl_formality', 'default') if ts else 'default'
+        else:
+            formality_setting = 'default'
         formality_value = self.FORMALITY_OPTIONS.get(formality_setting)
         if formality_value and target_lang.lower()[:2] in formality_languages:
             data["formality"] = formality_value
@@ -1504,7 +1729,7 @@ class DeepLTranslator(BaseTranslator):
                                 is_quota = True
                             else:
                                 is_quota = False
-                        except:
+                        except Exception:
                             msg = await resp.text()
                             is_quota = False
                         
@@ -1562,9 +1787,14 @@ class DeepLTranslator(BaseTranslator):
                         for pattern, replacement in renpy_tag_cleanup:
                             final_text = re.sub(pattern, replacement, final_text, flags=re.IGNORECASE)
                         
-                        results.append(TranslationResult(r.text, final_text, r.source_lang, r.target_lang, TranslationEngine.DEEPL, True, confidence=0.98))
+                        # Use original (unprotected) text for TranslationResult
+                        meta_i = r.metadata if isinstance(r.metadata, dict) else {}
+                        orig_text = meta_i.get('original_text', r.text)
+                        results.append(TranslationResult(orig_text, final_text, r.source_lang, r.target_lang, TranslationEngine.DEEPL, True, confidence=0.98))
                     else:
-                        results.append(TranslationResult(r.text, "", r.source_lang, r.target_lang, TranslationEngine.DEEPL, False, "Missing translation in response"))
+                        meta_i = r.metadata if isinstance(r.metadata, dict) else {}
+                        orig_text = meta_i.get('original_text', r.text)
+                        results.append(TranslationResult(orig_text, "", r.source_lang, r.target_lang, TranslationEngine.DEEPL, False, "Missing translation in response"))
                 return results
 
             except Exception as e:
@@ -1725,7 +1955,10 @@ class TranslationManager:
         tr = self.translators.get(req.engine)
         if not tr:
             return TranslationResult(req.text, "", req.source_lang, req.target_lang, req.engine, False, f"Translator {req.engine.value} not available")
-        key = (req.engine.value, req.source_lang, req.target_lang, req.text)
+        # ── Normalize cache key to original (unprotected) text ──
+        meta = req.metadata if isinstance(req.metadata, dict) else {}
+        cache_text = meta.get('original_text', req.text)
+        key = (req.engine.value, req.source_lang, req.target_lang, cache_text)
         cached = await self._cache_get(key)
         if cached:
             self.cache_hits += 1
@@ -1736,15 +1969,15 @@ class TranslationManager:
         for attempt in range(self.max_retries + 1):
             try:
                 res = await tr.translate_single(req)
-                print(f"[DEBUG] translate_single returned: success={res.success}, text='{res.translated_text[:50] if res.translated_text else 'EMPTY'}', error={res.error}")
+                self.logger.debug("translate_single returned: success=%s, text='%s', error=%s", res.success, (res.translated_text[:50] if res.translated_text else 'EMPTY'), res.error)
                 if res.success:
                     await self._cache_put(key, res)
-                    print(f"[DEBUG] Added to cache: {req.text[:30]}...")
+                    self.logger.debug("Added to cache: %s...", cache_text[:30])
                     await self._record_metric(time.time() - start, True)
                     return res
                 last_err = res.error
             except Exception as e:
-                print(f"[DEBUG] translate_single EXCEPTION: {e}")
+                self.logger.debug("translate_single EXCEPTION: %s", e)
                 last_err = str(e)
             if attempt < self.max_retries:
                 await asyncio.sleep(self.retry_delays[min(attempt, len(self.retry_delays)-1)])
@@ -1762,7 +1995,10 @@ class TranslationManager:
         # Benzersiz metinleri topla
         unique_req_map: Dict[Tuple[str, str, str, str], List[int]] = {}  # (engine, src, tgt, text) -> [original_indices]
         for idx, req in indexed:
-            key = (req.engine.value, req.source_lang, req.target_lang, req.text)
+            # ── Normalize dedup key to original (unprotected) text ──
+            meta = req.metadata if isinstance(req.metadata, dict) else {}
+            cache_text = meta.get('original_text', req.text)
+            key = (req.engine.value, req.source_lang, req.target_lang, cache_text)
             unique_req_map.setdefault(key, []).append(idx)
         
         # Cache'den kontrol et

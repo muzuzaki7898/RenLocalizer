@@ -22,9 +22,10 @@ class SettingsBackend(QObject):
     systemThemeChanged = pyqtSignal()
     proxyRefreshFinished = pyqtSignal(bool, str) # success, message
     
-    def __init__(self, config_manager: ConfigManager, parent=None):
+    def __init__(self, config_manager: ConfigManager, proxy_manager=None, parent=None):
         super().__init__(parent)
         self.config = config_manager
+        self._proxy_manager = proxy_manager  # Reference to app's real ProxyManager
     
     @pyqtSlot(str, str, result=str)
     def getTextWithDefault(self, key: str, default: str) -> str:
@@ -453,7 +454,11 @@ class SettingsBackend(QObject):
 
     @pyqtSlot(bool)
     def setUseHtmlProtection(self, value: bool):
-        self.config.translation_settings.use_html_protection = value
+        selected_engine = getattr(self.config.translation_settings, 'selected_engine', 'google')
+        if selected_engine == 'google' and value:
+            self.config.translation_settings.use_html_protection = False
+        else:
+            self.config.translation_settings.use_html_protection = value
         self.config.save_config()
 
     @pyqtSlot(result=int)
@@ -520,6 +525,18 @@ class SettingsBackend(QObject):
     def setProxyEnabled(self, enabled: bool):
         self.config.proxy_settings.enabled = enabled
         self.config.save_config()
+        
+        # Show warning when enabling free proxy mode (no personal proxy configured)
+        if enabled:
+            proxy_url = getattr(self.config.proxy_settings, 'proxy_url', '') or ""
+            manual_proxies = getattr(self.config.proxy_settings, 'manual_proxies', [])
+            
+            # Free proxy mode: enabled but no personal/manual proxies
+            if not proxy_url and not manual_proxies:
+                self.showInfo(
+                    self.translator.translate("free_proxy_warning"),
+                    self.translator.translate("proxy_settings")
+                )
     
     @pyqtSlot(result=str)
     def getProxyUrl(self) -> str:
@@ -551,25 +568,30 @@ class SettingsBackend(QObject):
         import asyncio
         try:
             from src.core.proxy_manager import ProxyManager
-            
+
+            # Use the app's real ProxyManager if available, otherwise create temporary
+            pm = self._proxy_manager if self._proxy_manager is not None else ProxyManager()
+            # Always reconfigure from latest settings
+            pm.configure_from_settings(self.config.proxy_settings)
+
             async def run_refresh():
-                pm = ProxyManager()
-                # Use settings to configure partial behavior if needed
-                pm.configure_from_settings(self.config.proxy_settings)
-                await pm.initialize() # Fetches and tests
+                await pm.initialize()  # Fetches and tests
                 return pm.get_proxy_stats()
 
             loop = asyncio.new_event_loop()
             asyncio.set_event_loop(loop)
             try:
                 stats = loop.run_until_complete(run_refresh())
+                personal = stats.get('personal_proxies', 0)
                 msg = self.config.get_ui_text("proxy_refresh_success", "Proxy list updated: {working}/{total} active.").format(
                     working=stats['working_proxies'], total=stats['total_proxies']
                 )
+                if personal > 0:
+                    msg += f" (+ {personal} personal)"
                 self.proxyRefreshFinished.emit(True, msg)
             finally:
                 loop.close()
-                
+
         except Exception as e:
             self.proxyRefreshFinished.emit(False, str(e))
 
@@ -678,6 +700,31 @@ class SettingsBackend(QObject):
     def setUseCache(self, enabled: bool):
         self.config.translation_settings.use_cache = enabled
         self.config.save_config()
+
+    # ==================== v2.7.1 NEW SETTINGS ====================
+
+    @pyqtSlot(result=bool)
+    def getAutoProtectCharNames(self) -> bool:
+        return getattr(self.config.translation_settings, 'auto_protect_character_names', True)
+
+    @pyqtSlot(bool)
+    def setAutoProtectCharNames(self, enabled: bool):
+        self.config.translation_settings.auto_protect_character_names = enabled
+        self.config.save_config()
+
+    @pyqtSlot(result=str)
+    def getCustomFunctionParams(self) -> str:
+        return getattr(self.config.translation_settings, 'custom_function_params', '{}')
+
+    @pyqtSlot(str)
+    def setCustomFunctionParams(self, text: str):
+        import json
+        try:
+            json.loads(text)  # Validate JSON
+            self.config.translation_settings.custom_function_params = text
+            self.config.save_config()
+        except (json.JSONDecodeError, TypeError):
+            pass  # Invalid JSON — ignore silently
 
     # ==================== FILTER SETTINGS ====================
 

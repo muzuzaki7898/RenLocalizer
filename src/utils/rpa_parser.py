@@ -81,7 +81,7 @@ class RPAParser:
             
             try:
                 index = pickle.loads(zlib.decompress(index_data))
-            except:
+            except Exception:
                 # Some archives use raw pickle
                 f.seek(offset)
                 index = pickle.loads(f.read())
@@ -109,7 +109,7 @@ class RPAParser:
             
             try:
                 index = pickle.loads(zlib.decompress(index_data))
-            except:
+            except Exception:
                 f.seek(offset)
                 index = pickle.loads(f.read())
             

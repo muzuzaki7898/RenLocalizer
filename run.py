@@ -321,7 +321,7 @@ def main() -> int:
         # Initialize Logic
         config_manager = ConfigManager()
         backend = AppBackend(config_manager)
-        settings_backend = SettingsBackend(config_manager)
+        settings_backend = SettingsBackend(config_manager, proxy_manager=backend.proxy_manager)
         
         # Link backends for signal propagation (Localization refresh)
         settings_backend.languageChanged.connect(backend.refreshUI)

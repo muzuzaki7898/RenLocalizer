@@ -65,8 +65,9 @@ CRITICAL RULES:
     
     BATCH_INSTRUCTION_TEMPLATE = (
         "\n\nIMPORTANT: You are processing a BATCH of {count} items.\n"
-        "Each item is wrapped in <r id=\"N\" [type=\"...\"]> tags.\n"
+        "Each item is wrapped in <r id=\"N\" [type=\"...\"] [context=\"...\"]> tags.\n"
         "The 'type' attribute (if present) gives context (e.g. [ui_action], [dialogue]). Use it to verify meaning.\n"
+        "The 'context' attribute (if present) shows the PREVIOUS dialogue line. Use it to maintain narrative continuity (e.g. for 'extend' lines that continue a sentence).\n"
         "You MUST return the translations in the SAME XML-like format: <r id=\"N\">Translation</r>.\n"
         "Maintain the original IDs. Do not combine lines. Return ALL items."
     )
@@ -158,7 +159,10 @@ IMPORTANT:
 - Preserve XML placeholders like <ph id="0">...</ph> exactly."""
 
     async def translate_single(self, request: TranslationRequest) -> TranslationResult:
-        protected_text, placeholders = protect_renpy_syntax_xml(request.text)
+        # ── Preprotected guard: pipeline may have already applied protect_renpy_syntax ──
+        meta = request.metadata if isinstance(request.metadata, dict) else {}
+        source_text = meta.get('original_text', request.text) if meta.get('preprotected') else request.text
+        protected_text, placeholders = protect_renpy_syntax_xml(source_text)
         
         # Check if aggressive retry is enabled
         aggressive_retry = False
@@ -196,29 +200,29 @@ IMPORTANT:
                 # 2. AŞAMA KORUMA (Validation - Sadece uyarı, reddetme)
                 missing_vars = validate_translation_integrity(final_text, placeholders)
                 if missing_vars:
-                   self.emit_log("warning", f"Syntax integrity warning: Possible missing variables {missing_vars}. Text: {request.text[:30]}...")
+                   self.emit_log("warning", f"Syntax integrity warning: Possible missing variables {missing_vars}. Text: {source_text[:30]}...")
                    # v2.5.1 uyumlu: Hata fırlatma, sadece uyar
                 
                 # Aggressive Retry: If translation equals original, retry with enhanced prompt
-                if aggressive_retry and final_text.strip() == request.text.strip() and len(request.text.strip()) > 3:
-                    self.emit_log("debug", f"AI translation unchanged, trying aggressive retry: {request.text[:50]}...")
+                if aggressive_retry and final_text.strip() == source_text.strip() and len(source_text.strip()) > 3:
+                    self.emit_log("debug", f"AI translation unchanged, trying aggressive retry: {source_text[:50]}...")
                     
                     for retry_attempt in range(max_unchanged_retries):
                         # Use aggressive prompt that forces translation
                         aggressive_prompt = self.AGGRESSIVE_RETRY_PROMPT.format(
                             source_lang=request.source_lang,
                             target_lang=request.target_lang,
-                            original_text=request.text[:100]  # Include snippet of original
+                            original_text=source_text[:100]  # Include snippet of original
                         )
                         
                         try:
                             retry_content = await self._generate_completion(aggressive_prompt, protected_text)
                             retry_final = restore_renpy_syntax_xml(retry_content, placeholders)
                             
-                            if retry_final.strip() != request.text.strip():
+                            if retry_final.strip() != source_text.strip():
                                 self.emit_log("info", f"Aggressive retry successful after {retry_attempt + 1} attempts")
                                 return TranslationResult(
-                                    original_text=request.text,
+                                    original_text=source_text,
                                     translated_text=retry_final.strip(),
                                     source_lang=request.source_lang,
                                     target_lang=request.target_lang,
@@ -232,10 +236,10 @@ IMPORTANT:
                         
                         await asyncio.sleep(0.5)  # Brief delay between retries
                     
-                    self.emit_log("warning", f"AI translation unchanged after aggressive retry: {request.text[:50]}...")
+                    self.emit_log("warning", f"AI translation unchanged after aggressive retry: {source_text[:50]}...")
                 
                 return TranslationResult(
-                    original_text=request.text,
+                    original_text=source_text,
                     translated_text=final_text.strip(),
                     source_lang=request.source_lang,
                     target_lang=request.target_lang,
@@ -267,7 +271,7 @@ IMPORTANT:
                 
                 # Report definitive failure
                 return TranslationResult(
-                    request.text, "", request.source_lang, request.target_lang, request.engine, False, str(e), quota_exceeded=is_rate_limit
+                    source_text, "", request.source_lang, request.target_lang, request.engine, False, str(e), quota_exceeded=is_rate_limit
                 )
 
     async def translate_batch(self, requests: List[TranslationRequest]) -> List[TranslationResult]:
@@ -315,7 +319,10 @@ IMPORTANT:
         all_placeholders = [] # Corresponds to unique_requests
         
         for i, req in enumerate(unique_requests):
-            protected, placeholders = protect_renpy_syntax_xml(req.text)
+            # ── Preprotected guard: pipeline may have already applied protect_renpy_syntax ──
+            meta = req.metadata if isinstance(req.metadata, dict) else {}
+            source_text = meta.get('original_text', req.text) if meta.get('preprotected') else req.text
+            protected, placeholders = protect_renpy_syntax_xml(source_text)
             
             # Extract context info from metadata if available
             # We look for [tag] style markers in context_path
@@ -326,9 +333,23 @@ IMPORTANT:
                 # Filter out file paths or IDs, keep descriptive tags
                 useful_ctx = [c for c in ctx_path if c.startswith('[') and c.endswith(']')]
                 if useful_ctx:
-                    type_attr = f' type="{";".join(useful_ctx)}"'
+                    type_val = ";".join(useful_ctx).replace('&', '&amp;').replace('"', '&quot;')
+                    type_attr = f' type="{type_val}"'
             
-            batch_items.append(f'<r id="{i}"{type_attr}>{protected}</r>')
+            # v2.7.1: extend context hint — önceki diyalog satırını bağlam olarak ekle
+            context_hint = meta.get('context_hint')
+            ctx_attr = ""
+            if context_hint:
+                # Sadece ilk 120 karakter — prompt şişmemeli
+                # & must be escaped FIRST to avoid double-escaping
+                hint_clean = (context_hint[:120]
+                              .replace('&', '&amp;')
+                              .replace('"', '&quot;')
+                              .replace('<', '&lt;')
+                              .replace('>', '&gt;'))
+                ctx_attr = f' context="{hint_clean}"'
+            
+            batch_items.append(f'<r id="{i}"{type_attr}{ctx_attr}>{protected}</r>')
             all_placeholders.append(placeholders)
             
         user_prompt = "\n".join(batch_items)
@@ -379,9 +400,11 @@ IMPORTANT:
                              # v2.5.1 uyumlu: continue yerine devam et
 
                         req = unique_requests[u_idx]
+                        req_meta = req.metadata if isinstance(req.metadata, dict) else {}
+                        req_orig = req_meta.get('original_text', req.text)
                         
                         unique_results_map[u_idx] = TranslationResult(
-                            original_text=req.text,
+                            original_text=req_orig,
                             translated_text=final_text,
                             source_lang=req0.source_lang,
                             target_lang=req0.target_lang,
@@ -402,8 +425,10 @@ IMPORTANT:
                         if u_idx in unique_indices_map:
                             for orig_idx in unique_indices_map[u_idx]:
                                 # Copy result with correct metadata if needed
+                                orig_meta = requests[orig_idx].metadata if isinstance(requests[orig_idx].metadata, dict) else {}
+                                orig_text = orig_meta.get('original_text', requests[orig_idx].text)
                                 final_results[orig_idx] = TranslationResult(
-                                    requests[orig_idx].text,
+                                    orig_text,
                                     res.translated_text,
                                     res.source_lang,
                                     res.target_lang,
@@ -685,8 +710,10 @@ class LocalLLMTranslator(LLMTranslator):
             src_name = self._get_lang_name(request.source_lang)
             tgt_name = self._get_lang_name(request.target_lang)
             
-            # Protect text
-            protected, placeholders = protect_renpy_syntax(request.text)
+            # ── Preprotected guard: pipeline may have already applied protect_renpy_syntax ──
+            meta = request.metadata if isinstance(request.metadata, dict) else {}
+            source_text = meta.get('original_text', request.text) if meta.get('preprotected') else request.text
+            protected, placeholders = protect_renpy_syntax(source_text)
             
             if custom_prompt:
                 system_prompt = custom_prompt.format(source_lang=src_name, target_lang=tgt_name)
@@ -719,13 +746,13 @@ class LocalLLMTranslator(LLMTranslator):
             final_text = restore_renpy_syntax(clean_text, placeholders)
             
             # Last resort: if the model corrupted XRPYX placeholders or returned empty, use original
-            if not final_text or 'XRPYX' in final_text and 'XRPYX' not in request.text:
-                 self.emit_log("warning", f"Local LLM corrupted placeholders, using original: {request.text[:50]}...")
-                 final_text = request.text
+            if not final_text or 'XRPYX' in final_text and 'XRPYX' not in source_text:
+                 self.emit_log("warning", f"Local LLM corrupted placeholders, using original: {source_text[:50]}...")
+                 final_text = source_text
 
-            return TranslationResult(request.text, final_text, request.source_lang, request.target_lang, request.engine, True)
+            return TranslationResult(source_text, final_text, request.source_lang, request.target_lang, request.engine, True)
         except Exception as e:
-            return TranslationResult(request.text, "", request.source_lang, request.target_lang, request.engine, False, str(e))
+            return TranslationResult(source_text, "", request.source_lang, request.target_lang, request.engine, False, str(e))
 
     async def translate_batch(self, requests: List[TranslationRequest]) -> List[TranslationResult]:
         """Local LLMs often fail with XML-style batching. Process one-by-one instead."""

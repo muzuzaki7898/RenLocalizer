@@ -57,6 +57,7 @@ class AppBackend(QObject):
     languageRefresh = pyqtSignal()
     updateAvailable = pyqtSignal(str, str, str, arguments=['currentVersion', 'latestVersion', 'releaseUrl'])
     updateCheckFinished = pyqtSignal(bool, str, arguments=['hasUpdate', 'message']) # NEW explicit signal
+    engineChanged = pyqtSignal()
     
     # Initialization Signals (For UI BusyIndicator)
     initializationChanged = pyqtSignal()
@@ -86,6 +87,7 @@ class AppBackend(QObject):
         
         # Managers
         self.proxy_manager = ProxyManager()
+        self.proxy_manager.configure_from_settings(self.config.proxy_settings)
         self.translation_manager = TranslationManager(self.proxy_manager, self.config)
 
         self._start_async_setup() # Heavy setup to thread
@@ -146,7 +148,7 @@ class AppBackend(QObject):
         # 3. DeepL
         deepl_key = self.config.get_api_key("deepl")
         if deepl_key:
-            deepl_translator = DeepLTranslator(api_key=deepl_key, proxy_manager=self.proxy_manager)
+            deepl_translator = DeepLTranslator(api_key=deepl_key, proxy_manager=self.proxy_manager, config_manager=self.config)
             self.translation_manager.add_translator(TranslationEngine.DEEPL, deepl_translator)
 
         # 4. OpenAI
@@ -218,6 +220,10 @@ class AppBackend(QObject):
     @pyqtProperty(bool, notify=translationStarted)
     def isTranslating(self) -> bool:
         return self._is_translating
+
+    @pyqtProperty(str, notify=engineChanged)
+    def selectedEngine(self) -> str:
+        return self._selected_engine
     
     # ========== SLOTS (QML'den çağrılabilir) ==========
     
@@ -581,9 +587,12 @@ class AppBackend(QObject):
     @pyqtSlot(str)
     def setEngine(self, engine: str):
         """Çeviri motorunu ayarla ve başlat."""
+        changed = self._selected_engine != engine
         self._selected_engine = engine
         self.config.translation_settings.selected_engine = engine
         self.config.save_config()
+        if changed:
+            self.engineChanged.emit()
         self.logMessage.emit("info", self.config.get_log_text("log_engine_selected", engine=engine))
         
         # Trigger async initialization
@@ -831,32 +840,23 @@ class AppBackend(QObject):
             reverse_lang_map = {v.lower(): k for k, v in RENPY_TO_API_LANG.items()}
             renpy_lang = reverse_lang_map.get(target_lang.lower(), target_lang)
             
-            # 1. strings.json Oluştur (Agresif kanca için gerekli)
+            # 1. strings.json Oluştur (Use pipeline's generator to avoid code duplication)
             try:
                 from src.core.tl_parser import TLParser
-                tl_parser = TLParser()
+                from src.core.translation_pipeline import TranslationPipeline
+                
                 tl_dir = os.path.join(game_dir, "tl")
                 if os.path.exists(tl_dir):
                     lang_dir = os.path.join(tl_dir, renpy_lang)
                     if os.path.isdir(lang_dir):
+                        # Use TLParser + pipeline's _generate_strings_json (DRY)
+                        tl_parser = TLParser()
                         tl_files = tl_parser.parse_directory(tl_dir, renpy_lang)
                         
-                        import json
-                        mapping = {}
-                        for tfile in tl_files:
-                            for entry in tfile.entries:
-                                if entry.original_text and entry.translated_text:
-                                    orig = entry.original_text.strip()
-                                    trans = entry.translated_text.strip()
-                                    if not orig or not trans or orig == trans:
-                                        continue
-                                    mapping[orig] = trans
-                        
-                        if mapping:
-                            json_path = os.path.join(lang_dir, "strings.json")
-                            with open(json_path, 'w', encoding='utf-8') as f:
-                                json.dump(mapping, f, ensure_ascii=False, indent=4)
-                            self.logMessage.emit('info', self.config.get_log_text('log_strings_json_generated', count=len(mapping)))
+                        # Create pipeline instance just to use _generate_strings_json
+                        pipeline = TranslationPipeline(self.config, self.translation_manager)
+                        pipeline._generate_strings_json(tl_files, lang_dir)
+                        self.logMessage.emit('info', self.config.get_ui_text('log_strings_json_generated'))
             except Exception as json_err:
                 self.logger.warning(f"Failed to generate strings.json in backend: {json_err}")
 
@@ -1052,7 +1052,8 @@ class AppBackend(QObject):
                 TranslationEngine.DEEPL,
                 DeepLTranslator(
                     api_key=self.config.api_keys.deepl_api_key,
-                    proxy_manager=self.proxy_manager
+                    proxy_manager=self.proxy_manager,
+                    config_manager=self.config
                 )
             )
     
@@ -1065,7 +1066,10 @@ class AppBackend(QObject):
             
             if self.pipeline_worker:
                 try:
-                    self.pipeline_worker.wait(5000)
+                    if not self.pipeline_worker.wait(5000):
+                        self.logger.warning("Pipeline worker did not stop within 5s, terminating thread.")
+                        self.pipeline_worker.terminate()
+                        self.pipeline_worker.wait(2000)
                 except Exception:
                     pass
                 self.pipeline_worker = None
@@ -1162,7 +1166,9 @@ class AppBackend(QObject):
         # Cleanup
         if self.pipeline_worker:
             try:
-                self.pipeline_worker.wait(2000)
+                if not self.pipeline_worker.wait(2000):
+                    self.pipeline_worker.terminate()
+                    self.pipeline_worker.wait(1000)
             except Exception:
                 pass
             self.pipeline_worker = None
@@ -1302,7 +1308,7 @@ class AppBackend(QObject):
                 cache_dir = os.path.join(project_dir, 'game', 'tl', self._target_language)
                 
             return os.path.join(cache_dir, "translation_cache.json")
-        except:
+        except Exception:
             return None
 
     @pyqtSlot(str, str, str, str, result=bool)
@@ -1352,4 +1358,173 @@ class AppBackend(QObject):
     @pyqtSlot(result=int)
     def getCacheSize(self) -> int:
         return len(self.translation_manager._cache)
+
+    # ========== v2.7.1 TOOL SLOTS ==========
+
+    @pyqtSlot()
+    def exportProject(self):
+        """Export project as .rlproj archive."""
+        def _run():
+            try:
+                from src.utils.project_io import export_project
+                if not self._project_path:
+                    self.logMessage.emit("error", self.config.get_ui_text("tool_project_export_no_project", "No project loaded. Please select a game folder first."))
+                    return
+
+                project_dir = os.path.dirname(self._project_path) if os.path.isfile(self._project_path) else self._project_path
+                project_name = os.path.basename(project_dir.rstrip('/\\')) or "project"
+                out_path = os.path.join(project_dir, f"{project_name}.rlproj")
+
+                cache_data = None
+                try:
+                    cache_snapshot = dict(self.translation_manager._cache)
+                    if cache_snapshot:
+                        cache_data = {str(k): v.translated_text for k, v in cache_snapshot.items()}
+                except Exception:
+                    pass
+
+                result = export_project(
+                    config_manager=self.config,
+                    output_path=out_path,
+                    cache_data=cache_data,
+                    include_api_keys=False,
+                )
+                self.logMessage.emit("success", self.config.get_ui_text("tool_project_export_success", "Project exported: {path}").format(path=result))
+            except Exception as e:
+                self.logMessage.emit("error", self.config.get_ui_text("tool_project_export_error", "Export failed: {error}").format(error=str(e)))
+
+        threading.Thread(target=_run, daemon=True).start()
+
+    @pyqtSlot()
+    def importProject(self):
+        """Import project from .rlproj archive."""
+        def _run():
+            try:
+                from src.utils.project_io import import_project, apply_import
+                if not self._project_path:
+                    self.logMessage.emit("error", self.config.get_ui_text("tool_project_import_no_project", "No project loaded. Please select a game folder first."))
+                    return
+
+                project_dir = os.path.dirname(self._project_path) if os.path.isfile(self._project_path) else self._project_path
+
+                # Find .rlproj files
+                rlproj_files = list(Path(project_dir).glob("*.rlproj"))
+                if not rlproj_files:
+                    self.logMessage.emit("error", self.config.get_ui_text("tool_project_import_not_found", "No .rlproj file found in the game directory."))
+                    return
+
+                archive = str(rlproj_files[0])
+                result = import_project(archive)
+                if not result.ok:
+                    self.logMessage.emit("error", f"Import failed: {'; '.join(result.warnings)}")
+                    return
+
+                messages = apply_import(result, self.config)
+                for msg in messages:
+                    self.logMessage.emit("info", msg)
+                self.logMessage.emit("success", self.config.get_ui_text("tool_project_import_success", "Project imported successfully."))
+            except Exception as e:
+                self.logMessage.emit("error", self.config.get_ui_text("tool_project_import_error", "Import failed: {error}").format(error=str(e)))
+
+        threading.Thread(target=_run, daemon=True).start()
+
+    @pyqtSlot()
+    def encryptTranslations(self):
+        """Obfuscate translation output files."""
+        def _run():
+            try:
+                from src.utils.translation_crypto import obfuscate_rpy_file
+                if not self._project_path:
+                    self.logMessage.emit("error", self.config.get_ui_text("tool_encrypt_no_project", "No project loaded. Please select a game folder first."))
+                    return
+
+                project_dir = os.path.dirname(self._project_path) if os.path.isfile(self._project_path) else self._project_path
+                tl_dir = os.path.join(project_dir, "game", "tl")
+                if not os.path.isdir(tl_dir):
+                    self.logMessage.emit("error", self.config.get_ui_text("tool_encrypt_no_tl", "No 'game/tl' directory found."))
+                    return
+
+                count = 0
+                for root_d, dirs, files in os.walk(tl_dir):
+                    for f in files:
+                        if f.endswith(".rpy") and not f.startswith("_rl_"):
+                            fpath = os.path.join(root_d, f)
+                            try:
+                                obfuscate_rpy_file(fpath)
+                                count += 1
+                            except Exception as e:
+                                self.logMessage.emit("warning", f"Skip {f}: {e}")
+
+                self.logMessage.emit("success", self.config.get_ui_text("tool_encrypt_success", "{count} file(s) obfuscated.").format(count=count))
+            except Exception as e:
+                self.logMessage.emit("error", self.config.get_ui_text("tool_encrypt_error", "Encryption failed: {error}").format(error=str(e)))
+
+        threading.Thread(target=_run, daemon=True).start()
+
+    @pyqtSlot()
+    def runTranslationLint(self):
+        """Run translation lint on output files."""
+        def _run():
+            try:
+                from src.tools.renpy_lint import lint_translation_output
+                if not self._project_path:
+                    self.logMessage.emit("error", self.config.get_ui_text("tool_lint_no_project", "No project loaded. Please select a game folder first."))
+                    return
+
+                project_dir = os.path.dirname(self._project_path) if os.path.isfile(self._project_path) else self._project_path
+                tl_dir = os.path.join(project_dir, "game", "tl")
+                if not os.path.isdir(tl_dir):
+                    self.logMessage.emit("error", self.config.get_ui_text("tool_lint_no_tl", "No 'game/tl' directory found."))
+                    return
+
+                self.logMessage.emit("info", self.config.get_ui_text("tool_lint_running", "Running translation lint..."))
+                report = lint_translation_output(tl_dir, game_dir=project_dir)
+
+                if not report.issues:
+                    self.logMessage.emit("success", self.config.get_ui_text("tool_lint_clean", "✓ No issues found! Translation files look clean."))
+                else:
+                    errors = sum(1 for i in report.issues if i.severity.value in ("error", "critical"))
+                    warnings = sum(1 for i in report.issues if i.severity.value == "warning")
+                    self.logMessage.emit("warning", self.config.get_ui_text("tool_lint_result", "Lint complete: {errors} error(s), {warnings} warning(s), {total} total issues.").format(
+                        errors=errors, warnings=warnings, total=len(report.issues)
+                    ))
+                    for issue in report.issues[:20]:
+                        self.logMessage.emit("info", f"[{issue.code}] {issue.file}:{issue.line} — {issue.message}")
+                    if len(report.issues) > 20:
+                        self.logMessage.emit("info", f"... and {len(report.issues) - 20} more issues.")
+            except Exception as e:
+                self.logMessage.emit("error", self.config.get_ui_text("tool_lint_error", "Lint failed: {error}").format(error=str(e)))
+
+        threading.Thread(target=_run, daemon=True).start()
+
+    @pyqtSlot()
+    def packRPA(self):
+        """Pack translation files into an RPA archive."""
+        def _run():
+            try:
+                from src.utils.rpa_packer import pack_translations
+                if not self._project_path:
+                    self.logMessage.emit("error", self.config.get_ui_text("tool_rpa_pack_no_project", "No project loaded. Please select a game folder first."))
+                    return
+
+                project_dir = os.path.dirname(self._project_path) if os.path.isfile(self._project_path) else self._project_path
+                tl_dir = os.path.join(project_dir, "game", "tl")
+                if not os.path.isdir(tl_dir):
+                    self.logMessage.emit("error", self.config.get_ui_text("tool_rpa_pack_no_tl", "No 'game/tl' directory found."))
+                    return
+
+                self.logMessage.emit("info", self.config.get_ui_text("tool_rpa_pack_running", "Packing translations into RPA archive..."))
+                result = pack_translations(
+                    tl_directory=tl_dir,
+                    game_dir=os.path.join(project_dir, "game"),
+                )
+
+                if result:
+                    self.logMessage.emit("success", self.config.get_ui_text("tool_rpa_pack_success", "RPA archive created: {path}").format(path=result))
+                else:
+                    self.logMessage.emit("warning", self.config.get_ui_text("tool_rpa_pack_empty", "No files found to pack."))
+            except Exception as e:
+                self.logMessage.emit("error", self.config.get_ui_text("tool_rpa_pack_error", "RPA packing failed: {error}").format(error=str(e)))
+
+        threading.Thread(target=_run, daemon=True).start()
 

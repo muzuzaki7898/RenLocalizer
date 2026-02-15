@@ -300,9 +300,12 @@ Rectangle {
                          CheckBox { 
                              text: (backend.uiTrigger, backend.getTextWithDefault("settings_use_html_protection", "HTML Wrap Protection (Zenpy-Style)"))
                              checked: settingsBackend.getUseHtmlProtection() 
-                             onCheckedChanged: settingsBackend.setUseHtmlProtection(checked) 
+                             enabled: backend.selectedEngine !== "google"
+                             onCheckedChanged: if (enabled) settingsBackend.setUseHtmlProtection(checked)
                              ToolTip.visible: hovered
-                             ToolTip.text: (backend.uiTrigger, backend.getTextWithDefault("tooltip_html_protection", "Protects placeholders without breaking them. Uses Google Translate's <span class='notranslate'> tag."))
+                             ToolTip.text: enabled
+                                ? (backend.uiTrigger, backend.getTextWithDefault("tooltip_html_protection", "Protects placeholders without breaking them. Uses Google Translate's <span class='notranslate'> tag."))
+                                : (backend.uiTrigger, backend.getTextWithDefault("tooltip_html_protection_google_disabled", "Disabled for Google web endpoint. Token-based placeholder protection is used automatically."))
                          }
                     }
 
@@ -415,6 +418,60 @@ Rectangle {
                         description: (backend.uiTrigger, backend.getTextWithDefault("auto_unren_desc", ""))
                         checked: settingsBackend.getAutoUnren()
                         onToggled: (isChecked) => settingsBackend.setAutoUnren(isChecked)
+                    }
+
+                    DescriptiveCheck {
+                        label: (backend.uiTrigger, backend.getTextWithDefault("auto_protect_char_names", "Auto-Protect Character Names"))
+                        description: (backend.uiTrigger, backend.getTextWithDefault("auto_protect_char_names_desc", "Automatically protect character names from translation"))
+                        checked: settingsBackend.getAutoProtectCharNames()
+                        onToggled: (isChecked) => settingsBackend.setAutoProtectCharNames(isChecked)
+                    }
+
+                    // Custom Function Params (JSON)
+                    ColumnLayout {
+                        Layout.fillWidth: true
+                        spacing: 6
+                        Label {
+                            text: (backend.uiTrigger, backend.getTextWithDefault("custom_function_params_label", "Custom Function Params (JSON):"))
+                            color: "#ccc"
+                            font.bold: true
+                            Layout.fillWidth: true
+                            wrapMode: Text.Wrap
+                        }
+                        Label {
+                            text: (backend.uiTrigger, backend.getTextWithDefault("custom_function_params_desc", "Define which custom Ren'Py functions should have their text parameters extracted for translation."))
+                            color: root.secondaryTextColor
+                            font.pixelSize: 12
+                            Layout.fillWidth: true
+                            wrapMode: Text.Wrap
+                        }
+                        Rectangle {
+                            Layout.fillWidth: true
+                            Layout.preferredHeight: Math.max(80, customFuncArea.contentHeight + 24)
+                            color: root.inputBackground
+                            radius: 8
+                            border.color: root.borderColor
+                            border.width: 1
+                            ScrollView {
+                                anchors.fill: parent
+                                clip: true
+                                ScrollBar.vertical.policy: ScrollBar.AsNeeded
+                                TextArea {
+                                    id: customFuncArea
+                                    text: settingsBackend.getCustomFunctionParams()
+                                    placeholderText: '{"MyFunc": {"pos": [0, 1]}, "notify": {"pos": [0]}}'
+                                    color: root.mainTextColor
+                                    font.pixelSize: 13
+                                    font.family: "Consolas"
+                                    wrapMode: TextEdit.Wrap
+                                    leftPadding: 12; rightPadding: 12; topPadding: 12; bottomPadding: 12
+                                    selectByMouse: true
+                                    background: null
+                                    onEditingFinished: settingsBackend.setCustomFunctionParams(text)
+                                    placeholderTextColor: Qt.rgba(root.mainTextColor.r, root.mainTextColor.g, root.mainTextColor.b, 0.35)
+                                }
+                            }
+                        }
                     }
                 }
             }

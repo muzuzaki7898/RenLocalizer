@@ -649,10 +649,14 @@ class TLParser:
             
             save_path = output_path or tl_file.file_path
             
-            return save_text_safely(Path(save_path), updated_content, encoding='utf-8-sig', newline='\n')
+            success = save_text_safely(Path(save_path), updated_content, encoding='utf-8-sig', newline='\n')
             
-            self.logger.info(f"Kaydedildi: {save_path}")
-            return True
+            if success:
+                self.logger.info(f"Kaydedildi: {save_path}")
+            else:
+                self.logger.warning(f"Kaydetme başarısız: {save_path}")
+            
+            return success
             
         except Exception as e:
             self.logger.error(f"Kaydetme hatası: {e}")

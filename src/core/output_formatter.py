@@ -17,6 +17,8 @@ if TYPE_CHECKING:
 
 def _preserve_case(src: str, dst: str) -> str:
     # Kaynak kelimenin büyük/küçük harfini hedefe uygula
+    if not src or not dst:
+        return dst
     if src.isupper():
         return dst.upper()
     if src[0].isupper():
@@ -97,7 +99,7 @@ class RenPyOutputFormatter:
         'id', 'name', 'type', 'style', 'action', 'hovered', 'unhovered',
         'selected', 'insensitive', 'activate', 'alternate',
         # Common technical single words
-        'idle', 'hover', 'focus', 'insensitive', 'selected_idle',
+        'idle', 'hover', 'focus', 'selected_idle',
         'selected_hover', 'selected_focus', 'selected_insensitive',
         # Transitions & Motion
         'dissolve', 'fade', 'pixellate', 'move', 'moveinright', 'moveoutright',
@@ -117,11 +119,21 @@ class RenPyOutputFormatter:
         'layeredimage', 'transform', 'camera', 'expression', 'assert',
         'hotspot', 'hotbar', 'areapicker', 'drag', 'draggroup', 'showif',
         'after_load', 'after_warp', 'before_main_menu', 'splashscreen',
-        'config', 'preferences', 'gui', 'style', 'persistent',
+        'config', 'preferences', 'gui', 'persistent',  # style already above
+        # Ren'Py statement keywords (v2.7.3 — crash-causing when translated)
+        'scene', 'with', 'at', 'behind', 'as', 'onlayer', 'zorder',
+        'parallel', 'block', 'contains', 'pause', 'repeat', 'function',
+        # Ren'Py core statement keywords — MUST stay untranslated
+        'return', 'screen', 'label', 'menu', 'init', 'call', 'jump',
+        'python', 'define', 'image',
+        # Ren'Py screen language elements — purely technical, never user text
+        'textbutton', 'imagebutton', 'mousearea', 'nearrect',
+        'hbox', 'vbox', 'vbar', 'transclude', 'testcase',
+        'nvl', 'elif',
         'kerning', 'line_leading', 'outlines', 'antialias', 'hinting',
-        'vscroller', 'hscroller', 'viewport', 'button', 'input',
+        'vscroller', 'hscroller', 'button',  # viewport, input, ascii already above
         'zsync', 'zsyncmake', 'rpu', 'ecdsa', 'rsa', 'bbcode', 'markdown',
-        'utf8', 'latin1', 'ascii'
+        'utf8', 'latin1',
     }
     
     # Pre-compiled regex patterns for performance (class-level caching)
@@ -132,9 +144,16 @@ class RenPyOutputFormatter:
     _URL_RE = re.compile(r'^(https?://|ftp://|mailto:|www\.)')
     _HEX_COLOR_RE = re.compile(r'^#[0-9a-fA-F]{3,8}$')
     _NUMBER_RE = re.compile(r'^-?\d+\.?\d*$')
-    _FUNC_CALL_RE = re.compile(r'^[A-Za-z_]\w*\s*\(.*\)$')
+    _FUNC_CALL_RE = re.compile(r'^[A-Za-z_][\w.]*\s*\(.*\)$')  # obj.method(...) dahil
     _MODULE_ATTR_RE = re.compile(r'^[A-Za-z_]\w*\.[A-Za-z_]\w*$')
     _KEYVAL_RE = re.compile(r'^[A-Za-z0-9_\-]+\s*:\s*[A-Za-z0-9_\-]+$')
+    # Code expression detection: dotted access + subscript/comparison/boolean
+    # Catches: tris.attr['SLU'] >= 3, GAME.mc.getTally('Job') or ..., obj.isAt() in [...]
+    _CODE_EXPR_RE = re.compile(
+        r'^[A-Za-z_][\w.]*'                    # obj.attr.method start
+        r'(?:\[.*?\]|\(.*?\))'               # followed by subscript or call
+        r'(?:\s*(?:>=|<=|==|!=|>|<|\band\b|\bor\b|\bnot\b|\bin\b)\s*.+)?$'  # optional comparison
+    )
     _SNAKE_CASE_RE = re.compile(r'^[a-z][a-z0-9]*(_[a-z0-9]+)+$')
     _SCREAMING_SNAKE_RE = re.compile(r'^[A-Z][A-Z0-9]*(_[A-Z0-9]+)+$')
     _GAME_SAVE_ID_RE = re.compile(r'^[A-Za-z_][A-Za-z0-9_]*-\d+$')
@@ -143,6 +162,36 @@ class RenPyOutputFormatter:
     _FILE_PATH_BACKSLASH_RE = re.compile(r'^[a-zA-Z0-9_\\\.\-]+$')
     _ANGLE_PLACEHOLDER_RE = re.compile(r'[\u27e6\u27e7]')  # ⟦placeholder⟧ gibi
     _QMARK_PLACEHOLDER_RE = re.compile(r'\?[A-Za-z]\d{3}\?')  # ?V000? ?T000? vb.
+    # v2.7.3: Python condition pattern — 'var_name' in obj.attr (multi-word support)
+    # Now handles: 'reactor activated' in GAME.mc.done (spaces inside quotes)
+    _PYTHON_CONDITION_RE = re.compile(
+        r"""^\s*['"][^'"]+['"]\s+(?:not\s+)?in\s+[A-Za-z_]\w*\.\w+"""
+    )
+    # v2.7.3: Code logic with dotted access — not GAME.x.y(), khelara not in GAME.crew
+    _CODE_LOGIC_RE = re.compile(
+        r'^\s*(?:not\s+)?[A-Za-z_][\w.]*(?:\([^)]*\))?'
+        r'\s+(?:not\s+)?in\s+[A-Za-z_][\w.]*'
+    )
+    # v2.7.4: Dotted path IN list — GAME.hour in [18,19], GAME.getStarSys().ID in ['X']
+    _DOTTED_IN_RE = re.compile(
+        r'^\s*[A-Za-z_][\w.]*(?:\([^)]*\))?(?:\.[A-Za-z_]\w*)*\s+(?:not\s+)?in\s+\['
+    )
+    # v2.7.4: Dotted path + comparison/modulo — GAME.day%5 == 0, GAME.hour < 18
+    _DOTTED_COMPARE_RE = re.compile(
+        r'^\s*[A-Za-z_][\w.]*(?:\([^)]*\))?(?:\.[A-Za-z_]\w*)*[%\s]*(?:==|!=|>=|<=|<|>)'
+    )
+    # v2.7.4: List comprehension — [x >= 70 for x in items]
+    _LIST_COMPREHENSION_RE = re.compile(
+        r'\[.*\bfor\s+\w+\s+in\b.*\]'
+    )
+    # v2.7.4: Method call on bracket/paren result — ].count(True), ).items()
+    _BRACKET_METHOD_RE = re.compile(
+        r'[\]\)]\s*\.\w+\s*\('
+    )
+    # v2.7.3: Short ALL_CAPS game terms (2-6 pure uppercase letters)
+    _SHORT_ALL_CAPS_RE = re.compile(r'^[A-Z]{2,6}$')
+    # v2.7.3: Format string templates: "...".format(...)
+    _FORMAT_TEMPLATE_RE = re.compile(r'"[^"]*"\s*\.format\s*\(')
     
     def __init__(self):
         self.logger = logging.getLogger(__name__)
@@ -182,20 +231,24 @@ class RenPyOutputFormatter:
         # --- PYTHON CODE / DOCSTRING DETECTION ---
         # Skip strings containing Python code patterns (commonly from docstrings)
         # These cause critical game-breaking issues when translated
+        # NOTE: Patterns must be strict to avoid catching natural English:
+        #   "I'll return home" != code, "return self.x" = code
+        #   "Stay a while longer" != code, "while True:" = code
         python_code_patterns = [
             r'\bdef\s+\w+\s*\(',           # Function definitions: def foo(
             r'\bclass\s+\w+\s*[:\(]',      # Class definitions: class Foo:
-            r'\bfor\s+\w+\s+in\s+',        # For loops: for x in
+            r'(?:^|\n)\s*for\s+\w+\s+in\s+\w+\s*:',  # For loops at statement level: for x in items:
             r'\bif\s+\w+\s+in\s+\w+:',     # If in checks: if key in km:
             r'\bimport\s+\w+',              # Import statements
             r'\bfrom\s+\w+\s+import',       # From imports
-            r'\breturn\s+\w+',              # Return statements
+            r'\breturn\s+(?:self|cls|True|False|None|\d|\(|\[|\{|"|\')',  # Return code values only
             r'\braise\s+\w+',               # Raise exceptions
             r'\btry\s*:',                   # Try blocks
             r'\bexcept\s+\w*:',             # Except blocks
-            r'\bwhile\s+\w+',               # While loops
+            r'(?:^|\n)\s*while\s+\w+\s*:',  # While at statement level: while True:
+            r'\bwhile\s+(?:True|False|not\s+|\d)',  # while True, while not, while 0
             r'\blambda\s+\w*:',             # Lambda functions
-            r'\bwith\s+\w+\s+as\s+',        # With statements
+            r'\bwith\s+\w+\s*\(.*\)\s+as\s+',  # With context manager: with open() as f
             r'renpy\.\w+\.\w+',             # Ren'Py module calls: renpy.store.x
             r'renpy\.\w+\(',                # Ren'Py function calls: renpy.block_rollback()
             r'_\w+\[',                      # Internal dict access: _saved_keymap[key]
@@ -235,7 +288,8 @@ class RenPyOutputFormatter:
         # --- FILE PATH PATTERNS WITH VARIABLES ---
         # Skip strings that look like path templates with string concatenation
         # e.g., "minigame/dice_"+str(one)+".png", "images/"+name+".jpg"
-        if re.search(r'["\']?[\w/]+["\']?\s*\+\s*\w+', text_strip):
+        # NOTE: Pattern requires quotes or '/' to avoid catching "2 + 2", "Add +5"
+        if re.search(r'["\'][\w/]*["\']\s*\+\s*\w+', text_strip) or re.search(r'\w+/\w+\s*\+\s*\w+', text_strip):
             return True
         
         # --- RENPY-ONLY MARKUP STRINGS (no translatable content) ---
@@ -323,11 +377,18 @@ class RenPyOutputFormatter:
         # Skip Python format strings like {:,}, {:3d}, {}, {}Attitude:{} {}
         # These are used for number/string formatting and should not be translated
         if '{' in text_strip:
-            # Count format placeholders using cached regex
-            format_count = len(self._FORMAT_PLACEHOLDER_RE.findall(text_strip))
+            # First strip Ren'Py text tags before counting format placeholders.
+            # Tags like {b}, {/b}, {i}, {color=#fff}, {/color}, {size=20} etc.
+            # are legitimate Ren'Py markup, NOT Python format placeholders.
+            _renpy_tag_stripped = re.sub(
+                r'\{/?(?:b|i|u|s|plain|color|font|size|cps|nw|fast|w|p|a|outlinecolor|alpha|k|rt|rb|image|space|vspace)(?:=[^}]*)?\}',
+                '', text_strip
+            )
+            # Count ACTUAL format placeholders (not Ren'Py tags)
+            format_count = len(self._FORMAT_PLACEHOLDER_RE.findall(_renpy_tag_stripped))
             if format_count >= 1:
                 # Remove format placeholders and check remaining content
-                remaining = self._FORMAT_PLACEHOLDER_RE.sub('', text_strip).strip()
+                remaining = self._FORMAT_PLACEHOLDER_RE.sub('', _renpy_tag_stripped).strip()
                 # If remaining has no meaningful letters, skip
                 if not re.search(r'[a-zA-ZçğıöşüÇĞIİÖŞÜа-яА-Яа-яА-Я]{3,}', remaining):
                     return True
@@ -370,12 +431,24 @@ class RenPyOutputFormatter:
         # "history" -> skip, "History" -> translate (UI label)
         if text_strip in self.RENPY_TECHNICAL_TERMS:
             return True
+        
+        # v2.7.4: Python builtin constants as standalone text
+        # "True", "False", "None" are NEVER translatable — they are Python keywords
+        if text_strip in ('True', 'False', 'None'):
+            return True
 
         # Skip likely function calls or code-like literals
         if self._FUNC_CALL_RE.match(text_strip):
             return True
+        # Also skip 'not func_call()' patterns (negated code expressions)
+        if text_strip.startswith('not ') and self._FUNC_CALL_RE.match(text_strip[4:].strip()):
+            return True
         # Skip module.attribute references
         if self._MODULE_ATTR_RE.match(text_strip):
+            return True
+        # Skip code expressions: dotted access + subscript/comparison
+        # e.g., tris.attr['SLU'] >= 3, GAME.mc.getTally('Job') or ...
+        if self._CODE_EXPR_RE.match(text_strip):
             return True
         # Skip key:value like config entries
         if self._KEYVAL_RE.match(text_strip):
@@ -426,6 +499,79 @@ class RenPyOutputFormatter:
         stripped_of_vars = self._VARIABLE_RE.sub('', stripped_of_tags)
         if not stripped_of_vars.strip():
             return True
+        
+        # =================================================================
+        # v2.7.3: Additional False-Positive Guards (from crash analysis)
+        # =================================================================
+        
+        # --- PYTHON CONDITION STRINGS ---
+        # Pattern: 'var_name' in obj.attr  /  'reactor activated' in GAME.mc.done
+        # These are game logic conditions that MUST NOT be translated.
+        if self._PYTHON_CONDITION_RE.match(text_strip):
+            return True
+        
+        # --- DOTTED PATH + IN [LIST] ---
+        # Pattern: GAME.hour in [18,19,20], GAME.getStarSys().ID in ['X']
+        if self._DOTTED_IN_RE.match(text_strip):
+            return True
+        
+        # --- DOTTED PATH + COMPARISON/MODULO ---
+        # Pattern: GAME.day%5 == 0, GAME.hour < 18
+        if self._DOTTED_COMPARE_RE.match(text_strip):
+            return True
+        
+        # --- LIST COMPREHENSION ---
+        # Pattern: [x >= 70 for x in bot.skills.values()].count(True) >= 3
+        if self._LIST_COMPREHENSION_RE.search(text_strip):
+            return True
+        
+        # --- METHOD CALL ON BRACKET/PAREN RESULT ---
+        # Pattern: ].count(True), ).items(), ).ID
+        if self._BRACKET_METHOD_RE.search(text_strip) and '.' in text_strip:
+            return True
+        
+        # --- CODE LOGIC WITH DOTTED ACCESS ---
+        # Pattern: not GAME.questSys.isDone('QID_...')
+        #          khelara not in GAME.crew
+        #          GAME.hour < 18 and GAME.questSys.isDone(...)
+        # IMPORTANT: Require at least one dotted path (obj.attr) to avoid
+        # catching natural language like "Getting in Shape"
+        if self._CODE_LOGIC_RE.match(text_strip) and '.' in text_strip:
+            return True
+        
+        # Broader code detection: dotted access + comparison/boolean in same string
+        # e.g., "GAME.hour < 18 and GAME.questSys.isDone('QID_...')"
+        # v2.7.4: Lowered threshold to 1 dotted ref (was 2) when operators present
+        # NOTE: Require 3+ chars before dot to avoid abbreviations (e.g., U.S., Dr.)
+        dot_refs = re.findall(r'[A-Za-z_]\w{2,}\.\w+', text_strip)
+        if len(dot_refs) >= 1 and re.search(r'\b(?:and|or|not)\b|[<>=!]=|(?<![<>])[<>](?![<>])', text_strip):
+            return True
+        
+        # --- SHORT ALL_CAPS GAME TERMS ---
+        # Pattern: NOT, REP, INT, CON, STR, DEX, TEC (game stat abbreviations)
+        # These are 2-6 uppercase letters, commonly used as skill/stat identifiers.
+        # EXCLUSION: Common English words that SHOULD be translated when Title Case is used
+        # but are game tokens when ALL_CAPS. We only skip pure ALL_CAPS 2-6 char strings.
+        if self._SHORT_ALL_CAPS_RE.match(text_strip):
+            # Safety: allow very common English words even in ALL_CAPS
+            # "OK", "NO" are valid UI labels, but "NOT", "REP", "STR" etc. are game stats
+            _caps_translate_whitelist = {'OK', 'NO', 'ON', 'UP', 'GO', 'OR', 'AN', 'IF', 'BY', 'IN', 'IS', 'DO'}
+            if text_strip not in _caps_translate_whitelist:
+                return True
+        
+        # --- FORMAT STRING TEMPLATES ---
+        # Pattern: "Track: {} | Dist: {}".format(race.ground, race.laps)
+        if self._FORMAT_TEMPLATE_RE.search(text_strip):
+            return True
+        
+        # --- PYTHON EXPRESSION WITH SINGLE-QUOTED IDENTIFIERS ---
+        # Strings that start with a single-quoted identifier followed by code operators
+        # e.g., 'exemption_talk' in moira.done → missed by _PYTHON_CONDITION_RE if multiline
+        if text_strip.startswith("'") and re.match(r"^'[\w.]+'", text_strip):
+            # If the rest contains code-like pattern, skip
+            rest = re.sub(r"^'[\w.]+'", '', text_strip).strip()
+            if rest and re.match(r'^(?:in\b|not\b|and\b|or\b|==|!=|>=|<=|>|<)', rest):
+                return True
         
         return False
     
@@ -498,17 +644,18 @@ class RenPyOutputFormatter:
             temp_text = temp_text.replace(tag, placeholder, 1)
             counter += 1
         
-        # Handle literal double brackets BEFORE escaping
-        # [[ should become \[\[ in Ren'Py to show literal [
-        temp_text = temp_text.replace('[[', '\\[\\[')
-        temp_text = temp_text.replace('{{', '\\{\\{')
-        
-        # Now escape the rest
+        # Now escape special characters for Ren'Py string literal.
+        # IMPORTANT: Escape backslashes FIRST to prevent double-escaping.
+        # Previous bug: [[ was converted to \[\[ then \\ escaped all \,
+        # producing \\[\\[ (double-escaped and invalid Ren'Py).
         temp_text = temp_text.replace('\\', '\\\\')  # Escape backslashes first
         temp_text = temp_text.replace('"', '\\"')     # Escape double quotes
         temp_text = temp_text.replace('\r', '')       # Remove carriage returns
         temp_text = temp_text.replace('\n', '\\n')    # Escape newlines
         temp_text = temp_text.replace('\t', '\\t')    # Escape tabs
+        # Note: [[ and {{ are already correct Ren'Py escapes for literal
+        # [ and { brackets. They must be preserved as-is (not re-escaped).
+        # [variable] and {tag} patterns were protected via placeholders above.
         
         # Restore variables and tags
         for placeholder, original_content in protection_map.items():

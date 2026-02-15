@@ -1,8 +1,8 @@
 # -*- coding: utf-8 -*-
 # MIT License - RenLocalizer
 """
-Syntax Guard Module (v3.1 Hybrid)
-=================================
+Syntax Guard Module (v3.3 Ren'Py 8 Full Compliance)
+====================================================
 Ren'Py ve Python sözdizimini (değişkenler, tagler, format karakterleri) koruma ve geri yükleme işlemlerini yönetir.
 Bu modül, çeviri motorlarının (Google, DeepL) kod yapısını bozmasını engellemek için "Askeri Düzeyde" koruma sağlar.
 
@@ -25,7 +25,38 @@ Architecture & Optimizations (v2.6.4+):
 """
 
 import re
+import uuid
+import unicodedata
 from typing import Dict, Tuple, List
+
+# =============================================================================
+# SCRIPT TRANSLITERATION RECOVERY (Google Translate Anti-Corruption)
+# =============================================================================
+# Google Translate bazı dillerde token isimlerini hedef dil alfabesine translitere ediyor.
+# Örnek: Rusça'da VAR0 → ВАР0 (Kiril), Yunanca'da TAG0 → ΤΑΓ0 (Yunan)
+# Bu map FONETİK eşleşmeye göre — görsel değil (В=V sesi, Р=R sesi)
+# Recovery sadece token-benzeri bölgelerde (büyük harf + rakam) uygulanır.
+_CYRILLIC_TO_LATIN = str.maketrans({
+    'А': 'A', 'В': 'V', 'Г': 'G', 'Д': 'D', 'Е': 'E',
+    'И': 'I', 'К': 'K', 'Л': 'L', 'М': 'M', 'Н': 'N',
+    'О': 'O', 'П': 'P', 'Р': 'R', 'С': 'S', 'Т': 'T',
+    'У': 'U', 'Х': 'X',
+})
+
+_GREEK_TO_LATIN = str.maketrans({
+    'Α': 'A', 'Β': 'B', 'Γ': 'G', 'Δ': 'D', 'Ε': 'E',
+    'Ι': 'I', 'Κ': 'K', 'Μ': 'M', 'Ν': 'N', 'Ο': 'O',
+    'Ρ': 'R', 'Σ': 'S', 'Τ': 'T', 'Χ': 'X',
+})
+
+# Tüm non-Latin büyük harfleri tek regex ile yakala: token-benzeri sekanslar
+# Pattern: En az 2 uppercase (Latin veya non-Latin) + rakam/underscore dizisi
+# v2.7.2: Boşluk ile ayrılmış combo'ları da yakala (ВАР 0 → VAR0)
+_TRANSLITERATED_TOKEN_RE = re.compile(
+    r'[A-ZА-ЯΑ-Ω][A-ZА-ЯΑ-Ω0-9_]*(?:\s+\d+)'
+    r'|[A-ZА-ЯΑ-Ω][A-ZА-ЯΑ-Ω0-9_]*\d+'
+    r'|[A-ZА-ЯΑ-Ω][A-ZА-ЯΑ-Ω0-9]*_[A-ZА-ЯΑ-Ω0-9_]+'
+)
 
 # Ren'Py variable patterns
 # Ren'Py variable patterns (Individual)
@@ -45,6 +76,7 @@ _PAT_ESC_COMPLETE = r'\[\[.*?\]\]|\{\{.*?\}\}'  # Complete pairs only: [[...]] o
 _PAT_ESC_INCOMPLETE = r'\}\}|\]\]'              # Only closing brackets as fallback (not opening)
 _PAT_ESC = f"({_PAT_ESC_COMPLETE}|{_PAT_ESC_INCOMPLETE})"  # Complete pairs first, then singles
 _PAT_TAG = r'\{[^\}]+\}'                     # {tag} (greedy match inside braces)
+_PAT_EMPTY_BRACE = r'\{\}'                   # Empty {} (Python .format() positional placeholder)
 # _PAT_DISAMBIG: Disambiguation tags like {#comment}, {#game} - MUST be preserved exactly
 _PAT_DISAMBIG = r'\{#[^}]+\}'
 # _PAT_VAR: Matches [variable], [obj.attr], [list[index]], and [var!t] (translatable flag)
@@ -55,12 +87,12 @@ _PAT_DISAMBIG = r'\{#[^}]+\}'
 _PAT_VAR = r"\[[^\[\]]*(?:\[[^\[\]]*\][^\[\]]*)*\]"
 _PAT_FMT = r'%\([^)]+\)[sdfi]|%[sdfi]'       # Python formatting: %(var)s or %s (Support for s, d, f, i)
 _PAT_QMK = r'\?[A-Za-z]\d{3}\?'              # ?A000? style
-_PAT_UNI = r'\u27e6[^\u27e7]+\u27e7'         # ⟦...⟧ style
+_PAT_UNI = r'\u27e6(?:[A-Z][A-Z0-9_]{1,24}|RLPH[A-F0-9]{6}_\d+)\u27e7'  # Legacy + internal unicode token style
 
 # Combined pattern string (Order matters: most specific/longest first)
 # v2.6.6: Complete escaped pairs MUST match before variables to prevent partial breakage
 # Example: [[Phone]] matches as atomic esc pair; bare [[Phone] won't match as [[ so [Phone] matches normally
-_PROTECT_PATTERN_STR = f"({_PAT_DISAMBIG}|{_PAT_ESC}|{_PAT_TAG}|{_PAT_FMT}|{_PAT_PCT}|{_PAT_QMK}|{_PAT_UNI}|{_PAT_VAR})"
+_PROTECT_PATTERN_STR = f"({_PAT_DISAMBIG}|{_PAT_ESC}|{_PAT_TAG}|{_PAT_EMPTY_BRACE}|{_PAT_FMT}|{_PAT_PCT}|{_PAT_QMK}|{_PAT_UNI}|{_PAT_VAR})"
 
 # Pre-compiled Regexes (Module Level Optimization)
 PROTECT_RE = re.compile(_PROTECT_PATTERN_STR)
@@ -72,8 +104,8 @@ _OPEN_TAG_RE = re.compile(
     r'^(\{(?:'
     # Style tags
     r'i|b|u|s|plain|'
-    # Control tags
-    r'fast|nw|done|'
+    # Control tags (nw can have argument: {nw=2})
+    r'fast|nw(?:=[\d.]+)?|done|'
     # Timing tags
     r'w(?:=[\d.]+)?|p(?:=[\d.]+)?|cps(?:=\*?[\d.]+)?|'
     # Visual style tags
@@ -81,6 +113,8 @@ _OPEN_TAG_RE = re.compile(
     r'alpha(?:=[^}]+)?|k(?:=[^}]+)?|'
     # Ruby text (furigana) tags
     r'rb|rt|'
+    # Alternate ruby top (Ren'Py 8)
+    r'art|'
     # Spacing tags
     r'space(?:=[^}]+)?|vspace(?:=[^}]+)?|'
     # Image/Link tags
@@ -89,13 +123,38 @@ _OPEN_TAG_RE = re.compile(
     r'alt(?:=[^}]+)?|noalt|'
     # Shader/Transform tags (Ren'Py 8)
     r'shader(?:=[^}]+)?|transform(?:=[^}]+)?|'
+    # Variable font tags (Ren'Py 8): {instance=heavy}, {axis:width=125}
+    r'instance(?:=[^}]+)?|axis:[a-z]+(?:=[^}]+)?|'
+    # OpenType feature tag (Ren'Py 8): {feature:liga=0}
+    r'feature:[a-z]+(?:=[^}]+)?|'
+    # Vertical/Horizontal text tags (Ren'Py 8)
+    r'horiz|vert|'
     # Clear tag (Ren'Py 8)
     r'clear'
     r')\})+'
 )
 
 _CLOSE_TAG_RE = re.compile(
-    r'(\{/(?:i|b|u|s|plain|color|size|font|outlinecolor|alpha|a|rb|rt|alt|shader|transform)\})+$'
+    r'(\{/(?:'
+    # Core style tags
+    r'i|b|u|s|plain|'
+    # Visual style tags
+    r'color|size|font|outlinecolor|alpha|cps|k|'
+    # Link tag
+    r'a|'
+    # Ruby text tags
+    r'rb|rt|art|'
+    # Accessibility tags
+    r'alt|noalt|'
+    # Shader/Transform tags
+    r'shader|transform|'
+    # Variable font tags (Ren'Py 8)
+    r'instance|axis|'
+    # OpenType feature tag (Ren'Py 8)
+    r'feature|'
+    # Vertical/Horizontal text tags (Ren'Py 8)
+    r'horiz|vert'
+    r')\})+$'
 )
 
 # Aggressive spaced pattern for restoration (handles AI adding spaces)
@@ -131,48 +190,78 @@ def protect_renpy_syntax(text: str) -> Tuple[str, Dict[str, str]]:
     """
     placeholders: Dict[str, str] = {}
     result_text = text
+    token_namespace = uuid.uuid4().hex[:6].upper()
     
     # AŞAMA 1: Wrapper tag pair'lerini tespit et ve çıkar (START AND END ONLY)
+    # v3.2 FIX: Orphaned tag loss prevention — tags that can't form valid pairs
+    # are reinserted into the text so PROTECT_RE can tokenize them normally.
     wrapper_pairs = []  # List of (open_tag, close_tag) tuples
     
     # Extract opening wrapper tags from START of string
     opening_tags = []
+    _removed_opening_str = ""
     opening_match = _OPEN_TAG_RE.match(result_text)
     if opening_match:
-        wrapper_opening_str = opening_match.group(0)
-        result_text = result_text[len(wrapper_opening_str):]  # Remove opening tags from start
-        for tag_match in re.finditer(r'\{[^}]+\}', wrapper_opening_str):
+        _removed_opening_str = opening_match.group(0)
+        result_text = result_text[len(_removed_opening_str):]  # Remove opening tags from start
+        for tag_match in re.finditer(r'\{[^}]+\}', _removed_opening_str):
             opening_tags.append(tag_match.group(0))
     
     # Extract closing wrapper tags from END of string
     closing_tags = []
+    _removed_closing_str = ""
     closing_match = _CLOSE_TAG_RE.search(result_text)
     if closing_match:
-        wrapper_closing_str = closing_match.group(0)
+        _removed_closing_str = closing_match.group(0)
         result_text = result_text[:closing_match.start()]  # Remove closing tags from end
-        for tag_match in re.finditer(r'\{/[^}]+\}', wrapper_closing_str):
+        for tag_match in re.finditer(r'\{/[^}]+\}', _removed_closing_str):
             closing_tags.append(tag_match.group(0))
-        closing_tags.reverse()  # Match them in correct order
+        closing_tags.reverse()  # Match them in correct nesting order
     
-    # FIX v2.6.7+: Create wrapper pairs instead of separate lists
-    # This prevents confusion when inner closing tags are in the content
-    if opening_tags and closing_tags:
-        # Pair each opening tag with its corresponding closing tag
-        for i, open_tag in enumerate(opening_tags):
-            if i < len(closing_tags):
-                close_tag = closing_tags[i]
-                wrapper_pairs.append((open_tag, close_tag))
-                # Store wrapper pairs as __WRAPPER_PAIR_0__, __WRAPPER_PAIR_1__, etc.
-                placeholders[f"__WRAPPER_PAIR_{i}__"] = (open_tag, close_tag)
+    # v3.2 FIX: Validate wrapper pairs by tag TYPE and reinsert unmatched tags.
+    # Previous code paired by INDEX which could lose orphaned tags entirely.
+    _remaining_closes = list(closing_tags)
+    _matched_pairs = []
+    _unmatched_opens = []
     
-    # Handle whitespace around content
-    if opening_tags and result_text and result_text[0].isspace():
-        result_text = result_text.lstrip()
+    for open_tag in opening_tags:
+        # Extract tag name: {color=#fff} -> color, {b} -> b
+        # Also handle colon syntax: {feature:liga=0} -> feature, {axis:width=125} -> axis
+        _tag_inner = open_tag[1:-1]  # Remove { }
+        _tag_name = _tag_inner.split('=')[0].split(':')[0].split()[0].lower().strip()
+        _expected_close = '{/' + _tag_name + '}'
         
-    if closing_tags and result_text and result_text[-1].isspace():
-        result_text = result_text.rstrip()
+        # Find matching close in remaining
+        _found_idx = None
+        for j, close_tag in enumerate(_remaining_closes):
+            if close_tag.lower().strip() == _expected_close:
+                _found_idx = j
+                break
         
-    result_text = result_text.strip()
+        if _found_idx is not None:
+            _matched_pairs.append((open_tag, _remaining_closes.pop(_found_idx)))
+        else:
+            _unmatched_opens.append(open_tag)
+    
+    # Reinsert unmatched tags back into the text so PROTECT_RE can tokenize them
+    if _unmatched_opens:
+        result_text = ''.join(_unmatched_opens) + result_text
+    if _remaining_closes:
+        # Remaining closes had no matching open — reinsert at end
+        result_text = result_text + ''.join(reversed(_remaining_closes))
+    
+    # Store matched pairs as placeholders
+    for i, (open_tag, close_tag) in enumerate(_matched_pairs):
+        wrapper_pairs.append((open_tag, close_tag))
+        placeholders[f"__WRAPPER_PAIR_{i}__"] = (open_tag, close_tag)
+    
+    # Handle whitespace ONLY between wrapper tags and content
+    # v3.2 FIX: Only strip boundary spaces, not content-internal whitespace/newlines
+    if wrapper_pairs and result_text:
+        if result_text[0] == ' ':
+            result_text = result_text.lstrip(' ')
+        if result_text and result_text[-1] == ' ':
+            result_text = result_text.rstrip(' ')
     
     # AŞAMA 2: Syntax Koruması (TOKEN mode, HTML NOT)
     counter = 0
@@ -196,37 +285,15 @@ def protect_renpy_syntax(text: str) -> Tuple[str, Dict[str, str]]:
             last = end
             continue
         
-        # Token Tipi Belirleme ve İsimlendirme
-        # v2.6.6: Check for full escaped bracket/brace PAIRS first (now matched atomically)
-        if (token.startswith('[[') and token.endswith(']]')) or (token.startswith('{{') and token.endswith('}}')):
-            # Full escaped pair like [[Phone]] or {{comment}} (v2.6.6 atomic matching)
-            key_content = f"ESC_PAIR{counter}"
-            counter += 1
-        elif token == '[[':
-            # Legacy: Single [[ without closing ]] (shouldn't happen with new pattern)
-            key_content = "ESC_OPEN"
-        elif token == ']]':
-            # Legacy: Single ]] without opening [[ (shouldn't happen with new pattern)
-            key_content = "ESC_CLOSE"
-        elif token == '%%':
-            key_content = f"PCT{counter}"
-            counter += 1
-        elif token in ('{{', '}}'):
-            # Legacy: Individual braces (shouldn't happen with new pattern)
-            key_content = f"ESC{counter}"
-            counter += 1
-        elif token.startswith('{#'):
-            key_content = f"DIS{counter}"
-            counter += 1
-        elif token.startswith('{') and token.endswith('}'):
-            key_content = f"TAG{counter}"
-            counter += 1
-        elif token.startswith('[') and token.endswith(']'):
-            key_content = f"VAR{counter}"
-            counter += 1
-        else:
-            key_content = f"VAR{counter}"
-            counter += 1
+        # Token İsimlendirme (v2.7.2): Alfabe-Bağımsız Format ⟦N⟧
+        # Eski format (VAR0, TAG1, ESC_PAIR2...) Latin harf içerdiği için
+        # Google Translate bazı hedef dillerde translitere ediyordu:
+        #   Rusça:  VAR0 → ВАР0, TAG0 → ТАГ0, ESC0 → ЕСК0
+        #   C harfi özellikle sorunlu: Kiril'de C=С(=S) veya К(=K), geri dönüşüm imkansız
+        # Unicode matematiksel köşeli parantezler ⟦⟧ (U+27E6/U+27E7) hiçbir dilde
+        # translitere edilemez — Google bunlara "tanımsız sembol" olarak dokunmaz.
+        key_content = f"\u27e6RLPH{token_namespace}_{counter}\u27e7"
+        counter += 1
             
         # Placeholders map'e kaydet (Token -> Orijinal)
         placeholders[key_content] = token
@@ -239,8 +306,10 @@ def protect_renpy_syntax(text: str) -> Tuple[str, Dict[str, str]]:
     out_parts.append(result_text[last:])
     protected = ''.join(out_parts)
     
-    # Fazla boşlukları temizle
-    protected = ' '.join(protected.split())
+    # Fazla boşlukları temizle (ardışık boşluklar → tek boşluk)
+    # v3.2 FIX: Newline'ları koru — sadece yatay boşlukları (space/tab) normalize et.
+    # Eski kod: ' '.join(protected.split()) — bu \n karakterlerini yok ediyordu.
+    protected = re.sub(r'[^\S\n]+', ' ', protected).strip()
     
     return protected, placeholders
 
@@ -287,12 +356,72 @@ def restore_renpy_syntax(text: str, placeholders: Dict[str, str]) -> str:
         
     result = text
     
-    # AŞAMA 0.5: Spaced Token Cleanup (Google Translate corruption fix)
-    # Google Translate sık sık "VAR 0" -> "VAR0" türü space ekliyor
-    # Bunu pre-process'te düzeltmeliyiz
+    # AŞAMA 0: Unicode Bracket Token Restore (legacy + v3.3.1 namespaced format)
+    # Google ⟦⟧ içine boşluk ekleyebilir: ⟦RLPHABC123_0⟧ → ⟦ RLPHABC123_0 ⟧.
+    if vars_only and '\u27e6' in result:
+        _unicode_token_re = re.compile(r'\u27e6\s*([^\u27e7]+?)\s*\u27e7')
+        def _restore_unicode_token(match):
+            token_inner = ''.join(match.group(1).split())
+            token_inner = unicodedata.normalize('NFKC', token_inner).upper()
+            if not re.fullmatch(r'[A-Z0-9_]+', token_inner):
+                return match.group(0)
+            token_key = f'\u27e6{token_inner}\u27e7'
+            return vars_only.get(token_key, match.group(0))
+        result = _unicode_token_re.sub(_restore_unicode_token, result)
+    
+    # AŞAMA 0.1: Bracket-stripped / variant-bracket RLPH token recovery
+    # Google bazen ⟦⟧ Unicode parantezlerini tamamen siler veya
+    # [RLPH...], (RLPH...) gibi başka parantezlere dönüştürür.
+    # Stage 0 sağlam ⟦⟧ tokenlarını yakalar; bu aşama kalanları toplar.
     if vars_only:
-        # Spaced token pattern: VAR + optional spaces + digits
-        spaced_pattern = re.compile(r'(VAR|TAG|ESC_OPEN|ESC_CLOSE|XRPYX[A-Z]*)\s+(\d+|[A-Z_]*)')
+        # Inner → key haritası: "RLPHABC123_0" → "⟦RLPHABC123_0⟧"
+        _rlph_inner_map = {}
+        for _k in vars_only:
+            if _k.startswith('\u27e6') and _k.endswith('\u27e7'):
+                _rlph_inner_map[_k[1:-1]] = _k
+        if _rlph_inner_map:
+            # Opsiyonel herhangi bir parantez + RLPH içerik + opsiyonel kapanış
+            _rlph_recovery_re = re.compile(
+                r'[\u27e6\[\(\{【「〔〚]?\s*'
+                r'(RLPH[A-F0-9]{6}_[A-Z0-9]+)'
+                r'\s*[\u27e7\]\)\}】」〕〛]?'
+            )
+            def _recover_bare_rlph(m):
+                inner = ''.join(m.group(1).split()).upper()
+                inner = unicodedata.normalize('NFKC', inner)
+                _key = _rlph_inner_map.get(inner)
+                if _key:
+                    return vars_only[_key]
+                return m.group(0)
+            result = _rlph_recovery_re.sub(_recover_bare_rlph, result)
+    
+    # =========================================================================
+    # BACKWARD COMPAT: Eski VAR0/TAG1/ESC_PAIR2 formatı için recovery aşamaları
+    # Cache'lenmiş çeviriler veya eski sürüm placeholder'ları kullanabilir.
+    # =========================================================================
+    
+    # AŞAMA 0.5: Script Transliteration Recovery (Kiril/Yunan → Latin)
+    # Eski format token'ları (VAR0, TAG0...) Google Translate tarafından
+    # translitere edilmiş olabilir: ВАР0 → VAR0
+    if vars_only:
+        def _recover_transliterated(match):
+            original = match.group(0)
+            normalized = original.translate(_CYRILLIC_TO_LATIN).translate(_GREEK_TO_LATIN)
+            if normalized in vars_only:
+                return normalized
+            normalized_nospace = re.sub(r'\s+', '', normalized)
+            if normalized_nospace in vars_only:
+                return normalized_nospace
+            return original
+        
+        result = _TRANSLITERATED_TOKEN_RE.sub(_recover_transliterated, result)
+    
+    # AŞAMA 0.6: Spaced Token Cleanup (eski format backward compat)
+    # Google Translate "VAR 0" → "VAR0" türü space eklemiş olabilir
+    if vars_only:
+        spaced_pattern = re.compile(
+            r'(VAR|TAG|ESC_PAIR|ESC_OPEN|ESC_CLOSE|ESC|DIS|PCT|XRPYX[A-Z]*)\s+(\d+|[A-Z_]*)'
+        )
         
         def fix_spaced(match):
             prefix = match.group(1)
@@ -304,16 +433,10 @@ def restore_renpy_syntax(text: str, placeholders: Dict[str, str]) -> str:
         
         result = spaced_pattern.sub(fix_spaced, result)
 
-    # AŞAMA 1: Token Geri Yükleme (VAR0, ESC_OPEN vb.)
-    # Performans için: Önce metinde var mı diye hızlıca bak
+    # AŞAMA 1: Token Geri Yükleme (eski format VAR0, ESC_OPEN vb. + yeni ⟦N⟧)
     # Tüm keyleri tek bir regex ile aramak en hızlısıdır
     if vars_only:
-        # Keyleri uzunluklarına göre sırala
         sorted_keys = sorted(vars_only.keys(), key=len, reverse=True)
-        
-        # Regex: Tokenları ara (word boundaries YOK - ESC_OPEN, ESC_CLOSE underscore içerdiği için)
-        # Underscore ve digits word characters olduğu için \b çalışmıyor
-        # Örnek: "ESC_OPENtext" yazılı olduğunda \b sınırı H'den önceki sınırı tanıyor
         pattern_str = '(' + '|'.join(re.escape(k) for k in sorted_keys) + ')'
         token_pattern = re.compile(pattern_str)
         
@@ -373,6 +496,23 @@ def restore_renpy_syntax(text: str, placeholders: Dict[str, str]) -> str:
     result = re.sub(r'\[\s+([a-zA-Z0-9_]+)\s+\]', r'[\1]', result)
     result = re.sub(r'\[\s*(\d+)\s*\]', r'[\1]', result)
     
+    # AŞAMA 5.5: Fuzzy Recovery - Bracket içindeki bozuk boşlukları temizle
+    # Google Translate bazen [player.name] → [player. name] veya [player .name] yapıyor
+    # Hedef dile göre bu oran artıyor (SOV diller, Arapça, vb.)
+    # Pattern: [içerik] içindeki gereksiz boşlukları kaldır ama yapıyı koru
+    def fix_bracket_spaces(match):
+        content = match.group(1)
+        # Nokta etrafındaki boşlukları temizle: "player . name" → "player.name"
+        content = re.sub(r'\s*\.\s*', '.', content)
+        # Çoklu boşlukları tek boşluğa indir
+        content = re.sub(r'\s+', ' ', content)
+        # Baş ve sondaki boşlukları temizle
+        content = content.strip()
+        return f'[{content}]'
+    
+    # Bracket expresionları düzelt (değişken interpolation)
+    result = re.sub(r'\[([^\[\]]+)\]', fix_bracket_spaces, result)
+    
     # Tag Nesting Repair
     result = _repair_broken_tag_nesting(result)
 
@@ -410,7 +550,13 @@ def _repair_broken_tag_nesting(text: str) -> str:
         stack = []
         broken_indices = set()
         
-        nesting_tags = {'b', 'i', 'u', 's', 'plain', 'font', 'color', 'size', 'alpha', 'k', 'rt', 'rb', 'a', 'cps', 'shader', 'transform'}
+        nesting_tags = {
+            'b', 'i', 'u', 's', 'plain', 'font', 'color', 'size', 'alpha', 'k',
+            'rt', 'rb', 'art', 'a', 'cps', 'shader', 'transform',
+            # Ren'Py 8 additions
+            'alt', 'noalt', 'outlinecolor', 'instance', 'axis', 'feature',
+            'horiz', 'vert',
+        }
         
         for i, token in enumerate(tokens):
             # Skip empty tokens or non-tags
@@ -432,8 +578,9 @@ def _repair_broken_tag_nesting(text: str) -> str:
                     tag_name_part = content[1:].strip()
                     tag_name = tag_name_part.split()[0] if tag_name_part else ""
                 else:
-                     # Get tag name before = or space
-                    tag_name = content.split('=')[0].split()[0]
+                     # Get tag name before = or : or space
+                     # Handles: {feature:liga=0} -> feature, {axis:width=125} -> axis
+                    tag_name = content.split('=')[0].split(':')[0].split()[0]
                 
                 tag_name = tag_name.lower().strip()
                 
@@ -472,7 +619,8 @@ def _repair_broken_tag_nesting(text: str) -> str:
 
 
 
-def validate_translation_integrity(text: str, placeholders: Dict[str, str]) -> List[str]:
+def validate_translation_integrity(text: str, placeholders: Dict[str, str],
+                                    skip_glossary: bool = True) -> List[str]:
     """
     Çevirinin bütünlüğünü doğrular (tüm orijinal tag'ler yerinde mi?).
     Eksik orijinal tag'lerin listesini döner.
@@ -485,6 +633,9 @@ def validate_translation_integrity(text: str, placeholders: Dict[str, str]) -> L
     Args:
         text (str): Kontrol edilecek çevrilmiş metin
         placeholders (Dict[str, str]): placeholder -> orijinal değer sözlüğü
+        skip_glossary (bool): True ise sözlük (glossary) yer tutucuları atlanır.
+            Glossary tokenları (_G prefix) sözdizimi değildir — eksik olmaları
+            çeviriyi bozmaz, sadece tercih edilen sözcüğün uygulanmadığı anlamına gelir.
         
     Returns:
         List[str]: Eksik orijinal değerlerin listesi (boşsa başarılı)
@@ -494,6 +645,9 @@ def validate_translation_integrity(text: str, placeholders: Dict[str, str]) -> L
         
     missing = []
     clean_text = None  # Lazy: sadece gerekirse hesapla
+    
+    # Glossary key pattern: ⟦RLPH{ns}_G{n}⟧
+    _GLOSSARY_KEY_RE = re.compile(r'_G\d+\u27e7$')
     
     for key, original in placeholders.items():
         # Wrapper ve eski tag sistemlerini atla
@@ -506,6 +660,11 @@ def validate_translation_integrity(text: str, placeholders: Dict[str, str]) -> L
             
         # Tuple ise (eski tag pozisyon bilgisi), atla
         if isinstance(original, tuple):
+            continue
+        
+        # Glossary placeholder'ları atla (sözdizimi değildir)
+        # Key format: ⟦RLPH{ns}_G{n}⟧  —  _G prefix glossary olduğunu gösterir
+        if skip_glossary and _GLOSSARY_KEY_RE.search(key):
             continue
             
         # Hızlı yol: direkt kontrol
@@ -531,6 +690,593 @@ def validate_translation_integrity(text: str, placeholders: Dict[str, str]) -> L
         pass # Şimdilik sadece structural check yeterli, derin nesting analizi pahalı olabilir.
 
     return missing
+
+
+def inject_missing_placeholders(translated_text: str, protected_text: str,
+                                 placeholders: Dict[str, str],
+                                 missing_originals: List[str]) -> str:
+    """
+    Google Translate'in tamamen sildiği RLPH tokenlarının orijinal değerlerini
+    çevrilen metne oransal pozisyonda enjekte eder.
+    
+    Google bazen ⟦RLPH...⟧ tokenlarını tamamen siler (bracket dönüşümü değil,
+    tam silme). Bu durumda ne Stage 0 ne Stage 0.1 kurtarabilir.
+    Bu fonksiyon son çare olarak çevrilmiş metne eksik değişkenleri
+    orijinal metindeki konumlarına oranla yerleştirir.
+    
+    Strateji:
+        1. Her eksik original_value → hangi RLPH key'e ait bul
+        2. O key'in protected_text içindeki pozisyonunu bul (%oran)
+        3. Aynı oranı translated_text'e uygula ve orijinal değeri yerleştir
+    
+    Args:
+        translated_text: restore sonrası çevrilen metin (eksik değişkenlerle)
+        protected_text: Google'a gönderilen korunmuş metin (RLPH tokenlerle)
+        placeholders: tam placeholder sözlüğü
+        missing_originals: validate_translation_integrity'nin döndürdüğü eksik liste
+        
+    Returns:
+        str: Eksik değişkenler enjekte edilmiş çevrilen metin
+    """
+    if not missing_originals or not translated_text or not protected_text:
+        return translated_text
+    
+    # Build reverse map: original_value → RLPH key
+    value_to_key = {}
+    for key, val in placeholders.items():
+        if isinstance(val, str):
+            value_to_key[val] = key
+    
+    # Collect (position_ratio, original_value) pairs
+    insertions = []
+    protected_len = len(protected_text)
+    
+    for orig_val in missing_originals:
+        if orig_val == "UNBALANCED_BRACKET_END":
+            continue
+        rlph_key = value_to_key.get(orig_val)
+        if not rlph_key:
+            continue
+        
+        # Find token position in protected text
+        pos = protected_text.find(rlph_key)
+        if pos < 0:
+            continue
+        
+        # Calculate proportional position
+        ratio = pos / protected_len if protected_len > 0 else 0.5
+        insertions.append((ratio, orig_val))
+    
+    if not insertions:
+        return translated_text
+    
+    # Sort by position (left to right)
+    insertions.sort(key=lambda x: x[0])
+    
+    # Insert from right to left to preserve positions
+    result = translated_text
+    trans_len = len(result)
+    
+    for ratio, orig_val in reversed(insertions):
+        insert_pos = int(ratio * trans_len)
+        
+        # Find a safe insertion point — prefer ACTUAL word boundaries (spaces)
+        # Only real spaces count; text start/end are fallback only.
+        # ±20 chars arama: en yakın boşluk pozisyonunu bul
+        best_pos = None
+        for delta in range(0, 21):
+            for candidate in [insert_pos + delta, insert_pos - delta]:
+                if 0 <= candidate <= len(result):
+                    # Actual space boundary check — NOT start/end of text
+                    if (candidate > 0 and result[candidate - 1] == ' ') or \
+                       (candidate < len(result) and result[candidate] == ' '):
+                        best_pos = candidate
+                        break
+            else:
+                continue
+            break
+        
+        # Fallback: no space found within ±20 chars → snap to nearest text edge
+        # to avoid splitting words in the middle
+        if best_pos is None:
+            dist_start = insert_pos
+            dist_end = len(result) - insert_pos
+            best_pos = 0 if dist_start <= dist_end else len(result)
+        
+        # Insert with surrounding spaces — always ensure space around injected value
+        left = result[:best_pos].rstrip()
+        right = result[best_pos:].lstrip()
+        if left and right:
+            result = f"{left} {orig_val} {right}"
+        elif right:
+            result = f"{orig_val} {right}"
+        elif left:
+            result = f"{left} {orig_val}"
+        else:
+            result = orig_val
+    
+    # Normalize double spaces
+    result = re.sub(r'  +', ' ', result).strip()
+    
+    return result
+
+
+# =============================================================================
+# DELIMITER-AWARE TRANSLATION (v2.7.2)
+# =============================================================================
+# Bazı oyun geliştiricileri tek bir string içinde | (pipe) veya benzeri
+# ayırıcılar kullanarak birden fazla varyasyon/diyalog sunar.
+# Örnek: "<I enjoy missions...|I am trained with weapons...|I once infiltrated a base...>"
+# Google Translate bu formatı bozar: pipe silinir, segmentler birleşir.
+# Bu katman, çeviriden ÖNCE metni parçalara ayırır ve çeviriden SONRA
+# geri birleştirir — böylece her segment bağımsız olarak çevrilir.
+#
+# Yaygın delimiter kalıpları:
+#   <seg1|seg2|seg3>       — Angle-bracket + pipe (en yaygın)
+#   seg1|seg2|seg3         — Bare pipe (wrapper olmadan)
+#   seg1||seg2||seg3       — Double pipe
+#
+# NOT: Bu özellik sadece "metin" segmentleri ayrıştırır; Ren'Py text tag'leri
+# ({b}, [var]) protect_renpy_syntax tarafından zaten korunuyor. Burada pipe
+# ve dış sarmalayıcılar (<>) korunur.
+
+# Regex: <...> wrapper içinde en az bir pipe — çok parçalı varyant metni
+# Negatif lookbehind isteğe bağlı: [[< gibi escape'leri exclude etmek için
+_DELIMITED_ANGLE_PIPE_RE = re.compile(
+    r'^(?P<pre>[^<]*)(?P<open><)(?P<body>[^>]*\|[^>]*)(?P<close>>)(?P<post>[^>]*)$',
+    re.DOTALL
+)
+# Bare pipe: wrapper yok, en az 2 segment, her segment anlamlı metin (3+ karakter)
+_BARE_PIPE_RE = re.compile(
+    r'^(?P<body>(?:[^|]{3,}\|){1,}[^|]{3,})$',
+    re.DOTALL
+)
+
+# Regex: Tüm <seg1|seg2|...> gruplarını metinde bulur (multi-group desteği)
+_ANGLE_PIPE_GROUP_RE = re.compile(r'<([^<>]*\|[^<>]*)>')
+
+
+# ── Multi-Group Angle-Pipe Split (v2.7.5) ─────────────────────────────────────
+
+def split_angle_pipe_groups(text: str) -> 'tuple[str, list[list[str]]] | None':
+    """
+    Multi-group destekli angle-pipe delimiter split (v2.7.5).
+    
+    Metindeki TÜM <seg1|seg2|...> gruplarını bulur ve placeholder-tabanlı
+    template + grup listesine dönüştürür.
+    
+    Tek grup, çok grup ve çevreleyen metin dahil tüm kombinasyonları destekler:
+      - ``<A|B|C>``                        → template=``[DGRP_0]``, groups=[[A,B,C]]
+      - ``text <A|B> more text``           → template=``text [DGRP_0] more text``, groups=[[A,B]]
+      - ``text <A|B> mid <C|D|E> end``     → template=``text [DGRP_0] mid [DGRP_1] end``
+    
+    Pipeline bu fonksiyonu çağırır:
+      1. Template ayrı request olarak çevrilir ([DGRP_N] protect_renpy_syntax ile korunur)
+      2. Her grubun segmentleri ayrı request olarak çevrilir
+      3. rejoin_angle_pipe_groups() ile birleştirilir
+    
+    Returns:
+        None — metin angle-pipe delimiter içermiyor veya geçersiz
+        (template, groups) — template ``[DGRP_N]`` placeholder'lı şablon,
+                            groups her grubun pipe-ayrılmış segment listesi
+    """
+    if not text or '<' not in text or '|' not in text or '>' not in text:
+        return None
+    
+    matches = list(_ANGLE_PIPE_GROUP_RE.finditer(text))
+    if not matches:
+        return None
+    
+    groups: list[list[str]] = []
+    for m in matches:
+        body = m.group(1)
+        segments = body.split('|')
+        
+        # En az 2 segment olmalı
+        if len(segments) < 2:
+            return None
+        
+        # Son segment boş olabilir (oyun scripti edge case: <A|B|>)
+        # Boş son segment'i atla
+        if segments and not segments[-1].strip():
+            segments = segments[:-1]
+        if len(segments) < 2:
+            return None
+        
+        # Kalan segmentler boş olmamalı
+        if not all(s.strip() for s in segments):
+            return None
+        
+        # Saf sayı/sembol grup: çevrilmeye gerek yok ama YAPIYI koru
+        # <0.1|0.02|0.005> gibi sayısal gruplar çevirilmez, ama template'e dahil edilir
+        is_numeric_group = not any(any(c.isalpha() for c in s) for s in segments)
+        
+        if not is_numeric_group:
+            # Herhangi bir segment kod benzeri ise tüm split'i iptal et
+            if any(_is_code_like_segment(s.strip()) for s in segments):
+                return None
+        
+        groups.append(([s.strip() for s in segments], is_numeric_group))
+    
+    # En az bir çevrilebilir (metin) grup olmalı
+    if not any(not is_num for _, is_num in groups):
+        return None
+    
+    # Template oluştur: metin gruplarını [DGRP_N] ile değiştir, sayısal grupları olduğu gibi bırak
+    template = text
+    offset = 0
+    text_groups: list[list[str]] = []
+    dgrp_idx = 0
+    
+    for i, m in enumerate(matches):
+        segs, is_numeric = groups[i]
+        if is_numeric:
+            # Sayısal grup: template'de olduğu gibi bırak (placeholder yok)
+            continue
+        
+        placeholder = f'[DGRP_{dgrp_idx}]'
+        dgrp_idx += 1
+        text_groups.append(segs)
+        
+        start = m.start() + offset
+        end = m.end() + offset
+        template = template[:start] + placeholder + template[end:]
+        offset += len(placeholder) - (m.end() - m.start())
+    
+    return (template, text_groups)
+
+
+def rejoin_angle_pipe_groups(
+    translated_template: str,
+    translated_groups: 'list[list[str]]'
+) -> 'str | None':
+    """
+    Çevrilmiş template ve çevrilmiş grupları birleştirir (v2.7.5).
+    
+    Her [DGRP_N] placeholder'ını ilgili grubun <seg1|seg2|...> formatıyla
+    değiştirir.
+    
+    Args:
+        translated_template: Çevrilmiş şablon metin ([DGRP_N] placeholder'lı)
+        translated_groups: Her grubun çevrilmiş segment listesi
+    
+    Returns:
+        str — birleştirilmiş nihai metin
+        None — placeholder kayboldu (çevirmen silmiş veya bozmuş)
+    """
+    result = translated_template
+    
+    for i, segments in enumerate(translated_groups):
+        placeholder = f'[DGRP_{i}]'
+        
+        if placeholder not in result:
+            return None  # Placeholder kaybolmuş — yapısal bozulma
+        
+        # Segmentlerde iç pipe/bracket kontrolü
+        has_pipe = any('|' in seg for seg in segments)
+        has_angle = any('<' in seg or '>' in seg for seg in segments)
+        if has_pipe or has_angle:
+            return None  # Segment bozulması — güvenli geri dönüş
+        
+        # Boş segment kontrolü
+        if any(not seg.strip() for seg in segments):
+            return None
+        
+        group_text = '<' + '|'.join(segments) + '>'
+        result = result.replace(placeholder, group_text, 1)
+    
+    # Doubled placeholder koruması: GT tokeni çoğaltmışsa kalan [DGRP_ kalır
+    if '[DGRP_' in result:
+        return None
+    
+    return result
+
+
+# ── False-Positive Detection Helpers ──────────────────────────────────────────
+
+# Kod benzeri segment kalıpları (false positive göstergesi)
+# v2.7.5: Minimum 2 char before dot to avoid A.I. abbreviation false positives
+_CODE_DOT_RE = re.compile(r'[A-Za-z_]\w+\.\w+')        # obj.attr, GAME.mc.done (NOT A.I.)
+_CODE_SNAKE_RE = re.compile(r'[a-z]+_[a-z_]+')          # snake_case tokens
+_CODE_CALL_RE = re.compile(r'\w+\s*\(')                 # func(, call(
+_CODE_ASSIGN_RE = re.compile(r'\w\s*[+\-*/]?=\s*\w')    # x = y, x += 1
+_CODE_COMPARE_RE = re.compile(r'[<>=!]=|[<>]\s*\d')     # ==, !=, >=, < 5
+_ALL_CAPS_RE = re.compile(r'^[A-Z][A-Z0-9_]{2,}$')      # CONSTANT, MC_NAME
+# Ren'Py sözdizimi tokenleri: [variable], {tag}...{/tag} — bunlar KOD DEĞİL
+_RENPY_BRACKET_RE = re.compile(r'\[[^\]]*\]|\{[^}]*\}')
+
+
+def _strip_renpy_tokens(text: str) -> str:
+    """Ren'Py sözdizimi tokenlerini ([var], {tag}) metinden çıkarır.
+    Kod benzeri kontrolü yapılmadan önce çağrılır, böylece
+    ``[player.name]`` gibi ifadeler yanlışlıkla 'kod' olarak algılanmaz.
+    """
+    return _RENPY_BRACKET_RE.sub(' ', text).strip()
+
+
+def _is_code_like_segment(segment: str) -> bool:
+    """
+    Bir segment'in kod benzeri (çevrilmemesi gereken) içerik olup olmadığını
+    tespit eder.
+    
+    Ren'Py sözdizimi tokenleri ([variable], {b}...{/b}) otomatik olarak
+    çıkarılır — bunlar doğal dil metninin bir parçasıdır, kod değil.
+    
+    Kod göstergeleri:
+      - Nokta gösterimi: ``GAME.mc``, ``player.quest_completed``
+      - snake_case: ``quest_log``, ``mc_name``
+      - Fonksiyon çağrısı: ``func()``, ``call(``
+      - Atama/karşılaştırma: ``x = y``, ``a == b``
+      - Tümü büyük harf sabit: ``INTRO``, ``MC``
+      - Python/Ren'Py anahtar kelimeleri: ``if``, ``elif``, ``return``, ``True``
+      - Dosya yolu: ``/path/to/file``, ``images/``
+      
+    Returns:
+        True → kod benzeri (delimiter split'e dahil etme)
+    """
+    s = segment.strip()
+    if not s:
+        return False
+    
+    # Ren'Py sözdizimi tokenlerini çıkar (kod kontrolü öncesi)
+    # "[player.name] was helpful" → "was helpful" (dot notation yanlış pozitif önlenir)
+    s = _strip_renpy_tokens(s)
+    if not s:
+        return False
+    
+    # Dot notation (obj.attr, GAME.mc.done)
+    if _CODE_DOT_RE.search(s):
+        return True
+    
+    # Tam eşleşen ALL_CAPS sabitler (3+ karakter, tümü büyük)
+    if _ALL_CAPS_RE.match(s):
+        return True
+    
+    # snake_case tokenler (doğal dilde yaygın değil)
+    if _CODE_SNAKE_RE.search(s):
+        return True
+    
+    # Fonksiyon çağrısı
+    if _CODE_CALL_RE.search(s):
+        return True
+    
+    # Atama veya bileşik atama
+    if _CODE_ASSIGN_RE.search(s):
+        return True
+    
+    # Karşılaştırma/boolean operatörleri
+    if _CODE_COMPARE_RE.search(s):
+        return True
+    
+    # Python/Ren'Py anahtar kelime (segment tamamı tek keyword ise)
+    _KEYWORDS = frozenset({
+        'if', 'elif', 'else', 'return', 'pass', 'break', 'continue',
+        'True', 'False', 'None', 'and', 'or', 'not', 'in', 'is',
+        'def', 'class', 'import', 'from', 'with', 'as', 'try',
+        'except', 'finally', 'raise', 'yield', 'lambda', 'del',
+        'for', 'while', 'assert', 'global', 'nonlocal',
+        'show', 'hide', 'scene', 'jump', 'call', 'menu', 'label',
+        'init', 'python', 'define', 'default', 'screen', 'transform',
+    })
+    if s in _KEYWORDS:
+        return True
+    
+    # Dosya yolu benzeri (v2.7.5: harf/alt çizgiyle devam eden yol ayırıcıları)
+    # 10/20 gibi sayısal ifadeleri hariç tutar
+    if re.search(r'[\\/][A-Za-z_]', s):
+        return True
+    
+    # Yalnızca sayı/sembol (çevrilecek metin değil)
+    if s.replace('.', '').replace('-', '').replace('+', '').isdigit():
+        return True
+    
+    return False
+
+
+def _is_natural_language_segment(segment: str, min_words: int = 2, min_len: int = 8) -> bool:
+    """
+    Bir segment'in doğal dil (çevrilmeye değer) metin olup olmadığını kontrol eder.
+    
+    Kontroller:
+      - Minimum kelime sayısı (varsayılan 2)
+      - Minimum karakter uzunluğu (varsayılan 8)
+      - En az bir harf içermeli
+      - Kod benzeri içerik olmamalı
+      
+    Returns:
+        True → doğal dil, çevrilebilir
+    """
+    s = segment.strip()
+    if not s:
+        return False
+    
+    # Ren'Py tokenlerini çıkardıktan sonra kontrol et
+    stripped = _strip_renpy_tokens(s)
+    if not stripped:
+        return False
+    
+    # Minimum uzunluk (Ren'Py tokenleri çıkarılmış halde)
+    if len(stripped) < min_len:
+        return False
+    
+    # En az bir alfabetik karakter olmalı
+    if not any(c.isalpha() for c in stripped):
+        return False
+    
+    # Kelime sayısı kontrolü (boşlukla ayrılmış gerçek kelimeler)
+    words = stripped.split()
+    if len(words) < min_words:
+        return False
+    
+    # Kod benzeri değilse doğal dil kabul et
+    return not _is_code_like_segment(s)
+
+
+def _has_structural_integrity(segments: 'list[str]') -> bool:
+    """
+    Segment listesinin yapısal bütünlüğünü kontrol eder.
+    Gerçek çevrilmeye değer diyalog varyantları mı yoksa tek kelimelik
+    tanımlayıcı/etiket listeleri mi olduğunu ayırt eder.
+    
+    Returns:
+        True → bütünlük tamam, delimiter split güvenli
+    """
+    if len(segments) < 2:
+        return False
+    
+    # Segment sayısı çok fazlaysa (>15) muhtemelen veri listesi, çeviri değil
+    if len(segments) > 15:
+        return False
+    
+    # Her segment boş olmamalı
+    if not all(s.strip() for s in segments):
+        return False
+    
+    # Segment'lerin çoğunluğu doğal dil olmalı (en az %50)
+    # min_words=2, min_len=8: Her segment en az 2 kelime ve 8 karakter olmalı
+    natural_count = sum(1 for s in segments if _is_natural_language_segment(s, min_words=2, min_len=8))
+    if natural_count < len(segments) * 0.5:
+        return False
+    
+    # Hiçbir segmentte iç içe <> olmamalı
+    for s in segments:
+        s_stripped = s.strip()
+        if '<' in s_stripped and '>' in s_stripped and '|' in s_stripped:
+            return False
+    
+    return True
+
+
+def split_delimited_text(text: str) -> 'tuple[list[str], str, str, str] | None':
+    """
+    Delimiter-aware metin bölme (v2.7.3 — Hardened).
+    
+    Eğer metin bilinen bir delimiter kalıbı içeriyorsa segmentlere ayırır.
+    Kod benzeri string'ler, kısa tanımlayıcılar ve yapısal olarak riskli
+    pattern'ler false-positive olarak filtrelenir.
+    
+    Returns:
+        None — metin delimiter içermiyor veya false positive
+        (segments, delimiter, prefix, suffix) — ayrıştırılmış parçalar
+            segments: ['seg1', 'seg2', ...]
+            delimiter: '|' (kullanılan ayırıcı karakter)
+            prefix: '<' veya '' (dış açılış sarmalayıcı)
+            suffix: '>' veya '' (dış kapanış sarmalayıcı)
+    """
+    if not text or '|' not in text:
+        return None
+    
+    # ── Pattern 1: <seg1|seg2|seg3> (angle-bracket wrapping) ──────────────
+    m = _DELIMITED_ANGLE_PIPE_RE.match(text)
+    if m:
+        pre = m.group('pre')
+        body = m.group('body')
+        post = m.group('post')
+        segments = body.split('|')
+        
+        # En az 2 segment ve her biri boş olmamalı
+        if len(segments) >= 2 and all(s.strip() for s in segments):
+            # ── FALSE-POSITIVE FİLTRE (v2.7.3) ──
+            # 1) Herhangi bir segment kod benzeri ise TÜM split'i iptal et
+            if any(_is_code_like_segment(s) for s in segments):
+                return None
+            
+            # 2) Yapısal bütünlük kontrolü
+            if not _has_structural_integrity(segments):
+                return None
+            
+            return (segments, '|', pre + '<', '>' + post)
+    
+    # ── Pattern 2: Bare pipe (seg1|seg2|seg3, wrapper yok) ────────────────
+    # v2.7.5: Angle-bracket grupları varsa bare pipe'a düşme
+    # (split_angle_pipe_groups tarafından ele alınmalı)
+    stripped = text.strip()
+    if _ANGLE_PIPE_GROUP_RE.search(stripped):
+        return None  # Angle-pipe grup var — multi-group handler'a bırak
+    
+    if '|' in stripped and not stripped.startswith(('<', '{', '[')):
+        m2 = _BARE_PIPE_RE.match(stripped)
+        if m2:
+            segments = stripped.split('|')
+            # Ren'Py sözdizimi false-positive filtresi
+            has_syntax = any(
+                '{' in s or ('[' in s and ']' in s)
+                for s in segments
+            )
+            if has_syntax:
+                return None
+            
+            # ── FALSE-POSITIVE FİLTRE (v2.7.3) ──
+            if any(_is_code_like_segment(s) for s in segments):
+                return None
+            
+            if not _has_structural_integrity(segments):
+                return None
+            
+            if len(segments) >= 2:
+                prefix = text[:len(text) - len(text.lstrip())]  # Leading whitespace
+                suffix = text[len(text.rstrip()):]  # Trailing whitespace
+                return (segments, '|', prefix, suffix)
+    
+    return None
+
+
+def rejoin_delimited_text(
+    translated_segments: 'list[str]',
+    delimiter: str,
+    prefix: str,
+    suffix: str,
+    original_text: str = ''
+) -> 'str | None':
+    """
+    Çevrilmiş segmentleri orijinal delimiter formatında geri birleştirir (v2.7.3).
+    
+    Birleştirme sonrası yapısal doğrulama yapar. Bozulma tespit edilirse
+    ``None`` döndürür (çağıran kod orijinal metne geri dönmelidir).
+    
+    Args:
+        translated_segments: Çevrilmiş metin parçaları
+        delimiter: Orijinal ayırıcı ('|')
+        prefix: Dış açılış ('<' veya '')
+        suffix: Dış kapanış ('>' veya '')
+        original_text: Orijinal çevrilmemiş metin (doğrulama için)
+    
+    Returns:
+        str — birleştirilmiş, doğrulanmış metin
+        None — yapısal bozulma tespit edildi, orijinale geri dön
+    """
+    body = delimiter.join(translated_segments)
+    result = f"{prefix}{body}{suffix}"
+    
+    # ── POST-REJOIN YAPISAL DOĞRULAMA (v2.7.3) ──────────────────────────
+    
+    # 1) İç içe açılı parantez kontrolü: body kısmında çeviri kaynaklı <> olmamalı
+    #    prefix='<' ve suffix='>' kullanan bir pattern'de body içinde ek < veya > 
+    #    korrupt çıktı üretir (Ren'Py parse hatası kaynağı)
+    if '<' in prefix or '>' in suffix:
+        # Body kısmında iç içe <> veya | içeren yeni <...|...> pattern varsa → bozulma
+        if '<' in body or '>' in body:
+            return None
+    
+    # 2) Çevrilmiş segment'lerin hiçbiri pipe (delimiter) içermemeli
+    #    Aksi halde pipe sayısı beklenenden fazla olur
+    for seg in translated_segments:
+        if delimiter in seg:
+            return None
+    
+    # 3) Boş segment kontrolü: çevirmen bir segmenti tamamen silmiş olabilir
+    if any(not seg.strip() for seg in translated_segments):
+        return None
+    
+    # 4) Orijinal metin verilmişse karşılaştırmalı doğrulama
+    if original_text:
+        orig_pipe_count = original_text.count('|')
+        result_pipe_count = result.count('|')
+        # Pipe sayısı değişmişse → yapısal bozulma
+        if orig_pipe_count != result_pipe_count:
+            return None
+    
+    return result
 
 
 # =============================================================================
