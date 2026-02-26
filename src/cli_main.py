@@ -664,7 +664,7 @@ def interactive_mode() -> dict:
             if lang_choice == 0:
                 continue
             
-            lang_codes = ['tr', 'en', 'fr', 'de', 'es', 'ru', 'ja', 'ko', 'zh']
+            lang_codes = ['tr', 'en', 'fr', 'de', 'es', 'ru', 'ja', 'ko', 'zh','id']
             if lang_choice <= 9:
                 config['target_lang'] = lang_codes[lang_choice - 1]
             else:
