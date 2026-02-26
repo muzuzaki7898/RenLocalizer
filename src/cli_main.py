@@ -700,11 +700,15 @@ def interactive_mode() -> dict:
                 elif settings_choice == 1:
                     config['source_lang'] = get_input("Source language code", config['source_lang'])
                 elif settings_choice == 2:
-                    eng_choice = print_menu("Select engine", ["Google Translate", "DeepL"])
+                    eng_choice = print_menu("Select engine", ["Google Translate", "DeepL","openai","gemini"])
                     if eng_choice == 1:
                         config['engine'] = 'google'
                     elif eng_choice == 2:
                         config['engine'] = 'deepl'
+                    elif eng_choice == 3:
+                        config['engine'] = 'openai'
+                    elif eng_choice == 4:
+                        config['engine'] = 'gemini'
                 elif settings_choice == 3:
                     config['proxy'] = not config['proxy']
                 elif settings_choice == 4:
