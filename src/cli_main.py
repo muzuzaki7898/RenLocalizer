@@ -528,6 +528,7 @@ def get_input(prompt: str, default: str = "") -> str:
     return input(f"  {prompt}: ").strip()
 
 def interactive_mode() -> dict:
+    config_manager = ConfigManager()
     """Run interactive setup wizard."""
     config = {
         'input_path': '',
@@ -699,16 +700,28 @@ def interactive_mode() -> dict:
                     break
                 elif settings_choice == 1:
                     config['source_lang'] = get_input("Source language code", config['source_lang'])
-                elif settings_choice == 2:
-                    eng_choice = print_menu("Select engine", ["Google Translate", "DeepL","openai","gemini"])
-                    if eng_choice == 1:
-                        config['engine'] = 'google'
-                    elif eng_choice == 2:
-                        config['engine'] = 'deepl'
-                    elif eng_choice == 3:
-                        config['engine'] = 'openai'
-                    elif eng_choice == 4:
-                        config['engine'] = 'gemini'
+                 elif settings_choice == 2:
+                    eng_choice = print_menu("Select engine", ["Google Translate", "DeepL", "OpenAI", "Gemini"])
+                 elif eng_choice == 1:
+                    config['engine'] = 'google'
+                 elif eng_choice == 2:
+                    config['engine'] = 'deepl'
+                    key = get_input("Enter DeepL API Key")
+                    config_manager.set_api_key("deepl", key)
+                    config_manager.save_config()
+                    print("  ✅ DeepL API key saved.")
+                elif eng_choice == 3:
+                   config['engine'] = 'openai'
+                   key = get_input("Enter OpenAI API Key")
+                   config_manager.set_api_key("openai", key)
+                   config_manager.save_config()
+                   print("  ✅ OpenAI API key saved.")
+                elif eng_choice == 4:
+                   config['engine'] = 'gemini'
+                   key = get_input("Enter Gemini API Key")
+                   config_manager.set_api_key("gemini", key)
+                   config_manager.save_config()
+                   print("  ✅ Gemini API key saved.")
                 elif settings_choice == 3:
                     config['proxy'] = not config['proxy']
                 elif settings_choice == 4:
